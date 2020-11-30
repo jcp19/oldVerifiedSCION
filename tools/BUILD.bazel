@@ -1,5 +1,0 @@
-sh_binary(
-    name = "docker_ip",
-    srcs = ["docker-ip"],
-    visibility = ["//visibility:public"],
-)

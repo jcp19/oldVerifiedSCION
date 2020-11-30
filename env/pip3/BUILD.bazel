@@ -1,2 +1,0 @@
-# Marker file, required to have the local directory be a Bazel package for pip
-# dependencies

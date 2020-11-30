@@ -1,5 +1,0 @@
-#!/bin/bash
-
-# Small script to determine the git version.
-
-exec git describe --tags --dirty
