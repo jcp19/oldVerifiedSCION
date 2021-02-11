@@ -1,19 +1,31 @@
 package router
 
+// TODO: replace by relative path
+// ##(-I /Users/joao/Code/verifiedScionGo/)
+
 import (
-	underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
-	"github.com/scionproto/scion/go/lib/slayers"
+	// underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
 	// (joao) leads to empty.head error if run without qualified import
 	// "github.com/scionproto/scion/go/lib/topology"
-	// addr "github.com/scionproto/scion/go/lib/addr"
+	"gobra/lib/addr"
+	"gobra/lib/slayers/path"
+	"gobra/gobrautils"
+	"sync"
 ) 
 
-/* 
+/**
+ * TODO
+ * - fix type error
+ * - add error
+ * - finish verification of processPkt
+ * - devise permissions to data structs
+*/
+
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
-func (d *DataPlane) Run() error {
-    // (joao) No support for locks
-	//d.mtx.Lock()
+func (d *DataPlane) Run() gobrautils.error {
+/*
+	d.mtx.Lock()
 	d.running = true
 
 	// d.initMetrics()
@@ -134,11 +146,11 @@ func (d *DataPlane) Run() error {
 	for d.running {
 		time.Sleep(time.Second)
 	}
+*/
 	return nil
 }
-*/
 
-//(joao) No support for method spec/ non-empty interfaces
+//(joao) No support for method spec/ interfaces
 type BatchConn interface {
 	// ReadBatch(underlayconn.Messages, []underlayconn.ReadMeta) (int, error)
 	// WriteBatch(underlayconn.Messages) (int, error)
@@ -146,36 +158,38 @@ type BatchConn interface {
 }
 
 type DataPlane struct {
-	external         map[uint16]BatchConn
+	// external         map[uint16]BatchConn
 	// linkTypes        map[uint16]topology.LinkType
-	neighborIAs      map[uint16]addr.IA
+	// neighborIAs      map[uint16]addr.IA
 	// internal         BatchConn
 	// internalIP       net.IP
 	// internalNextHops map[uint16]net.Addr
 	// svc              *services
 	// macFactory       func() hash.Hash
-	bfdSessions      map[uint16]bfdSession
-	localIA          addr.IA
-	// mtx              sync.Mutex
+	// bfdSessions      map[uint16]bfdSession
+	// localIA          addr.IA
+	mtx              sync.Mutex
 	running          bool
 	// Metrics          *Metrics
 }
 
-func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte /*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
 
-	if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
-		return processResult{}, err
-	}
-	/* buffer ignored for now
-	if err := buffer.Clear(); err != nil {
-        // (joao) changed in order to parse correctly
-        // return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
-		return processResult{}, nil
-	}
-	*/
+func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, /*srcAddr net.Addr, s slayers.SCION, */
+	origPacket []byte /*, buffer gopacket.SerializeBuffer*/) (processResult, gobrautils.error) {
 
-	switch s.PathType {
+	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
+	//	return processResult{}, err
+	// }
+
+//	buffer ignored for now
+//	if err := buffer.Clear(); err != nil {
+//        // (joao) changed in order to parse correctly
+//        // return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
+//		return processResult{}, nil
+//	}
+	
+
+//	switch s.PathType {
 	/*
 	case slayers.PathTypeEmpty:
 		if s.NextHdr == common.L4BFD {
@@ -200,32 +214,33 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		return d.processOHP(ingressID, rawPkt, s, buffer)
 	*/
 	// (joao) assuming only a SCION path type
-	case slayers.PathTypeSCION:
-		return d.processSCION(ingressID, rawPkt, s, origPacket /*, buffer*/)
+// 	case slayers.PathTypeSCION:
+//		return d.processSCION(ingressID, rawPkt, s, origPacket /*, buffer*/)
 	/*
 	default:
         // (joao) parse error
 		// return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
 		return processResult{}, nil
 	*/
-	}
+//	}
 }
 
-//(joao) buffer ignored for now
-func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
-	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
+////(joao) buffer ignored for now
+//func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
+//	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
+//
+//	p := scionPacketProcessor{
+//		d:          d,
+//		ingressID:  ingressID,
+//		rawPkt:     rawPkt,
+//		scionLayer: s,
+//		origPacket: origPacket,
+//		//buffer:     buffer,
+//	}
+//	return p.process()
+//}
 
-	p := scionPacketProcessor{
-		d:          d,
-		ingressID:  ingressID,
-		rawPkt:     rawPkt,
-		scionLayer: s,
-		origPacket: origPacket,
-		//buffer:     buffer,
-	}
-	return p.process()
-}
-
+pred scionPacketProcessorP() {true}
 
 type scionPacketProcessor struct {
 	// d is a reference to the dataplane instance that initiated this processor.
@@ -236,16 +251,20 @@ type scionPacketProcessor struct {
 	// rawPkt is the raw packet, it is updated during processing to contain the
 	// message to send out.
 	rawPkt []byte
+
 	// scionLayer is the SCION gopacket layer.
-	scionLayer slayers.SCION
+	// scionLayer slayers.SCION
+
 	// origPacket is the raw original packet, must not be modified.
 	origPacket []byte
+
 	// (joao) buffer ignored for now
 	// buffer is the buffer that can be used to serialize gopacket layers.
 	// buffer gopacket.SerializeBuffer
 
 	// path is the raw SCION path. Will be set during processing.
-	path *scion.Raw
+	// path *scion.Raw
+
 	// hopField is the current hopField field, is updated during processing.
 	hopField *path.HopField
 	// infoField is the current infoField field, is updated during processing.
@@ -255,144 +274,143 @@ type scionPacketProcessor struct {
 }
 
 // (joao) no support for the error type
-func (p *scionPacketProcessor) process() (processResult, error) {
+//func (p *scionPacketProcessor) process() (processResult, error) {
+//
+//	if r, err := p.parsePath(); err != nil {
+//		return r, err
+//	}
+//	if r, err := p.validatePktLen(); err != nil {
+//		return r, err
+//	}
+//	/* (joao) skip by now
+//	if err := p.updateNonConsDirIngressSegID(); err != nil {
+//		return processResult{}, err
+//	}
+//	*/
+//	/* (joao) skip for now
+//	if r, err := p.verifyCurrentMAC(); err != nil {
+//		return r, err
+//	}
+//	*/
+//	/* (joao) skip by now
+//	if r, err := p.handleIngressRouterAlert(); err != nil {
+//		return r, err
+//	}
+//	*/ 
+//
+//	// Inbound: pkts destined to the local IA.
+//	if p.scionLayer.DstIA.Equal(p.d.localIA) && int(p.path.PathMeta.CurrHF)+1 == p.path.NumHops {
+//		a, r, err := p.resolveInbound()
+//		if err != nil {
+//			return r, err
+//		}
+//		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+//	}
+//
+//	// Outbound: pkts leaving the local IA.
+//	// BRTransit: pkts leaving from the same BR different interface.
+//	/* (joao) assuming no cross-over at this point
+//	if p.path.IsXover() {
+//		if r, err := p.doXover(); err != nil {
+//			return r, err
+//		}
+//	}*/
+//	if r, err := p.validateEgressID(); err != nil {
+//		return r, err
+//	}
+//	// handle egress router alert before we check if it's up because we want to
+//	// send the reply anyway, so that trace route can pinpoint the exact link
+//	// that failed.
+//	if r, err := p.handleEgressRouterAlert(); err != nil {
+//		return r, err
+//	}
+//	if r, err := p.validateEgressUp(); err != nil {
+//		return r, err
+//	}
+//
+//	/* (joao) skipped for now, leads to parser error
+//	egressID := p.egressInterface()
+//	if c, ok := p.d.external[egressID]; ok {
+//		if err := p.processEgress(); err != nil {
+//			return processResult{}, err
+//		}
+//		return processResult{EgressID: egressID, OutConn: c, OutPkt: p.rawPkt}, nil
+//	}
+//	*/
+//
+//	// ASTransit: pkts leaving from another AS BR.
+//
+//	/* (joao) skipped for now, leads to parser error
+//	if a, ok := p.d.internalNextHops[egressID]; ok {
+//		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+//	}
+//	*/
+//
+//
+//	/*
+//	errCode := slayers.SCMPCodeUnknownHopFieldEgress
+//	if !p.infoField.ConsDir {
+//		errCode = slayers.SCMPCodeUnknownHopFieldIngress
+//	}
+//	*/
+//	return p.packSCMP(
+//		&slayers.SCMP{
+//			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+//		},
+//		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+//		cannotRoute,
+//	)
+//}
 
-	if r, err := p.parsePath(); err != nil {
-		return r, err
-	}
-	if r, err := p.validatePktLen(); err != nil {
-		return r, err
-	}
-	/* (joao) skip by now
-	if err := p.updateNonConsDirIngressSegID(); err != nil {
-		return processResult{}, err
-	}
-	*/
-	/* (joao) skip for now
-	if r, err := p.verifyCurrentMAC(); err != nil {
-		return r, err
-	}
-	*/
-	/* (joao) skip by now
-	if r, err := p.handleIngressRouterAlert(); err != nil {
-		return r, err
-	}
-	*/ 
-
-	// Inbound: pkts destined to the local IA.
-	if p.scionLayer.DstIA.Equal(p.d.localIA) && int(p.path.PathMeta.CurrHF)+1 == p.path.NumHops {
-		a, r, err := p.resolveInbound()
-		if err != nil {
-			return r, err
-		}
-		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
-	}
-
-	// Outbound: pkts leaving the local IA.
-	// BRTransit: pkts leaving from the same BR different interface.
-	/* (joao) assuming no cross-over at this point
-	if p.path.IsXover() {
-		if r, err := p.doXover(); err != nil {
-			return r, err
-		}
-	}*/
-	if r, err := p.validateEgressID(); err != nil {
-		return r, err
-	}
-	// handle egress router alert before we check if it's up because we want to
-	// send the reply anyway, so that trace route can pinpoint the exact link
-	// that failed.
-	if r, err := p.handleEgressRouterAlert(); err != nil {
-		return r, err
-	}
-	if r, err := p.validateEgressUp(); err != nil {
-		return r, err
-	}
-
-	/* (joao) skipped for now, leads to parser error
-	egressID := p.egressInterface()
-	if c, ok := p.d.external[egressID]; ok {
-		if err := p.processEgress(); err != nil {
-			return processResult{}, err
-		}
-		return processResult{EgressID: egressID, OutConn: c, OutPkt: p.rawPkt}, nil
-	}
-	*/
-
-	// ASTransit: pkts leaving from another AS BR.
-
-	/* (joao) skipped for now, leads to parser error
-	if a, ok := p.d.internalNextHops[egressID]; ok {
-		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
-	}
-	*/
-
-
-	/*
-	errCode := slayers.SCMPCodeUnknownHopFieldEgress
-	if !p.infoField.ConsDir {
-		errCode = slayers.SCMPCodeUnknownHopFieldIngress
-	}
-	*/
-	return p.packSCMP(
-		&slayers.SCMP{
-			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
-		},
-		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-		cannotRoute,
-	)
-}
-
-
-func (p *scionPacketProcessor) parsePath() (processResult, error) {
-	var ok bool
-	//(joao) causes parser error
-	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
-	p.path, ok = nil, true //p.scionLayer.Path.(*scion.Raw)
-	if !ok {
-		// TODO(lukedirtwalker) parameter problem invalid path?
-		return processResult{}, malformedPath
-	}
-	var err error
-	p.hopField, err = p.path.GetCurrentHopField()
-	if err != nil {
-		// TODO(lukedirtwalker) parameter problem invalid path?
-		return processResult{}, err
-	}
-	p.infoField, err = p.path.GetCurrentInfoField()
-	if err != nil {
-		// TODO(lukedirtwalker) parameter problem invalid path?
-		return processResult{}, err
-	}
-	if r, err := p.validateHopExpiry(); err != nil {
-		return r, err
-	}
-	if r, err := p.validateIngressID(); err != nil {
-		return r, err
-	}
+func (p *scionPacketProcessor) parsePath() (processResult, gobrautils.error) {
+//	var ok bool
+//	//(joao) causes parser error
+//	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
+//	p.path, ok = nil, true //p.scionLayer.Path.(*scion.Raw)
+//	if !ok {
+//		// TODO(lukedirtwalker) parameter problem invalid path?
+//		return processResult{}, malformedPath
+//	}
+//	var err error
+//	p.hopField, err = p.path.GetCurrentHopField()
+//	if err != nil {
+//		// TODO(lukedirtwalker) parameter problem invalid path?
+//		return processResult{}, err
+//	}
+//	p.infoField, err = p.path.GetCurrentInfoField()
+//	if err != nil {
+//		// TODO(lukedirtwalker) parameter problem invalid path?
+//		return processResult{}, err
+//	}
+//	if r, err := p.validateHopExpiry(); err != nil {
+//		return r, err
+//	}
+//	if r, err := p.validateIngressID(); err != nil {
+//		return r, err
+//	}
 	return processResult{}, nil
 }
 
-func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
-	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
-		return processResult{}, nil
-	}
-	return p.packSCMP(
-		&slayers.SCMP{
-			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
-				slayers.SCMPCodeInvalidPacketSize),
-		},
-		&slayers.SCMPParameterProblem{Pointer: 0},
-		// (joao) no support for strings
-		// serrors.New("bad packet size",
-		//	"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
-	)
-}
+//func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
+//	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
+//		return processResult{}, nil
+//	}
+//	return p.packSCMP(
+//		&slayers.SCMP{
+//			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+//				slayers.SCMPCodeInvalidPacketSize),
+//		},
+//		&slayers.SCMPParameterProblem{Pointer: 0},
+//		// (joao) no support for strings
+//		// serrors.New("bad packet size",
+//		//	"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
+//	)
+//}
 
 type processResult struct {
 	EgressID uint16
 	OutConn  BatchConn
-	OutAddr  net.Addr
+	//OutAddr  net.Addr
 	OutPkt   []byte
 }
 
