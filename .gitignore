@@ -86,3 +86,7 @@ _build
 # IntelliJ folder
 #########################
 .idea/
+
+# Gobra
+#########################
+*.debugType

@@ -1,4 +1,0 @@
-package gobrautils
-
-// This is a current workaround to support error
-type error interface {}
