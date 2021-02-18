@@ -19,7 +19,6 @@ package path
 // ##(-I /Users/joao/Code/verifiedScionGo/)
 
 import (
-	"gobra/gobrautils"
 	// "encoding/binary"
 	"time"
 	// "github.com/scionproto/scion/go/lib/serrors"
@@ -78,7 +77,7 @@ requires acc(h)
 requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
 ensures acc(h)
 ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
-func (h *HopField) DecodeFromBytes(raw []byte) gobrautils.error {
+func (h *HopField) DecodeFromBytes(raw []byte) error {
 	if len(raw) < HopLen {
 		// (joao) string literals not supported
 		// return serrors.New("HopField raw too short", "expected", HopLen, "actual", len(raw))
@@ -108,7 +107,7 @@ requires acc(h, 1/2)
 requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures acc(h, 1/2)
 ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (h *HopField) SerializeTo(b []byte) gobrautils.error {
+func (h *HopField) SerializeTo(b []byte) error {
 	if len(b) < HopLen {
 		// return serrors.New("buffer for HopField too short", "expected", MacLen, "actual", len(b))
 		return nil

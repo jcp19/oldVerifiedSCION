@@ -9,21 +9,21 @@ import (
 	// "github.com/scionproto/scion/go/lib/topology"
 	"gobra/lib/addr"
 	"gobra/lib/slayers/path"
-	"gobra/gobrautils"
 	"sync"
+	"net"
+	"time"
 ) 
 
 /**
  * TODO
  * - fix type error
- * - add error
  * - finish verification of processPkt
  * - devise permissions to data structs
 */
 
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
-func (d *DataPlane) Run() gobrautils.error {
+func (d *DataPlane) Run() error {
 /*
 	d.mtx.Lock()
 	d.running = true
@@ -162,7 +162,7 @@ type DataPlane struct {
 	// linkTypes        map[uint16]topology.LinkType
 	// neighborIAs      map[uint16]addr.IA
 	// internal         BatchConn
-	// internalIP       net.IP
+	internalIP       net.IP
 	// internalNextHops map[uint16]net.Addr
 	// svc              *services
 	// macFactory       func() hash.Hash
@@ -175,7 +175,7 @@ type DataPlane struct {
 
 
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, /*srcAddr net.Addr, s slayers.SCION, */
-	origPacket []byte /*, buffer gopacket.SerializeBuffer*/) (processResult, gobrautils.error) {
+	origPacket []byte /*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
 
 	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
 	//	return processResult{}, err
@@ -362,7 +362,7 @@ type scionPacketProcessor struct {
 //	)
 //}
 
-func (p *scionPacketProcessor) parsePath() (processResult, gobrautils.error) {
+func (p *scionPacketProcessor) parsePath() (processResult, error) {
 //	var ok bool
 //	//(joao) causes parser error
 //	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
