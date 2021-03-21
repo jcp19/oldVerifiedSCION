@@ -8,6 +8,7 @@ import (
 	// (joao) leads to empty.head error if run without qualified import
 	// "github.com/scionproto/scion/go/lib/topology"
 	"gobra/lib/addr"
+	"gobra/lib/slayers"
 	"gobra/lib/slayers/path"
 	"sync"
 	"net"
@@ -16,7 +17,6 @@ import (
 
 /**
  * TODO
- * - fix type error
  * - finish verification of processPkt
  * - devise permissions to data structs
 */
@@ -150,32 +150,31 @@ func (d *DataPlane) Run() error {
 	return nil
 }
 
-//(joao) No support for method spec/ interfaces
 type BatchConn interface {
 	// ReadBatch(underlayconn.Messages, []underlayconn.ReadMeta) (int, error)
 	// WriteBatch(underlayconn.Messages) (int, error)
-	// Close() error
+	Close() error
 }
 
 type DataPlane struct {
 	// external         map[uint16]BatchConn
 	// linkTypes        map[uint16]topology.LinkType
 	// neighborIAs      map[uint16]addr.IA
-	// internal         BatchConn
+	internal         BatchConn
 	internalIP       net.IP
 	// internalNextHops map[uint16]net.Addr
 	// svc              *services
 	// macFactory       func() hash.Hash
 	// bfdSessions      map[uint16]bfdSession
-	// localIA          addr.IA
+	localIA          addr.IA
 	mtx              sync.Mutex
 	running          bool
 	// Metrics          *Metrics
 }
 
 
-func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, /*srcAddr net.Addr, s slayers.SCION, */
-	origPacket []byte /*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
+func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
+	origPacket []byte /*, buffer gopacket.SerializeBuffer*/) (processResult, error) //{
 
 	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
 	//	return processResult{}, err
@@ -189,18 +188,18 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, /*srcAddr net.Ad
 //	}
 	
 
-//	switch s.PathType {
+	// switch s.PathType {
+	//case slayers.PathTypeEmpty:
+
 	/*
-	case slayers.PathTypeEmpty:
 		if s.NextHdr == common.L4BFD {
 			return processResult{}, d.processIntraBFD(srcAddr, s.Payload)
 		}
-        // (joao) changed in order to parse correctly
+		/ return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader,
+		  "type", s.PathType, "header", s.NextHdr)
+		*/
 
-		// return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader,
-		//  "type", s.PathType, "header", s.NextHdr)
-		return processResult{}, nil
-
+	/*
 	case slayers.PathTypeOneHop:
 		if s.NextHdr == common.L4BFD {
             // (joao) parse error
@@ -214,32 +213,31 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, /*srcAddr net.Ad
 		return d.processOHP(ingressID, rawPkt, s, buffer)
 	*/
 	// (joao) assuming only a SCION path type
-// 	case slayers.PathTypeSCION:
-//		return d.processSCION(ingressID, rawPkt, s, origPacket /*, buffer*/)
+ 	// case slayers.PathTypeSCION:
+	//	return d.processSCION(ingressID, rawPkt, s, origPacket /*, buffer*/)
 	/*
 	default:
         // (joao) parse error
 		// return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
-		return processResult{}, nil
 	*/
-//	}
+	// }
+// }
+
+func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
+	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
+
+	p@ := scionPacketProcessor{
+		d:          d,
+		ingressID:  ingressID,
+		rawPkt:     rawPkt,
+		scionLayer: s,
+		origPacket: origPacket,
+		//buffer:     buffer,
+	}
+	return p.process()
 }
 
-////(joao) buffer ignored for now
-//func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
-//	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
-//
-//	p := scionPacketProcessor{
-//		d:          d,
-//		ingressID:  ingressID,
-//		rawPkt:     rawPkt,
-//		scionLayer: s,
-//		origPacket: origPacket,
-//		//buffer:     buffer,
-//	}
-//	return p.process()
-//}
-
+// Establishes the restrictions on the scion packet processors
 pred scionPacketProcessorP() {true}
 
 type scionPacketProcessor struct {
@@ -253,7 +251,7 @@ type scionPacketProcessor struct {
 	rawPkt []byte
 
 	// scionLayer is the SCION gopacket layer.
-	// scionLayer slayers.SCION
+	scionLayer slayers.SCION
 
 	// origPacket is the raw original packet, must not be modified.
 	origPacket []byte
@@ -273,16 +271,14 @@ type scionPacketProcessor struct {
 	segmentChange bool
 }
 
-// (joao) no support for the error type
-//func (p *scionPacketProcessor) process() (processResult, error) {
-//
-//	if r, err := p.parsePath(); err != nil {
-//		return r, err
-//	}
-//	if r, err := p.validatePktLen(); err != nil {
-//		return r, err
-//	}
-//	/* (joao) skip by now
+func (p *scionPacketProcessor) process() (processResult, error) {
+	if r, err := p.parsePath(); err != nil {
+		return r, err
+	}
+	if r, err := p.validatePktLen(); err != nil {
+		return r, err
+	}
+//	/* (joao) skip for now
 //	if err := p.updateNonConsDirIngressSegID(); err != nil {
 //		return processResult{}, err
 //	}
@@ -340,13 +336,12 @@ type scionPacketProcessor struct {
 //
 //	// ASTransit: pkts leaving from another AS BR.
 //
-//	/* (joao) skipped for now, leads to parser error
-//	if a, ok := p.d.internalNextHops[egressID]; ok {
-//		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
-//	}
-//	*/
-//
-//
+/*
+	if a, ok := (p.d.internalNextHops)[egressID]; ok {
+		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+	}
+	*/
+
 //	/*
 //	errCode := slayers.SCMPCodeUnknownHopFieldEgress
 //	if !p.infoField.ConsDir {
@@ -360,7 +355,7 @@ type scionPacketProcessor struct {
 //		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
 //		cannotRoute,
 //	)
-//}
+}
 
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 //	var ok bool
@@ -391,7 +386,7 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	return processResult{}, nil
 }
 
-//func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
+func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 //	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
 //		return processResult{}, nil
 //	}
@@ -405,12 +400,398 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 //		// serrors.New("bad packet size",
 //		//	"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
 //	)
-//}
+}
 
 type processResult struct {
 	EgressID uint16
 	OutConn  BatchConn
-	//OutAddr  net.Addr
+	OutAddr  net.Addr
 	OutPkt   []byte
 }
 
+/*func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
+	cause error) (processResult, error) {
+
+	// parse everything to see if the original packet was an SCMP error.
+	var (
+		scionLayer slayers.SCION
+		udpLayer   slayers.UDP
+		hbhExtn    slayers.HopByHopExtn
+		e2eExtn    slayers.EndToEndExtn
+		scmpLayer  slayers.SCMP
+	)
+	parser := gopacket.NewDecodingLayerParser(
+		slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
+	)
+	decoded := make([]gopacket.LayerType, 5)
+	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
+		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
+			return processResult{}, serrors.WrapStr("decoding packet", err)
+		}
+	}
+	// in reply to an SCMP error do nothing:
+	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
+		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
+	}
+
+	// the quoted packet is the packet in its current state
+	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+		return processResult{}, serrors.WrapStr("update info field", err)
+	}
+	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
+		return processResult{}, serrors.WrapStr("update hop field", err)
+	}
+	if err := p.buffer.Clear(); err != nil {
+		return processResult{}, err
+	}
+	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
+		return processResult{}, err
+	}
+	// quoteLen is used to limit the size of the quote buffer, the final quote
+	// length is calculated inside the scmpPacker.
+	quoteLen := len(p.origPacket)
+	if quoteLen > slayers.MaxSCMPPacketLen {
+		quoteLen = slayers.MaxSCMPPacketLen
+	}
+	quote := make([]byte, quoteLen)
+	updated := p.buffer.Bytes()
+	copy(quote[:len(updated)], updated)
+	copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
+
+	_, external := p.d.external[p.ingressID]
+	rawSCMP, err := scmpPacker{
+		internalIP: p.d.internalIP,
+		localIA:    p.d.localIA,
+		origPacket: p.origPacket,
+		ingressID:  p.ingressID,
+		scionL:     &p.scionLayer,
+		buffer:     p.buffer,
+		quote:      quote,
+	}.prepareSCMP(
+		scmpH,
+		scmpP,
+		external,
+		cause,
+	)
+	return processResult{OutPkt: rawSCMP}, err
+}
+
+func (p *scionPacketProcessor) parsePath() (processResult, error) {
+	var ok bool
+	p.path, ok = p.scionLayer.Path.(*scion.Raw)
+	if !ok {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		return processResult{}, malformedPath
+	}
+	var err error
+	p.hopField, err = p.path.GetCurrentHopField()
+	if err != nil {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		return processResult{}, err
+	}
+	p.infoField, err = p.path.GetCurrentInfoField()
+	if err != nil {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		return processResult{}, err
+	}
+	if r, err := p.validateHopExpiry(); err != nil {
+		return r, err
+	}
+	if r, err := p.validateIngressID(); err != nil {
+		return r, err
+	}
+	return processResult{}, nil
+}
+
+func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) {
+	expiration := util.SecsToTime(p.infoField.Timestamp).
+		Add(path.ExpTimeToDuration(p.hopField.ExpTime))
+	expired := expiration.Before(time.Now())
+	if !expired {
+		return processResult{}, nil
+	}
+	return p.packSCMP(
+		&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+			slayers.SCMPCodePathExpired),
+		},
+		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+		serrors.New("expired hop", "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
+			"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF),
+	)
+}
+
+func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
+	pktIngressID := p.hopField.ConsIngress
+	errCode := slayers.SCMPCodeUnknownHopFieldIngress
+	if !p.infoField.ConsDir {
+		pktIngressID = p.hopField.ConsEgress
+		errCode = slayers.SCMPCodeUnknownHopFieldEgress
+	}
+	if p.ingressID != 0 && p.ingressID != pktIngressID {
+		return p.packSCMP(
+			&slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+			},
+			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+			serrors.New("ingress interface invalid",
+				"pkt_ingress", pktIngressID, "router_ingress", p.ingressID),
+		)
+	}
+	return processResult{}, nil
+}
+
+func (p *scionPacketProcessor) validateEgressID() (processResult, error) {
+	pktEgressID := p.egressInterface()
+	_, ih := p.d.internalNextHops[pktEgressID]
+	_, eh := p.d.external[pktEgressID]
+	if !ih && !eh {
+		errCode := slayers.SCMPCodeUnknownHopFieldEgress
+		if !p.infoField.ConsDir {
+			errCode = slayers.SCMPCodeUnknownHopFieldIngress
+		}
+		return p.packSCMP(
+			&slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+			},
+			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+			cannotRoute,
+		)
+	}
+
+	if !p.segmentChange {
+		return processResult{}, nil
+	}
+	// Check that the interface pair is valid on a segment switch.
+	// Having a segment change received from the internal interface is never valid.
+	ingress, egress := p.d.linkTypes[p.ingressID], p.d.linkTypes[pktEgressID]
+	switch {
+	case ingress == topology.Core && egress == topology.Child:
+		return processResult{}, nil
+	case ingress == topology.Child && egress == topology.Core:
+		return processResult{}, nil
+	case ingress == topology.Child && egress == topology.Child:
+		return processResult{}, nil
+	default:
+		return p.packSCMP(
+			&slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(
+					slayers.SCMPTypeParameterProblem,
+					slayers.SCMPCodeInvalidSegmentChange,
+				),
+			},
+			&slayers.SCMPParameterProblem{Pointer: p.currentInfoPointer()},
+			serrors.WithCtx(cannotRoute, "ingress_id", p.ingressID, "ingress_type", ingress,
+				"egress_id", pktEgressID, "egress_type", egress))
+	}
+}
+
+func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error {
+	// against construction dir the ingress router updates the SegID, ifID == 0
+	// means this comes from this AS itself, so nothing has to be done.
+	// TODO(lukedirtwalker): For packets destined to peer links this shouldn't
+	// be updated.
+	if !p.infoField.ConsDir && p.ingressID != 0 {
+		p.infoField.UpdateSegID(p.hopField.Mac)
+		if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+			return serrors.WrapStr("update info field", err)
+		}
+		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *scionPacketProcessor) currentInfoPointer() uint16 {
+	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
+		scion.MetaLen + path.InfoLen*int(p.path.PathMeta.CurrINF))
+}
+
+func (p *scionPacketProcessor) currentHopPointer() uint16 {
+	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
+		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
+}
+
+func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) {
+	if err := path.VerifyMAC(p.d.macFactory(), p.infoField, p.hopField); err != nil {
+		return p.packSCMP(
+			&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+				slayers.SCMPCodeInvalidHopFieldMAC),
+			},
+			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+			serrors.WithCtx(err, "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
+				"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF,
+				"seg_id", p.infoField.SegID),
+		)
+	}
+	return processResult{}, nil
+}
+
+func (p *scionPacketProcessor) resolveInbound() (net.Addr, processResult, error) {
+	a, err := p.d.resolveLocalDst(p.scionLayer)
+	switch {
+	case errors.Is(err, noSVCBackend):
+		r, err := p.packSCMP(
+			&slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeDestinationUnreachable,
+					slayers.SCMPCodeNoRoute),
+			},
+			&slayers.SCMPDestinationUnreachable{}, err)
+		return nil, r, err
+	default:
+		return a, processResult{}, nil
+	}
+}
+
+func (p *scionPacketProcessor) processEgress() error {
+	// we are the egress router and if we go in construction direction we
+	// need to update the SegID.
+	if p.infoField.ConsDir {
+		p.infoField.UpdateSegID(p.hopField.Mac)
+		if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+			// TODO parameter problem invalid path
+			return serrors.WrapStr("update info field", err)
+		}
+	}
+	if err := p.path.IncPath(); err != nil {
+		// TODO parameter problem invalid path
+		return serrors.WrapStr("incrementing path", err)
+	}
+	if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *scionPacketProcessor) doXover() (processResult, error) {
+	p.segmentChange = true
+	if err := p.path.IncPath(); err != nil {
+		// TODO parameter problem invalid path
+		return processResult{}, serrors.WrapStr("incrementing path", err)
+	}
+	var err error
+	if p.hopField, err = p.path.GetCurrentHopField(); err != nil {
+		// TODO parameter problem invalid path
+		return processResult{}, err
+	}
+	if p.infoField, err = p.path.GetCurrentInfoField(); err != nil {
+		// TODO parameter problem invalid path
+		return processResult{}, err
+	}
+	if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
+		return processResult{}, err
+	}
+	if r, err := p.validateHopExpiry(); err != nil {
+		return r, err
+	}
+	// verify the new block
+	if r, err := p.verifyCurrentMAC(); err != nil {
+		return r, serrors.WithCtx(err, "info", "after xover")
+	}
+	return processResult{}, nil
+}
+
+func (p *scionPacketProcessor) egressInterface() uint16 {
+	if p.infoField.ConsDir {
+		return p.hopField.ConsEgress
+	}
+	return p.hopField.ConsIngress
+}
+
+func (p *scionPacketProcessor) validateEgressUp() (processResult, error) {
+	egressID := p.egressInterface()
+	if v, ok := p.d.bfdSessions[egressID]; ok {
+		if !v.IsUp() {
+			scmpH := &slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeExternalInterfaceDown, 0),
+			}
+			var scmpP gopacket.SerializableLayer = &slayers.SCMPExternalInterfaceDown{
+				IA:   p.d.localIA,
+				IfID: uint64(egressID),
+			}
+			if _, external := p.d.external[egressID]; !external {
+				scmpH.TypeCode =
+					slayers.CreateSCMPTypeCode(slayers.SCMPTypeInternalConnectivityDown, 0)
+				scmpP = &slayers.SCMPInternalConnectivityDown{
+					IA:      p.d.localIA,
+					Ingress: uint64(p.ingressID),
+					Egress:  uint64(egressID),
+				}
+			}
+			return p.packSCMP(scmpH, scmpP, serrors.New("bfd session down"))
+		}
+	}
+	return processResult{}, nil
+}
+
+func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error) {
+	if p.ingressID == 0 {
+		return processResult{}, nil
+	}
+	ingressAlert := (!p.infoField.ConsDir && p.hopField.EgressRouterAlert) ||
+		(p.infoField.ConsDir && p.hopField.IngressRouterAlert)
+	if !ingressAlert {
+		return processResult{}, nil
+	}
+	p.hopField.IngressRouterAlert = false
+	return p.handleSCMPTraceRouteRequest(p.ingressID)
+}
+
+func (p *scionPacketProcessor) handleEgressRouterAlert() (processResult, error) {
+	egressAlert := (p.infoField.ConsDir && p.hopField.EgressRouterAlert) ||
+		(!p.infoField.ConsDir && p.hopField.IngressRouterAlert)
+	if !egressAlert {
+		return processResult{}, nil
+	}
+	egressID := p.egressInterface()
+	if _, ok := p.d.external[egressID]; !ok {
+		return processResult{}, nil
+	}
+	p.hopField.EgressRouterAlert = false
+	return p.handleSCMPTraceRouteRequest(egressID)
+}
+
+func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
+	interfaceID uint16) (processResult, error) {
+
+	var scmpH slayers.SCMP
+	if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
+		log.Debug("Parsing SCMP header of router alert", "err", err)
+		return processResult{}, nil
+	}
+	if scmpH.TypeCode != slayers.CreateSCMPTypeCode(slayers.SCMPTypeTracerouteRequest, 0) {
+		log.Debug("Packet with router alert, but not traceroute request",
+			"type_code", scmpH.TypeCode)
+		return processResult{}, nil
+	}
+	var scmpP slayers.SCMPTraceroute
+	if err := scmpP.DecodeFromBytes(scmpH.Payload, gopacket.NilDecodeFeedback); err != nil {
+		log.Debug("Parsing SCMPTraceroute", "err", err)
+		return processResult{}, nil
+	}
+	scmpH = slayers.SCMP{
+		TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeTracerouteReply, 0),
+	}
+	scmpP = slayers.SCMPTraceroute{
+		Identifier: scmpP.Identifier,
+		Sequence:   scmpP.Sequence,
+		IA:         p.d.localIA,
+		Interface:  uint64(interfaceID),
+	}
+	return p.packSCMP(&scmpH, &scmpP, nil)
+}
+
+func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
+	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
+		return processResult{}, nil
+	}
+	return p.packSCMP(
+		&slayers.SCMP{
+			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+				slayers.SCMPCodeInvalidPacketSize),
+		},
+		&slayers.SCMPParameterProblem{Pointer: 0},
+		serrors.New("bad packet size",
+			"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
+	)
+}*/

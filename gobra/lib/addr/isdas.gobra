@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO: replace by relative path
+// ##(-I /Users/joao/Code/verifiedScionGo/)
+
 package addr
 
 import (
@@ -20,10 +23,11 @@ import (
 	"encoding/binary"
 //	"flag"
 //	"fmt"
-//	"strconv"
-//	"strings"
-//
-//	"github.com/scionproto/scion/go/lib/common"
+	"strconv"
+	"strings"
+
+ 	//corresponds to "github.com/scionproto/scion/go/lib/common"
+	"gobra/lib/common"
 )
 
 const (
@@ -192,11 +196,11 @@ type IA struct {
 	A AS
 }
 
-//func IAFromRaw(b common.RawBytes) IA {
-//	ia := &IA{}
-//	ia.Parse(b)
-//	return *ia
-//}
+func IAFromRaw(b common.RawBytes) IA {
+	ia := &IA{}
+	ia.Parse(b)
+	return *ia
+}
 
 // IAFromString parses an IA from a string of the format 'ia-as'.
 func IAFromString(s string) (IA, error) // {
@@ -232,13 +236,13 @@ func IAFromFileFmt(s string, prefixes bool) (IA, error) {
 //	return IA{I: isd, A: as}, nil
 }
 
-func (ia IA) MarshalText() ([]byte, error) {
+func (ia IA) MarshalText() ([]byte, error) /*{
 	return []byte(ia.String()), nil
-}
+} */
 
 // UnmarshalText allows IA to be used as a map key in JSON.
-requires ia != nil ==> acc(ia)
-ensures ia != nil ==> acc(ia)
+requires acc(ia)
+ensures acc(ia)
 func (ia *IA) UnmarshalText(text []byte) error {
 	if len(text) == 0 {
 		*ia = IA{}
@@ -252,7 +256,9 @@ func (ia *IA) UnmarshalText(text []byte) error {
 	return nil
 }
 
-//func (ia *IA) Parse(b common.RawBytes) {
+requires acc(ia)
+ensures acc(ia)
+func (ia *IA) Parse(b common.RawBytes) //{
 //	*ia = IAInt(binary.BigEndian.Uint64(b)).IA()
 //}
 
@@ -293,8 +299,9 @@ func (ia IA) FileFmt(prefixes bool) string //{
 //}
 
 // Set implements flag.Value interface
-requires ia != nil ==> acc(ia)
-ensures ia != nil ==> acc(ia)
+// (joao) may be simplified, only requires acc(ia) if IAFromString leads to nil error
+requires acc(ia)
+ensures acc(ia)
 func (ia *IA) Set(s string) error {
 	pIA, err := IAFromString(s)
 	if err != nil {
@@ -311,17 +318,19 @@ func (iaI IAInt) IA() IA //{
 //	return IA{I: ISD(iaI >> ASBits), A: AS(iaI) & MaxAS}
 //}
 
-func (iaI IAInt) String() string {
+func (iaI IAInt) String() string /*{
 	return iaI.IA().String()
-}
+} */
 
-func (ia IAInt) MarshalText() ([]byte, error) {
+func (ia IAInt) MarshalText() ([]byte, error) /*{
 	return []byte(IAInt(ia).String()), nil
-}
+} */
 
 requires acc(ia)
+requires p > 0
+requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
 ensures acc(ia)
-func (ia *IAInt) UnmarshalText(b []byte) error {
+func (ia *IAInt) UnmarshalText(b []byte, ghost p perm) error {
 	tIA, err := IAFromString(string(b))
 	if err != nil {
 		return nil

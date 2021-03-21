@@ -15,13 +15,17 @@
 
 package addr
 
+// TODO: replace by relative path
+// ##(-I /Users/joao/Code/verifiedScionGo/)
+
 import (
 	"encoding/binary"
 	//"fmt"
 	"net"
-	// "strings"
+	"strings"
 
 	// "github.com/scionproto/scion/go/lib/common"
+	"gobra/lib/common"
 	// "github.com/scionproto/scion/go/lib/serrors"
 )
 
@@ -85,7 +89,7 @@ const (
 type HostAddr interface {
 	Size() int
 	Type() HostAddrType
-	// Pack() common.RawBytes
+	Pack() common.RawBytes
 	IP() net.IP
 	Copy() HostAddr
 	Equal(HostAddr) bool
@@ -104,7 +108,7 @@ func (h HostNone) Type() HostAddrType {
 	return HostTypeNone
 }
 
-// func (h HostNone) Pack() common.RawBytes {
+func (h HostNone) Pack() common.RawBytes // {
 //	return common.RawBytes{}
 //}
 
@@ -112,14 +116,14 @@ func (h HostNone) IP() net.IP {
 	return nil
 }
 
-func (h HostNone) Copy() HostAddr /* {
-	return HostNone{}
-}*/
+func (h HostNone) Copy() HostAddr // {
+//	return HostNone{}
+//}
 
-func (h HostNone) Equal(o HostAddr) bool // {
+func (h HostNone) Equal(o HostAddr) bool //{
 //	_, ok := o.(HostNone)
 //	return ok
-// }
+//}
 
 func (h HostNone) String() string {
 	return "<None>"
@@ -137,7 +141,7 @@ func (h HostIPv4) Type() HostAddrType {
 	return HostTypeIPv4
 }
 
-// func (h HostIPv4) Pack() common.RawBytes {
+func (h HostIPv4) Pack() common.RawBytes //{
 //	return common.RawBytes(h.IP())
 // }
 
@@ -171,11 +175,9 @@ func (h HostIPv6) Type() HostAddrType {
 	return HostTypeIPv6
 }
 
-/*
-func (h HostIPv6) Pack() common.RawBytes {
-	return common.RawBytes(h)[:HostLenIPv6]
-}
-*/
+func (h HostIPv6) Pack() common.RawBytes //{
+//	return (common.RawBytes(h))[:HostLenIPv6]
+//}
 
 func (h HostIPv6) IP() net.IP {
 	return net.IP(h)
