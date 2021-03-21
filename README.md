@@ -6,7 +6,7 @@ SCION is the first
 clean-slate Internet architecture designed to provide route control, failure
 isolation, and explicit trust information for end-to-end communication.
 
-![VerifiedSCION sticker](./sticker.png)
+![VerifiedSCION sticker](./logo.png)
 
 To find out more about the project, please visit the [official project page](https://www.pm.inf.ethz.ch/research/verifiedscion.html).
 
