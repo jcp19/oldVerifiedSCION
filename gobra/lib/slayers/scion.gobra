@@ -30,6 +30,7 @@ import (
 	"gobra/lib/addr"
 	//"github.com/scionproto/scion/go/lib/common"
 	//"github.com/scionproto/scion/go/lib/serrors"
+	"gobra/lib/serrors"
 	//"github.com/scionproto/scion/go/lib/slayers/path/empty"
 	//"github.com/scionproto/scion/go/lib/slayers/path/onehop"
 	//"github.com/scionproto/scion/go/lib/slayers/path/scion"
@@ -87,6 +88,11 @@ const (
 	AddrLen12 AddrLen = 2
 	AddrLen16 AddrLen = 3
 )
+
+ghost
+pure func validAddrLen(addrLen AddrLen) bool {
+	return addrLen == AddrLen4 || addrLen == AddrLen8 || addrLen == AddrLen12 || addrLen == AddrLen16
+}
 
 // AddrType indicates the type of a host address of a given length in the SCION header. There are
 // four possible types per address length.
@@ -175,6 +181,10 @@ type SCION struct {
 
 	// Path is the path contained in the SCION header. It depends on the PathType field.
 	// Path Path //(joao) leads to cycles in kiama
+}
+
+pred InvariantSCION(s SCION) {
+	validAddrLen(s.DstAddrLen) && validAddrLen(s.SrcAddrLen)
 }
 
 // (joao) gopacket not supported for now
@@ -364,7 +374,6 @@ func (s *SCION) DstAddr() (net.Addr, error) {
 // underlaying layer data. Changing the net.Addr object might lead to inconsistent layer information
 // and thus should be treated read-only. Instead, SetDstAddr should be used to update the source
 // address.
-// (joao) fixed perm for now, could be passed as a ghost param
 requires acc(s)
 ensures acc(s)
 func (s *SCION) SrcAddr() (net.Addr, error) {
@@ -393,28 +402,27 @@ func (s *SCION) SetSrcAddr(src net.Addr) error {
 	return err
 }
 
-func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (net.Addr, error) {
-	switch addrLen {
-	case AddrLen4:
-		switch addrType {
-		case T4Ip:
-			// (joao) IPAddr not supported yet
-			// return &net.IPAddr{IP: net.IP(raw)}, nil
-		case T4Svc:
-			// return addr.HostSVC(binary.BigEndian.Uint16(raw[:addr.HostLenSVC])), nil
-		}
-	case AddrLen16:
-		switch addrType {
-		case T16Ip:
-//			return &net.IPAddr{IP: net.IP(raw)}, nil
-		}
-	}
-	// (joao) Add support for serrors
+func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (net.Addr, error) // {
+//	switch addrLen {
+//	case AddrLen4:
+//		switch addrType {
+//		case T4Ip:
+//			// (joao) IPAddr not supported yet
+//			// return &net.IPAddr{IP: net.IP(raw)}, nil
+//		case T4Svc:
+//			// return addr.HostSVC(binary.BigEndian.Uint16(raw[:addr.HostLenSVC])), nil
+//		}
+//	case AddrLen16:
+//		switch addrType {
+//		case T16Ip:
+////			return &net.IPAddr{IP: net.IP(raw)}, nil
+//		}
+//	}
 //	return nil, serrors.New("unsupported address type/length combination",
 //		"type", addrType, "len", addrLen)
-}
+//}
 
-func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) {
+func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) // {
 // (joao) no support for type switch
 //	switch a := hostAddr.(type) {
 //	case *net.IPAddr:
@@ -425,16 +433,16 @@ func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) {
 //	case addr.HostSVC:
 //		return AddrLen4, T4Svc, a.PackWithPad(2), nil
 //	}
-	// (joao) not supported
-	// return 0, 0, nil, serrors.New("unsupported address", "addr", hostAddr)
-}
+//	return 0, 0, nil, serrors.New("unsupported address", "addr", hostAddr)
+//}
 
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
 requires acc(s, _)
-pure func (s *SCION) AddrHdrLen() int // {
-//	return 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
-//}
+ensures res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+pure func (s *SCION) AddrHdrLen() (res int) {
+	return 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+}
 
 // SerializeAddrHdr serializes destination and source ISD-AS-Host address triples into the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
@@ -444,8 +452,8 @@ requires acc(s)
 ensures acc(s)
 func (s *SCION) SerializeAddrHdr(buf []byte) error {
 	if len(buf) < s.AddrHdrLen() {
-//		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
-//			"actual", len(buf))
+		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
+			"actual", len(buf))
 	}
 //	dstAddrBytes := addrBytes(s.DstAddrLen)
 //	srcAddrBytes := addrBytes(s.SrcAddrLen)
@@ -463,12 +471,15 @@ func (s *SCION) SerializeAddrHdr(buf []byte) error {
 // DecodeAddrHdr decodes the destination and source ISD-AS-Host address triples from the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
-requires acc(s)
-ensures acc(s)
+requires acc(s) && InvariantSCION(*s)
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures acc(s) && InvariantSCION(*s)
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (s *SCION) DecodeAddrHdr(data []byte, ghost p perm) error {
+	unfold InvariantSCION(*s)
 	if len(data) < s.AddrHdrLen() {
-		// return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
-		//	"actual", len(data))
+		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
+			"actual", len(data))
 	}
 	offset := 0
 	//s.DstIA = addr.IAFromRaw(data[offset:])
@@ -481,23 +492,23 @@ func (s *SCION) DecodeAddrHdr(data []byte, ghost p perm) error {
 	offset += dstAddrBytes
 	s.RawSrcAddr = data[offset : offset+srcAddrBytes]
 
+	fold InvariantSCION(*s)
 	return nil
 }
 
 
+requires validAddrLen(addrLen)
 ensures res == (int(addrLen) + 1) * LineLen
-func addrBytes(addrLen AddrLen) (res int) {
+pure func addrBytes(addrLen AddrLen) (res int) {
 	return (int(addrLen) + 1) * LineLen
 }
 
 // computeChecksum computes the checksum with the SCION pseudo header.
-// (joao) no support for serrors yet
-// (joao) temporary specification. does not allow s == nil for now but that should be changed
-requires acc(s) && acc(&s.RawSrcAddr) && acc(&s.RawDstAddr)
-ensures acc(s) && acc(&s.RawSrcAddr) && acc(&s.RawDstAddr)
+requires s != nil ==> acc(s) && acc(&s.RawSrcAddr) && acc(&s.RawDstAddr)
+ensures s != nil ==> acc(s) && acc(&s.RawSrcAddr) && acc(&s.RawDstAddr)
 func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8) (uint16, error) {
 	if s == nil {
-//		return 0, serrors.New("SCION header missing")
+		return 0, serrors.New("SCION header missing")
 	}
 	csum, err := s.pseudoHeaderChecksum(len(upperLayer), protocol)
 	if err != nil {
@@ -512,10 +523,10 @@ requires acc(s) && acc(&s.RawSrcAddr) && acc(&s.RawDstAddr)
 ensures acc(s) && acc(&s.RawSrcAddr) && acc(&s.RawDstAddr)
 func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (uint32, error) {
 	if len(s.RawDstAddr) == 0 {
-//		return 0, serrors.New("destination address missing")
+		return 0, serrors.New("destination address missing")
 	}
 	if len(s.RawSrcAddr) == 0 {
-//		return 0, serrors.New("source address missing")
+		return 0, serrors.New("source address missing")
 	}
 	var csum uint32
 	var srcIA, dstIA [8]byte
@@ -533,7 +544,8 @@ func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (uint32, error)
 
 	for i := 0; i < len(s.RawSrcAddr); i += 2 {
 //		csum += uint32(s.RawSrcAddr[i]) << 8
-//		csum += uint32((s.RawSrcAddr)[i+1]) // (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
+		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
+//		csum += uint32((s.RawSrcAddr)[i+1])
 	}
 	for i := 0; i < len(s.RawDstAddr); i += 2 {
 //		csum += uint32(s.RawDstAddr[i]) << 8

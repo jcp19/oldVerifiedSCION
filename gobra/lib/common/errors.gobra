@@ -15,12 +15,10 @@
 
 package common
 
-/*
 import (
-	"fmt"
+	//"fmt"
 	"strings"
 )
-*/
 
 // ErrorMsger allows extracting the message from an error. This means a caller
 // can determine the type of error by comparing the returned message with a
@@ -133,10 +131,9 @@ func (be BasicError) Unwrap() error {
 // being a list of string/val pairs. These key/value pairs should contain all context-dependent
 // information: 'msg' argument itself should be a constant string.
 // (joao) not supported while variadic functionas are not merged in Gobra's master
-/*
-func NewBasicError(msg ErrMsg, e error, logCtx ...interface{}) error {
-	return BasicError{Msg: msg, logCtx: logCtx, Err: e}
-}*/
+func NewBasicError(msg ErrMsg, e error, logCtx ...interface{}) error // {
+//	return BasicError{Msg: msg, logCtx: logCtx, Err: e}
+// }
 
 func (be BasicError) TopError() string /*{
 	s := make([]string, 0, 1+(len(be.logCtx)/2))
