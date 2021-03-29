@@ -77,7 +77,8 @@ jobs:
           # disabled caching of compiled source files altogether
           key: ${{ runner.os }}-sbt-no-precompiled-sources-${{ hashFiles('**/build.sbt') }}
 
-      - name: Execute all tests
+      - name: Verify all Gobra files
+        shell: bash
         run: |
           shopt -s nullglob
           for gobraFile in gobra/**/*.gobra
