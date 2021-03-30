@@ -55,26 +55,32 @@ const (
 type ISD uint16
 
 // ISDFromString parses an ISD from a decimal string.
-func ISDFromString(s string) (ISD, error) // {
-//	isd, err := strconv.ParseUint(s, 10, ISDBits)
-//	if err != nil {
-//		// err.Error() will contain the original value
-//		return 0, common.NewBasicError("Unable to parse ISD", err)
-//	}
-//	return ISD(isd), nil
-//}
+func ISDFromString(s string) (ISD, error) {
+	isd, err := strconv.ParseUint(s, 10, ISDBits)
+	if err != nil {
+		// err.Error() will contain the original value
+		// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+		//        fixing this requires some changes to the Assignability property: it should be a property between Expressions and Types
+		// return 0, common.NewBasicError("Unable to parse ISD", err)
+		return 0, common.NewBasicError(common.ErrMsg("Unable to parse ISD"), err)
+	}
+	return ISD(isd), nil
+}
 
 // ISDFromFileFmt parses an ISD from a file-format string. If prefix is true,
 // an 'ISD' prefix is expected and stripped before parsing.
-func ISDFromFileFmt(s string, prefix bool) (ISD, error) //{
-//	if prefix {
-//		if !strings.HasPrefix(s, ISDFmtPrefix) {
-//			return 0, common.NewBasicError("prefix missing", nil, "prefix", ISDFmtPrefix, "raw", s)
-//		}
-//		s = s[len(ISDFmtPrefix):]
-//	}
-//	return ISDFromString(s)
-//}
+func ISDFromFileFmt(s string, prefix bool) (ISD, error) {
+	if prefix {
+		if !strings.HasPrefix(s, ISDFmtPrefix) {
+			// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+			// return 0, common.NewBasicError("prefix missing", nil, "prefix", ISDFmtPrefix, "raw", s)
+			return 0, common.NewBasicError(common.ErrMsg("prefix missing"), nil, "prefix", ISDFmtPrefix, "raw", s)
+		}
+		// (joao) slicing a string is not yet supported
+		// s = s[len(ISDFmtPrefix):]
+	}
+	return ISDFromString(s)
+}
 
 func (isd ISD) String() string //{
 //	return strconv.FormatUint(uint64(isd), 10)
@@ -97,44 +103,57 @@ func ASFromString(s string) (AS, error) {
 // ASFromFileFmt parses an AS from a file-format string. This is the same
 // format as ASFromString expects, with ':' replaced by '_'. If prefix is true,
 // an 'AS' prefix is expected and stripped before parsing.
-func ASFromFileFmt(s string, prefix bool) (AS, error) //{
-//	if prefix {
-//		if !strings.HasPrefix(s, ASFmtPrefix) {
-//			return 0, common.NewBasicError("prefix missing", nil, "prefix", ASFmtPrefix, "raw", s)
-//		}
-//		s = s[len(ASFmtPrefix):]
-//	}
-//	return asParse(s, "_")
-//}
+func ASFromFileFmt(s string, prefix bool) (AS, error) {
+	if prefix {
+		if !strings.HasPrefix(s, ASFmtPrefix) {
+			// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+			// return 0, common.NewBasicError("prefix missing", nil, "prefix", ASFmtPrefix, "raw", s)
+			return 0, common.NewBasicError(common.ErrMsg("prefix missing"), nil, "prefix", ASFmtPrefix, "raw", s)
+		}
+		// (joao) slicing a string is not yet supported
+		// s = s[len(ASFmtPrefix):]
+	}
+	return asParse(s, "_")
+}
 
-func asParse(s string, sep string) (AS, error) // {
-//	if strings.Index(s, sep) == -1 {
-//		// Must be a BGP AS, parse as 32-bit decimal number
-//		as, err := strconv.ParseUint(s, 10, BGPASBits)
-//		if err != nil {
-//			// err.Error() will contain the original value
-//			return 0, common.NewBasicError("Unable to parse AS", err)
-//		}
-//		return AS(as), nil
-//	}
-//	parts := strings.Split(s, sep)
-//	if len(parts) != asParts {
-//		return 0, common.NewBasicError("unable to parse AS: wrong number of separators", nil,
-//			"expected", asParts, "actual", len(parts), "sep", sep, "raw", s)
-//	}
-//	var as AS
-//	for i := 0; i < asParts; i++ {
+func asParse(s string, sep string) (AS, error) {
+	if strings.Index(s, sep) == -1 {
+		// Must be a BGP AS, parse as 32-bit decimal number
+		as, err := strconv.ParseUint(s, 10, BGPASBits)
+		if err != nil {
+			// err.Error() will contain the original value
+			// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+			// return 0, common.NewBasicError("Unable to parse AS", err)
+			return 0, common.NewBasicError(common.ErrMsg("Unable to parse AS"), err)
+		}
+		return AS(as), nil
+	}
+	parts := strings.Split(s, sep)
+	if len(parts) != asParts {
+		// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+		// return 0, common.NewBasicError("unable to parse AS: wrong number of separators", nil,
+		return 0, common.NewBasicError(common.ErrMsg("unable to parse AS: wrong number of separators"), nil,
+			"expected", asParts, "actual", len(parts), "sep", sep, "raw", s)
+	}
+	var as AS
+
+	invariant 0 <= i && i <= asParts
+	invariant forall j int :: 0 <= j && j < len(parts) ==> acc(&parts[j])
+	for i := 0; i < asParts; i++ {
 //		as <<= asPartBits
-//		v, err := strconv.ParseUint(parts[i], asPartBase, asPartBits)
-//		if err != nil {
-//			return 0, common.NewBasicError("Unable to parse AS part", err, "raw", s)
-//		}
+		v, err := strconv.ParseUint(parts[i], asPartBase, asPartBits)
+		if err != nil {
+			// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+			// return 0, common.NewBasicError("Unable to parse AS part", err, "raw", s)
+			return 0, common.NewBasicError(common.ErrMsg("Unable to parse AS part"), err, "raw", s)
+		}
 //		as |= AS(v)
-//	}
-//	return as, nil
-//}
+	}
+	return as, nil
+}
 
 func (as AS) String() string // {
+// (joao) no support for char literals
 //	return as.fmt(':')
 //}
 
@@ -170,21 +189,25 @@ func (as AS) inRange() bool //{
 //	return as <= MaxAS
 //}
 
-func (as AS) MarshalText() ([]byte, error) //{
-//	if !as.inRange() {
+func (as AS) MarshalText() ([]byte, error) {
+	if !as.inRange() {
 //		return nil, common.NewBasicError("invalid AS", nil, "max", MaxAS, "actual", as)
-//	}
-//	return []byte(as.String()), nil
-//}
-//
-//func (as *AS) UnmarshalText(text []byte) error {
-//	newAS, err := ASFromString(string(text))
-//	if err != nil {
-//		return err
-//	}
-//	*as = newAS
-//	return nil
-//}
+	}
+	return []byte(as.String()), nil
+}
+
+requires acc(as)
+requires forall i int :: 0 <= i && i < len(text) ==> acc(&text[i])
+ensures acc(as)
+ensures forall i int :: 0 <= i && i < len(text) ==> acc(&text[i])
+func (as *AS) UnmarshalText(text []byte) error {
+	newAS, err := ASFromString(string(text))
+	if err != nil {
+		return err
+	}
+	*as = newAS
+	return nil
+}
 
 //var _ fmt.Stringer = IA{}
 //var _ encoding.TextUnmarshaler = (*IA)(nil)
@@ -203,42 +226,46 @@ func IAFromRaw(b common.RawBytes) IA {
 }
 
 // IAFromString parses an IA from a string of the format 'ia-as'.
-func IAFromString(s string) (IA, error) // {
-//	parts := strings.Split(s, "-")
-//	if len(parts) != 2 {
-//		return IA{}, common.NewBasicError("Invalid ISD-AS", nil, "raw", s)
-//	}
-//	isd, err := ISDFromString(parts[0])
-//	if err != nil {
-//		return IA{}, err
-//	}
-//	as, err := ASFromString(parts[1])
-//	if err != nil {
-//		return IA{}, err
-//	}
-//	return IA{I: isd, A: as}, nil
-//}
+func IAFromString(s string) (IA, error) {
+	parts := strings.Split(s, "-")
+	if len(parts) != 2 {
+		// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+		// original: return IA{}, common.ErrMsg("Invalid ISD-AS", nil, "raw", s)
+		return IA{}, common.NewBasicError(common.ErrMsg("Invalid ISD-AS"), nil, "raw", s)
+	}
+	isd, err := ISDFromString(parts[0])
+	if err != nil {
+		return IA{}, err
+	}
+	as, err := ASFromString(parts[1])
+	if err != nil {
+		return IA{}, err
+	}
+	return IA{I: isd, A: as}, nil
+}
 
 // IAFromFileFmt parses an IA from a file-format
 func IAFromFileFmt(s string, prefixes bool) (IA, error) {
-//	parts := strings.Split(s, "-")
-//	if len(parts) != 2 {
-//		return IA{}, common.NewBasicError("Invalid ISD-AS", nil, "raw", s)
-//	}
-//	isd, err := ISDFromFileFmt(parts[0], prefixes)
-//	if err != nil {
-//		return IA{}, err
-//	}
-//	as, err := ASFromFileFmt(parts[1], prefixes)
-//	if err != nil {
-//		return IA{}, err
-//	}
-//	return IA{I: isd, A: as}, nil
+	parts := strings.Split(s, "-")
+	if len(parts) != 2 {
+		// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+		// original: return IA{}, common.NewBasicError("Invalid ISD-AS", nil, "raw", s)
+		return IA{}, common.NewBasicError(common.ErrMsg("Invalid ISD-AS"), nil, "raw", s)
+	}
+	isd, err := ISDFromFileFmt(parts[0], prefixes)
+	if err != nil {
+		return IA{}, err
+	}
+	as, err := ASFromFileFmt(parts[1], prefixes)
+	if err != nil {
+		return IA{}, err
+	}
+	return IA{I: isd, A: as}, nil
 }
 
-func (ia IA) MarshalText() ([]byte, error) /*{
+func (ia IA) MarshalText() ([]byte, error) {
 	return []byte(ia.String()), nil
-} */
+}
 
 // UnmarshalText allows IA to be used as a map key in JSON.
 requires acc(ia)
@@ -262,7 +289,7 @@ func (ia *IA) Parse(b common.RawBytes) //{
 //	*ia = IAInt(binary.BigEndian.Uint64(b)).IA()
 //}
 
-//func (ia IA) Write(b common.RawBytes) {
+func (ia IA) Write(b common.RawBytes) // {
 //	binary.BigEndian.PutUint64(b, uint64(ia.IAInt()))
 //}
 
@@ -290,13 +317,13 @@ func (ia IA) String() string // {
 // FileFmt returns a file-system friendly representation of ia. If prefixes is
 // true, the format will be in the form of ISD%d-AS%d. If it is false, the
 // format is just %d-%d.
-func (ia IA) FileFmt(prefixes bool) string //{
-//	fmts := "%d-%s"
-//	if prefixes {
-//		fmts = "ISD%d-AS%s"
-//	}
+func (ia IA) FileFmt(prefixes bool) string {
+	fmts := "%d-%s"
+	if prefixes {
+		fmts = "ISD%d-AS%s"
+	}
 //	return fmt.Sprintf(fmts, ia.I, ia.A.FileFmt())
-//}
+}
 
 // Set implements flag.Value interface
 // (joao) may be simplified, only requires acc(ia) if IAFromString leads to nil error
@@ -322,9 +349,12 @@ func (iaI IAInt) String() string /*{
 	return iaI.IA().String()
 } */
 
-func (ia IAInt) MarshalText() ([]byte, error) /*{
-	return []byte(IAInt(ia).String()), nil
-} */
+ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
+ensures e == nil
+func (ia IAInt) MarshalText() (res []byte, e error) // {
+	// (joao) requires parentheses surrounding IAInt(ia) to make it parse
+	// return []byte(IAInt(ia).String()), nil
+// }
 
 requires acc(ia)
 requires p > 0

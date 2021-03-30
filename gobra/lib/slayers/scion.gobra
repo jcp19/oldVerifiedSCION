@@ -439,6 +439,8 @@ func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) // {
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
 requires acc(s, _)
+// requires InvariantSCION(*s)
+// ensures unfolding InvariantSCION(*s) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 ensures res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 pure func (s *SCION) AddrHdrLen() (res int) {
 	return 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
@@ -448,16 +450,17 @@ pure func (s *SCION) AddrHdrLen() (res int) {
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
 // (joao) no support for the copy function
-requires acc(s)
-ensures acc(s)
+requires acc(s) && InvariantSCION(*s)
+ensures acc(s) && InvariantSCION(*s)
 func (s *SCION) SerializeAddrHdr(buf []byte) error {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(buf))
 	}
-//	dstAddrBytes := addrBytes(s.DstAddrLen)
-//	srcAddrBytes := addrBytes(s.SrcAddrLen)
-//	offset := 0
+	unfold InvariantSCION(*s)
+	dstAddrBytes := addrBytes(s.DstAddrLen)
+	srcAddrBytes := addrBytes(s.SrcAddrLen)
+	offset := 0
 //	s.DstIA.Write(buf[offset:])
 //	offset += addr.IABytes
 //	s.SrcIA.Write(buf[offset:])
@@ -465,6 +468,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte) error {
 //	copy(buf[offset:offset+dstAddrBytes], s.RawDstAddr)
 //	offset += dstAddrBytes
 //	copy(buf[offset:offset+srcAddrBytes], s.RawSrcAddr)
+	fold InvariantSCION(*s)
 	return nil
 }
 
@@ -476,13 +480,13 @@ requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures acc(s) && InvariantSCION(*s)
 ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (s *SCION) DecodeAddrHdr(data []byte, ghost p perm) error {
-	unfold InvariantSCION(*s)
 	if len(data) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(data))
 	}
+	unfold InvariantSCION(*s)
 	offset := 0
-	//s.DstIA = addr.IAFromRaw(data[offset:])
+	s.DstIA = addr.IAFromRaw(data[offset:])
 	offset += addr.IABytes
 	//s.SrcIA = addr.IAFromRaw(data[offset:])
 	offset += addr.IABytes
@@ -514,9 +518,9 @@ func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8) (uint16, erro
 	if err != nil {
 		return 0, err
 	}
-//	csum = s.upperLayerChecksum(upperLayer, csum)
-//	folded := s.foldChecksum(csum)
-//	return folded, nil
+	csum = s.upperLayerChecksum(upperLayer, csum)
+	folded := s.foldChecksum(csum)
+	return folded, nil
 }
 
 requires acc(s) && acc(&s.RawSrcAddr) && acc(&s.RawDstAddr)
