@@ -92,6 +92,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
+          shopt -s globstar
           echo Running tests on the .gobra files
           echo $(ls ..)
           for gobraFile in ../verifiedSCION/gobra/**/*.gobra
