@@ -1,8 +1,5 @@
 package router
 
-// TODO: replace by relative path
-// ##(-I /Users/joao/Code/verifiedScionGo/)
-
 import (
 	// underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
 	// (joao) leads to empty.head error if run without qualified import
@@ -14,12 +11,6 @@ import (
 	"net"
 	"time"
 ) 
-
-/**
- * TODO
- * - finish verification of processPkt
- * - devise permissions to data structs
-*/
 
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.

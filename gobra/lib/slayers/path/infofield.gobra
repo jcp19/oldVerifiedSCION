@@ -14,8 +14,6 @@
 
 package path
 
-// TODO: replace by relative path
-// ##(-I /Users/joao/Code/verifiedScionGo/)
 // const ONE interface{} = 1
 
 import (

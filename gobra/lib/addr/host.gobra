@@ -15,18 +15,14 @@
 
 package addr
 
-// TODO: replace by relative path
-// ##(-I /Users/joao/Code/verifiedScionGo/)
-
 import (
 	"encoding/binary"
 	//"fmt"
 	"net"
 	"strings"
 
-	// "github.com/scionproto/scion/go/lib/common"
 	"gobra/lib/common"
-	// "github.com/scionproto/scion/go/lib/serrors"
+	"gobra/lib/serrors"
 )
 
 type HostAddrType uint8
@@ -108,6 +104,7 @@ func (h HostNone) Type() HostAddrType {
 	return HostTypeNone
 }
 
+// (joao) Logic error: expected composite type but got DefinedT(RawBytes_common_T,Exclusive)
 func (h HostNone) Pack() common.RawBytes // {
 //	return common.RawBytes{}
 //}
@@ -117,13 +114,14 @@ func (h HostNone) IP() net.IP {
 }
 
 func (h HostNone) Copy() HostAddr // {
+// (joao) Logic error: expected composite type but got DefinedT(HostNone_addr_T,Exclusive) 
 //	return HostNone{}
-//}
+// }
 
-func (h HostNone) Equal(o HostAddr) bool //{
+func (h HostNone) Equal(o HostAddr) bool // {
 //	_, ok := o.(HostNone)
 //	return ok
-//}
+// }
 
 func (h HostNone) String() string {
 	return "<None>"
@@ -145,10 +143,11 @@ func (h HostIPv4) Pack() common.RawBytes //{
 //	return common.RawBytes(h.IP())
 // }
 
-func (h HostIPv4) IP() net.IP // {
-//	// XXX(kormat): ensure the reply is the 4-byte representation.
-//	return net.IP(h).To4()
-//}
+func (h HostIPv4) IP() net.IP {
+	// XXX(kormat): ensure the reply is the 4-byte representation.
+	// (joao) add parentheses surrounding net.IP(h) otherwise causes parser error
+	return (net.IP(h)).To4()
+}
 
 func (h HostIPv4) Copy() HostAddr // {
 //	return HostIPv4(append(net.IP(nil), h...))
@@ -159,9 +158,9 @@ func (h HostIPv4) Equal(o HostAddr) bool // {
 //	return ok && net.IP(h).Equal(net.IP(ha))
 // }
 
-func (h HostIPv4) String() string // {
-//	return h.IP().String()
-// }
+func (h HostIPv4) String() string {
+	return (h.IP()).String() // (joao) add parentheses surrounding h.IP() otherwise causes parser error
+}
 
 // var _ HostAddr = (HostIPv6)(nil)
 
@@ -187,14 +186,16 @@ func (h HostIPv6) Copy() HostAddr // {
 //	return HostIPv6(append(net.IP(nil), h...))
 // }
 
-func (h HostIPv6) Equal(o HostAddr) bool // {
-//	ha, ok := o.(HostIPv6)
-//	return ok && net.IP(h).Equal(net.IP(ha))
-// }
+func (h HostIPv6) Equal(o HostAddr) bool {
+	ha, ok := o.(HostIPv6)
+	// (joao) put net.IP(h) inside parentheses, otherwise causes parser error
+	return ok && (net.IP(h)).Equal(net.IP(ha))
+}
 
-func (h HostIPv6) String() string // {
-//	return h.IP().String()
-// }
+func (h HostIPv6) String() string {
+	// (joao) put h.IP() inside parentheses, otherwise causes parser error
+	return (h.IP()).String()
+}
 
 // var _ HostAddr = (*HostSVC)(nil)
 
@@ -204,7 +205,7 @@ type HostSVC uint16
 // SVC addresses, use BS_A, PS_A, CS_A, and SB_A; shorthand versions without
 // the _A suffix (e.g., PS) also return anycast SVC addresses. For multicast,
 // use BS_M, PS_M, CS_M, and SB_M.
-func HostSVCFromString(str string) HostSVC /* {
+func HostSVCFromString(str string) HostSVC {
 	var m HostSVC
 	switch {
 	case strings.HasSuffix(str, "_A"):
@@ -214,6 +215,7 @@ func HostSVCFromString(str string) HostSVC /* {
 		m = SVCMcast
 	}
 	switch str {
+	/*
 	case "DS":
 		return SvcDS | m
 	case "CS":
@@ -224,10 +226,11 @@ func HostSVCFromString(str string) HostSVC /* {
 		return SvcSIG | m
 	case "Wildcard":
 		return SvcWildcard | m
+	*/
 	default:
 		return SvcNone
 	}
-} */
+}
 
 func (h HostSVC) Size() int {
 	return HostLenSVC
@@ -237,20 +240,18 @@ func (h HostSVC) Type() HostAddrType {
 	return HostTypeSVC
 }
 
-/*
-func (h HostSVC) Pack() common.RawBytes {
+func (h HostSVC) Pack() common.RawBytes /*{
 	out := make(common.RawBytes, HostLenSVC)
 	binary.BigEndian.PutUint16(out, uint16(h))
 	return out
-}
-*/
+} */
 
-func (h HostSVC) PackWithPad(pad int) []byte /* {
+requires HostLenSVC + pad >= 0 
+func (h HostSVC) PackWithPad(pad int) []byte {
 	out := make([]byte, HostLenSVC+pad)
-	binary.BigEndian.PutUint16(out, uint16(h))
+	// binary.BigEndian.PutUint16(out, uint16(h))
 	return out
 }
-*/
 
 func (h HostSVC) IP() net.IP {
 	return nil
@@ -281,15 +282,14 @@ func (h HostSVC) Equal(o HostAddr) bool {
 }
 
 // (joao) no support for rune literals
-func (h HostSVC) String() string /* {
+func (h HostSVC) String() string {
 	name := h.BaseString()
-	cast := 'A'
+	// cast := 'A'
 	if h.IsMulticast() {
-		cast = 'M'
+		// cast = 'M'
 	}
-	return fmt.Sprintf("%v %c (0x%04x)", name, cast, uint16(h))
+	// return fmt.Sprintf("%v %c (0x%04x)", name, cast, uint16(h))
 }
-*/
 
 // BaseString returns the upper case name of the service. For hosts or unrecognized services, it
 // returns UNKNOWN.
@@ -314,28 +314,29 @@ func (h HostSVC) Network() string {
 	return ""
 }
 
-/*
-func HostFromRaw(b common.RawBytes, htype HostAddrType) (HostAddr, error) {
-	switch htype {
-	case HostTypeNone:
-		return HostNone{}, nil
-	case HostTypeIPv4:
-		if len(b) < HostLenIPv4 {
-			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
-		}
-		return HostIPv4(b[:HostLenIPv4]), nil
-	case HostTypeIPv6:
-		if len(b) < HostLenIPv6 {
-			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
-		}
-		return HostIPv6(b[:HostLenIPv6]), nil
-	case HostTypeSVC:
-		return HostSVC(binary.BigEndian.Uint16(b)), nil
-	default:
-		return nil, serrors.WithCtx(ErrBadHostAddrType, "type", htype)
-	}
-}
-*/
+func HostFromRaw(b common.RawBytes, htype HostAddrType) (HostAddr, error) // {
+//	switch htype {
+//	case HostTypeNone:
+//		return HostNone{}, nil
+//	case HostTypeIPv4:
+//		// (joao) no support for len(b) where b is of a declared type
+//		if len(b) < HostLenIPv4 {
+//			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
+//		}
+//		return HostIPv4(b[:HostLenIPv4]), nil
+//	case HostTypeIPv6:
+//		// (joao) no support for len(b) where b is of a declared type
+//		if len(b) < HostLenIPv6 {
+//			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
+//		}
+//		return HostIPv6(b[:HostLenIPv6]), nil
+//		
+//	case HostTypeSVC:
+//		return HostSVC(binary.BigEndian.Uint16(b)), nil
+//	default:
+//		return nil, serrors.WithCtx(ErrBadHostAddrType, "type", htype)
+//	}
+//}
 
 func HostFromIP(ip net.IP) HostAddr {
 	if ip4 := ip.To4(); ip4 != nil {
