@@ -15,6 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     container: gobraverifier/gobra-base:v2
     steps:
+      - name: Install realpath
+        run: sudo apt-get install realpath
+
       - name: Checkout Gobra
         uses: actions/checkout@v2
         with:
@@ -64,6 +67,12 @@ jobs:
         run: echo "SBT_OPTS=-Dsbt.global.base=sbt-cache/.sbtboot -Dsbt.boot.directory=sbt-cache/.boot -Dsbt.ivy.home=sbt-cache/.ivy" >> $GITHUB_ENV
         # note that the cache path is relative to the directory in which sbt is invoked.
 
+      - name: Checkout VerifiedSCION
+        uses: actions/checkout@v2
+        with:
+          repository: jcp19/VerifiedSCION
+          path: verifiedSCION
+
       - name: Cache SBT
         uses: actions/cache@v2
         with:
@@ -81,9 +90,9 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          for gobraFile in gobra/**/*.gobra
+          for gobraFile in ../verifiedSCION/gobra/**/*.gobra
           do
-            echo "Verifying $gobraFile"
-            sbt run -Xss128m -i $gobraFile
+            echo "Verifying $(realpath $gobraFile)"
+            sbt run -Xss128m -i "$(realpath $gobraFile)"
           done
         working-directory: gobra
