@@ -93,11 +93,11 @@ jobs:
         run: |
           shopt -s nullglob
           shopt -s globstar
+          xport SBT_OPTS = "-Xss128m"
           echo Running tests on the .gobra files
-          echo $(ls ..)
           for gobraFile in ../verifiedSCION/gobra/**/*.gobra
           do
-            echo "Verifying $(realpath $gobraFile)"
-            sbt run -Xss128m -i "$(realpath $gobraFile)"
+            echo "Verifying $gobraFile"
+            sbt \"run -i "$(realpath $gobraFile)"\"
           done
         working-directory: gobra
