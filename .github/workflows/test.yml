@@ -16,7 +16,9 @@ jobs:
     container: gobraverifier/gobra-base:v2
     steps:
       - name: Install realpath
-        run: apt-get install realpath
+        run: | 
+          apt-get update
+          apt-get install realpath
 
       - name: Checkout Gobra
         uses: actions/checkout@v2
