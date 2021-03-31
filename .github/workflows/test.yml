@@ -98,6 +98,6 @@ jobs:
           for gobraFile in ../verifiedSCION/gobra/**/*.gobra
           do
             echo "Verifying $gobraFile"
-            sbt \"run -i "$(realpath $gobraFile)"\"
+            sbt \"run -i "$(realpath $gobraFile)" -I $(realpath ../verifiedSCION) \"
           done
         working-directory: gobra
