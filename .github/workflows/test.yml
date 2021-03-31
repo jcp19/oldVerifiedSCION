@@ -93,7 +93,7 @@ jobs:
         run: |
           shopt -s nullglob
           shopt -s globstar
-          xport SBT_OPTS = "-Xss128m"
+          export SBT_OPTS = "-Xss128m"
           echo Running tests on the .gobra files
           for gobraFile in ../verifiedSCION/gobra/**/*.gobra
           do
