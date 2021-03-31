@@ -92,6 +92,8 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
+          echo Running tests on the .gobra files
+          echo $(ls ..)
           for gobraFile in ../verifiedSCION/gobra/**/*.gobra
           do
             echo "Verifying $(realpath $gobraFile)"
