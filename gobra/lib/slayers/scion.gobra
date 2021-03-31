@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-// TODO: replace by relative path
-// ##(-I /Users/joao/Code/verifiedScionGo/)
-
 package slayers
 
 import (
@@ -439,11 +435,11 @@ func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) // {
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
 requires acc(s, _)
-// requires InvariantSCION(*s)
-// ensures unfolding InvariantSCION(*s) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
-ensures res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+requires InvariantSCION(*s)
+ensures unfolding InvariantSCION(*s) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+// ensures res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 pure func (s *SCION) AddrHdrLen() (res int) {
-	return 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+	return unfolding InvariantSCION(*s) in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 }
 
 // SerializeAddrHdr serializes destination and source ISD-AS-Host address triples into the provided
@@ -492,9 +488,9 @@ func (s *SCION) DecodeAddrHdr(data []byte, ghost p perm) error {
 	offset += addr.IABytes
 	dstAddrBytes := addrBytes(s.DstAddrLen)
 	srcAddrBytes := addrBytes(s.SrcAddrLen)
-	s.RawDstAddr = data[offset : offset+dstAddrBytes]
+	// s.RawDstAddr = data[offset : offset+dstAddrBytes]
 	offset += dstAddrBytes
-	s.RawSrcAddr = data[offset : offset+srcAddrBytes]
+	// s.RawSrcAddr = data[offset : offset+srcAddrBytes]
 
 	fold InvariantSCION(*s)
 	return nil

@@ -15,9 +15,6 @@
 
 package addr
 
-// TODO: replace by relative path
-// ##(-I /Users/joao/Code/verifiedScionGo/)
-
 import (
 	"encoding/binary"
 	//"fmt"
