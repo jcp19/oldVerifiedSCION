@@ -108,6 +108,7 @@ jobs:
             else
               echo -e "${RED}Error in file $gobraFile${RESET}"
               RESULT=$($RESULT+1)
+            fi
           done
           exit $RESULT
         working-directory: gobra
