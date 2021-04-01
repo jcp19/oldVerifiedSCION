@@ -102,9 +102,9 @@ jobs:
           RESULT=0
           for gobraFile in ../verifiedSCION/gobra/**/*.gobra
           do
-            echo -e "${yellow}Verifying $gobraFile${reset}"
+            echo -e "${YELLOW}Verifying $gobraFile${RESET}"
             if timeout 10m sbt "run -i $(realpath $gobraFile) -I $(realpath ../verifiedSCION)" ; then
-              echo -e "${GREEN} ${RESET}"
+              echo -e "${GREEN} $gobraFile successfully verified${RESET}"
             else
               echo -e "${RED}Error in file $gobraFile${RESET}"
               RESULT=$[$RESULT+1]
