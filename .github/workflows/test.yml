@@ -91,10 +91,10 @@ jobs:
       - name: Verify all Gobra files
         shell: bash
         run: |
-          red=`tput setaf 1`
-          green=`tput setaf 2`
-          yellow=`tput setaf 3`
-          reset=`tput sgr0`
+          RED='\033[0;31m'
+          GREEN='\033[0;32m'
+          YELLOW='\033[1;33m'
+          RESET='\033[0m' # No Color
           shopt -s nullglob
           shopt -s globstar
           export SBT_OPTS="-Xss128m"
@@ -102,11 +102,11 @@ jobs:
           RESULT=0
           for gobraFile in ../verifiedSCION/gobra/**/*.gobra
           do
-            echo "${yellow}Verifying $gobraFile${reset}"
+            echo -e "${yellow}Verifying $gobraFile${reset}"
             if timeout 10m sbt "run -i $(realpath $gobraFile) -I $(realpath ../verifiedSCION)" ; then
-              echo -e "${green} ${reset}"
+              echo -e "${GREEN} ${RESET}"
             else
-              echo -e "${red}Error in file $gobraFile${reset}"
+              echo -e "${RED}Error in file $gobraFile${RESET}"
               RESULT=$($RESULT+1)
           done
           exit $RESULT
