@@ -91,13 +91,23 @@ jobs:
       - name: Verify all Gobra files
         shell: bash
         run: |
+          red=`tput setaf 1`
+          green=`tput setaf 2`
+          yellow=`tput setaf 3`
+          reset=`tput sgr0`
           shopt -s nullglob
           shopt -s globstar
           export SBT_OPTS="-Xss128m"
           echo Running tests on the .gobra files
+          RESULT=0
           for gobraFile in ../verifiedSCION/gobra/**/*.gobra
           do
-            echo "Verifying $gobraFile"
-            sbt "run -i $(realpath $gobraFile) -I $(realpath ../verifiedSCION)"
+            echo "${yellow}Verifying $gobraFile${reset}"
+            if sbt "run -i $(realpath $gobraFile) -I $(realpath ../verifiedSCION)" ; then
+              echo -e "${green} ${reset}"
+            else
+              echo -e "${red}Error in file $gobraFile${reset}"
+              RESULT=$($RESULT+1)
           done
+          exit $RESULT
         working-directory: gobra
