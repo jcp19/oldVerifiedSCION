@@ -7,6 +7,9 @@ import (
 	"gobra/lib/addr"
 	"gobra/lib/slayers"
 	"gobra/lib/slayers/path"
+	"gobra/lib/slayers/path/scion"
+	// (lhalm) throws NotImplementedExeption
+	//"gobra/lib/serrors"
 	"sync"
 	"net"
 	"time"
@@ -252,7 +255,8 @@ type scionPacketProcessor struct {
 	// buffer gopacket.SerializeBuffer
 
 	// path is the raw SCION path. Will be set during processing.
-	// path *scion.Raw
+	// (lhalm) path makes Gobra throw an error
+	pathVar *scion.Raw
 
 	// hopField is the current hopField field, is updated during processing.
 	hopField *path.HopField
@@ -262,6 +266,8 @@ type scionPacketProcessor struct {
 	segmentChange bool
 }
 
+requires acc(p)
+ensures acc(p)
 func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
@@ -348,21 +354,25 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 //	)
 }
 
+requires acc(p)
+requires acc(p.pathVar)
+ensures acc(p)
+ensures acc(p.pathVar)
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
-//	var ok bool
-//	//(joao) causes parser error
-//	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
-//	p.path, ok = nil, true //p.scionLayer.Path.(*scion.Raw)
-//	if !ok {
-//		// TODO(lukedirtwalker) parameter problem invalid path?
-//		return processResult{}, malformedPath
-//	}
-//	var err error
-//	p.hopField, err = p.path.GetCurrentHopField()
-//	if err != nil {
-//		// TODO(lukedirtwalker) parameter problem invalid path?
-//		return processResult{}, err
-//	}
+	var ok bool
+	//(joao) causes parser error
+	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
+	p.pathVar, ok = nil, true //p.scionLayer.Path.(*scion.Raw)
+	if !ok {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		return processResult{}, nil//malformedPath
+	}
+	var err error
+	p.hopField, err = p.pathVar.GetCurrentHopField()
+	if err != nil {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		return processResult{}, err
+	}
 //	p.infoField, err = p.path.GetCurrentInfoField()
 //	if err != nil {
 //		// TODO(lukedirtwalker) parameter problem invalid path?
