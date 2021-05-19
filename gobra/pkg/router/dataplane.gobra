@@ -256,7 +256,7 @@ type scionPacketProcessor struct {
 
 	// path is the raw SCION path. Will be set during processing.
 	// (lhalm) path makes Gobra throw an error
-	pathVar *scion.Raw
+	pathVar *scion.Raw // path *scion.Raw
 
 	// hopField is the current hopField field, is updated during processing.
 	hopField *path.HopField
@@ -355,29 +355,31 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 }
 
 requires acc(p)
-requires acc(p.pathVar)
 ensures acc(p)
-ensures acc(p.pathVar)
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	var ok bool
 	//(joao) causes parser error
-	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
-	p.pathVar, ok = nil, true //p.scionLayer.Path.(*scion.Raw)
+	// p.pathVar, ok = (p.scionLayer.PathVar).(*scion.Raw)
+	p.pathVar, ok = &scion.Raw{}, true //p.scionLayer.Path.(*scion.Raw)
 	if !ok {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, nil//malformedPath
 	}
 	var err error
+	// (lhalm) path was renamed to pathVar to avoid error
+	// p.hopField, err = p.path.GetCurrentHopField()
 	p.hopField, err = p.pathVar.GetCurrentHopField()
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
-//	p.infoField, err = p.path.GetCurrentInfoField()
-//	if err != nil {
-//		// TODO(lukedirtwalker) parameter problem invalid path?
-//		return processResult{}, err
-//	}
+	// (lhalm) path was renamed to pathVar to avoid error
+	// p.infoField, err = p.path.GetCurrentInfoField()
+	p.infoField, err = p.pathVar.GetCurrentInfoField()
+	if err != nil {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		return processResult{}, err
+	}
 //	if r, err := p.validateHopExpiry(); err != nil {
 //		return r, err
 //	}
