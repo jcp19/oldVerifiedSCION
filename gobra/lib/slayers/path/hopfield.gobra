@@ -93,12 +93,9 @@ func (h *HopField) DecodeFromBytes(raw []byte) error {
 	// h.Mac = append([]byte(nil), raw[6:6+MacLen]...)
 	// I rewrote it as (MacLen is 6)
 	// (joao) append method not supported
-	h.Mac = append([]byte(nil), raw[6], raw[7], raw[8], raw[9], raw[10], raw[11])
+	// h.Mac = append([]byte(nil), raw[6], raw[7], raw[8], raw[9], raw[10], raw[11])
 	return nil
 }
-
-
-func append(arr []byte, elements ...byte) (res []byte)
 
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // path.HopLen
