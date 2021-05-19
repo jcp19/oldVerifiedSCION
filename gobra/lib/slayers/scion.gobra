@@ -176,7 +176,8 @@ type SCION struct {
 	RawSrcAddr []byte
 
 	// Path is the path contained in the SCION header. It depends on the PathType field.
-	// Path Path //(joao) leads to cycles in kiama
+	PathVar Path //(lhalm) Rename to "PathVar" since "Path" leads to cycles in kiama
+	// Path Path
 }
 
 pred InvariantSCION(s SCION) {

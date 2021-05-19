@@ -359,7 +359,7 @@ ensures acc(p)
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	var ok bool
 	//(joao) causes parser error
-	// p.pathVar, ok = (p.scionLayer.PathVar).(*scion.Raw)
+	// p.pathVar, ok = (p.scionLayer.Path).(*scion.Raw)
 	p.pathVar, ok = &scion.Raw{}, true //p.scionLayer.Path.(*scion.Raw)
 	if !ok {
 		// TODO(lukedirtwalker) parameter problem invalid path?
