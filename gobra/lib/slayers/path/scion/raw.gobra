@@ -22,13 +22,19 @@ import (
 // Raw is a raw representation of the SCION (data-plane) path type. It is designed to parse as
 // little as possible and should be used if performance matters.
 type Raw struct {
-	BaseEmbedded Base
+	// (lhalm) named the composite structure beacause composition does not seem to be supported
+	BaseEmbedded Base // Base
 	Raw []byte
+}
+
+// (lhalm) function added as a workaround because interface composition does not seem to be supported yet
+func (s *Raw) Len() int {
+	//return s.BaseEmbedded.Len()
 }
 
 // DecodeFromBytes only decodes the PathMetaHeader. Otherwise the nothing is decoded and simply kept
 // as raw bytes.
-// func (s *Raw) DecodeFromBytes(data []byte) error {
+func (s *Raw) DecodeFromBytes(data []byte) error {
 // 	if err := s.Base.DecodeFromBytes(data); err != nil {
 // 		return err
 // 	}
@@ -38,11 +44,11 @@ type Raw struct {
 // 	}
 // 	s.Raw = data[:pathLen]
 // 	return nil
-// }
+}
 
 // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
 // otherwise an error is returned.
-// func (s *Raw) SerializeTo(b []byte) error {
+func (s *Raw) SerializeTo(b []byte) error {
 // 	if s.Raw == nil {
 // 		return serrors.New("raw is nil")
 // 	}
@@ -56,10 +62,10 @@ type Raw struct {
 // 	}
 // 	copy(b, s.Raw)
 // 	return nil
-// }
+}
 
 // Reverse reverses the path such that it can be used in the reverse direction.
-// func (s *Raw) Reverse() error {
+func (s *Raw) Reverse() error {
 // 	// XXX(shitz): The current implementation is not the most performant, since it parses the entire
 // 	// path first. If this becomes a performance bottleneck, the implementation should be changed to
 // 	// work directly on the raw representation.
@@ -75,7 +81,7 @@ type Raw struct {
 // 		return err
 // 	}
 // 	return s.DecodeFromBytes(s.Raw)
-// }
+}
 
 // ToDecoded transforms a scion.Raw to a scion.Decoded.
 // func (s *Raw) ToDecoded() (*Decoded, error) {
@@ -103,19 +109,17 @@ func (s *Raw) GetInfoField(idx int) (*path.InfoField, error) {
 	}
 	infOffset := MetaLen + idx*path.InfoLen
 	info := &path.InfoField{}
-	/*
-	java.util.concurrent.ExecutionException: scala.MatchError: Receiver of 
-	(ShArrayloc((sarray(relevantPart_scion_V2): ShArray[Ref]), sadd((soffset(relevantPart_scion_V2): Int), 
-	i_scion_V4)): Ref).val$_Int [raw.gobra@128.66--128.81]  might not be injective. 
-	(of class viper.silver.verifier.reasons$ReceiverNotInjective)
-	*/	
-	end := infOffset+path.InfoLen
-	assert forall i int :: infOffset <= i && i < end ==> acc(&(s.Raw)[i], 1/2)
-	arg := (s.Raw)[infOffset : end]
-	assert forall i int :: 0 <= i && i < len(arg) ==> acc(&arg[i], 1/2)
-	if err := info.DecodeFromBytes(arg); err != nil {
+	// (lhalm) need to explicitly create the subslice and assert access permission
+	// if err := info.DecodeFromBytes((s.Raw)[infOffset : infOffset+path.InfoLen]); err != nil {
+	// 	return nil, err
+	// }
+	subslice := (s.Raw)[infOffset : infOffset+path.InfoLen]
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], 1/2)
+	if err := info.DecodeFromBytes(subslice); err != nil {
+		assert forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
 		return nil, err
 	}
+	assert forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
 	return info, nil
 }
 
@@ -144,25 +148,44 @@ func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
 }
 
 // GetHopField returns the HopField at a given index.
-requires acc(s)
-ensures acc(s)
+requires acc(s, 1/2)
+requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
+requires (MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) >= 0
+requires (MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) + path.HopLen < len(s.Raw)
+ensures acc(s, 1/2)
+ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
 func (s *Raw) GetHopField(idx int) (*path.HopField, error) {
 	if idx >= s.BaseEmbedded.NumHops {
 		return nil, serrors.New("HopField index out of bounds", "max", s.BaseEmbedded.NumHops-1, "actual", idx)
 	}
 	hopOffset := MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen
 	hop := &path.HopField{}
-	// Same problem as with GetInfoField above
+	assert hopOffset >= 0
+	assert hopOffset + path.HopLen <= len(s.Raw)
+	assert forall i int :: hopOffset <= i && i < hopOffset+path.HopLen ==> acc(&(s.Raw)[i], 1/2)
+	// (lhalm) need to explicitly create the subslice and assert access permission
 	// if err := hop.DecodeFromBytes((s.Raw)[hopOffset : hopOffset+path.HopLen]); err != nil {
 	// 	return nil, err
 	// }
+	subslice := (s.Raw)[hopOffset : hopOffset+path.HopLen]
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], 1/2)
+	if err := hop.DecodeFromBytes(subslice); err != nil {
+		assert forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
+		return nil, err
+	}
+	assert forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
 	return hop, nil
 }
 
 // GetCurrentHopField is a convenience method that returns the current hop field pointed to by the
 // CurrHF index in the path meta header.
-requires acc(s)
-ensures acc(s)
+requires acc(s, 1/2)
+requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
+requires (MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + int(s.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
+requires (MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + int(s.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len(s.Raw)
+ensures acc(s, 1/2)
+// (lhalm) causes "NotInjective" error
+ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
 func (s *Raw) GetCurrentHopField() (*path.HopField, error) {
 	return s.GetHopField(int(s.BaseEmbedded.PathMeta.CurrHF))
 }
