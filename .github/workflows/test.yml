@@ -110,10 +110,10 @@ jobs:
           RESULT=0
           for gobraPackage in $(find ../verifiedSCION/gobra -type d)
           do
-            CMDARGS="$(ls gobra/lib/slayers/path/*.gobra | xargs realpath| xargs)"
+            CMDARGS="$(ls $gobraPackage/*.gobra | xargs realpath| xargs)"
             echo -e "${YELLOW}Verifying package $gobraPackage${RESET}"
             echo -e "${YELLOW}Verifying files $CMDARGS ${RESET}"
-            if timeout 4h sbt "run -i $CMDARGS -I $(realpath ../verifiedSCION)" ; then
+            if timeout 10m sbt "run -i $CMDARGS -I $(realpath ../verifiedSCION)" ; then
               echo -e "${GREEN} $gobraPackage successfully verified${RESET}"
             else
               echo -e "${RED}Error in package $gobraPackage${RESET}"
