@@ -101,13 +101,13 @@ jobs:
           export SBT_OPTS="-Xss128m"
           echo Running tests on the .gobra files
           RESULT=0
-          for gobraFile in ../verifiedSCION/gobra/**/*.gobra
+          for gobraPackage in $(find ../verifiedSCION/gobra -type d)
           do
-            echo -e "${YELLOW}Verifying $gobraFile${RESET}"
-            if timeout 4h sbt "run -i $(realpath $gobraFile) -I $(realpath ../verifiedSCION)" ; then
-              echo -e "${GREEN} $gobraFile successfully verified${RESET}"
+            echo -e "${YELLOW}Verifying package $gobraPackage${RESET}"
+            if timeout 4h sbt "run -i $(ls gobra/lib/slayers/path/*.gobra | xargs realpath| xargs) -I $(realpath ../verifiedSCION)" ; then
+              echo -e "${GREEN} $gobraPackage successfully verified${RESET}"
             else
-              echo -e "${RED}Error in file $gobraFile${RESET}"
+              echo -e "${RED}Error in package $gobraPackage${RESET}"
               RESULT=$[$RESULT+1]
             fi
           done
