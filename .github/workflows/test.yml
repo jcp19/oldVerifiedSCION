@@ -112,11 +112,14 @@ jobs:
           for gobraPackage in $(find $(realpath ../verifiedSCION/gobra) -type d)
           do
             echo -e "${YELLOW}Verifying package $gobraPackage${RESET}"
-            if timeout 10m sbt "run -i $(echo $gobraPackage/*.gobra | xargs) -I $(realpath ../verifiedSCION)"; then
-              echo -e "${GREEN} $gobraPackage successfully verified${RESET}"
-            else
-              echo -e "${RED}Error in package $gobraPackage${RESET}"
-              RESULT=$[$RESULT+1]
+            CMDARG="$(find ../verifiedSCION/gobra -type d)"
+            if [ -n "$CMDARG" ]; then
+              if timeout 10m sbt "run -i $CMDARG -I $(realpath ../verifiedSCION)"; then
+                echo -e "${GREEN} $gobraPackage successfully verified${RESET}"
+              else
+                echo -e "${RED}Error in package $gobraPackage${RESET}"
+                RESULT=$[$RESULT+1]
+              fi
             fi
           done
           exit $RESULT
