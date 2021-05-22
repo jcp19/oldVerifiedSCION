@@ -92,6 +92,7 @@ _build
 *.debugType
 *.vpr
 *.internal
+*.unparsed
 
 # Other
 #########################
