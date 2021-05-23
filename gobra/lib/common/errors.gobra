@@ -41,12 +41,12 @@ type ErrorNester interface {
 }
 
 // GetNestedError returns the nested error, if any. Returns nil otherwise.
-func GetNestedError(e error) error /*{
-	if n, _ := e.(ErrorNester); n != nil {
-		return n.GetErr()
-	}
+func GetNestedError(e error) error {
+//	if n, _ := e.(ErrorNester); n != nil {
+//		return n.GetErr()
+//	}
 	return nil
-}*/
+}
 
 // Temporary allows signalling of a temporary error. Based on https://golang.org/pkg/net/#Error
 type Temporary interface {
@@ -130,20 +130,20 @@ func (be BasicError) Unwrap() error {
 // NewBasicError creates a new BasicError, with e as the embedded error (can be nil), with logCtx
 // being a list of string/val pairs. These key/value pairs should contain all context-dependent
 // information: 'msg' argument itself should be a constant string.
-// (joao) not supported while variadic functionas are not merged in Gobra's master
 func NewBasicError(msg ErrMsg, e error, logCtx ...interface{}) error // {
+// (joao) not supported while variadic functionas are not merged in Gobra's master
 //	return BasicError{Msg: msg, logCtx: logCtx, Err: e}
 // }
 
-func (be BasicError) TopError() string /*{
+func (be BasicError) TopError() string {
 	s := make([]string, 0, 1+(len(be.logCtx)/2))
-	s = append(s, string(be.Msg))
+//	s = append(s, string(be.Msg))
 	s[0] = string(be.Msg)
 	for i := 0; i < len(be.logCtx); i += 2 {
-		s = append(s, fmt.Sprintf("%s=\"%v\"", be.logCtx[i], be.logCtx[i+1]))
+//		s = append(s, fmt.Sprintf("%s=\"%v\"", be.logCtx[i], be.logCtx[i+1]))
 	}
 	return strings.Join(s, " ")
-}*/
+}
 
 func (be BasicError) Error() string {
 	return FmtError(be)
@@ -171,28 +171,29 @@ func (be MultiError) ToError() error /*{
 // multiError is the internal error interface implementation of MultiError.
 type multiError []error
 
-func (be multiError) Error() string /*{
+func (be multiError) Error() string {
 	return FmtErrors(be)
-}*/
+}
 
 // FmtError formats e for logging. It walks through all nested errors, putting each on a new line,
 // and indenting multi-line errors.
-func FmtError(e error) string /*{
+func FmtError(e error) string {
 	var s, ns []string
 	for {
 		ns, e = innerFmtError(e)
-		s = append(s, ns...)
+		// s = append(s, ns...)
 		if e == nil {
 			// (joao) break not supported
-			break
+			// break
 		}
 	}
 	return strings.Join(s, "\n    ")
-}*/
+}
 
-func innerFmtError(e error) ([]string, error) /* {
+func innerFmtError(e error) ([]string, error) {
 	var s []string
 	var lines []string
+	/*
 	switch e := e.(type) {
 	case ErrorNester:
 		lines = strings.Split(e.TopError(), "\n")
@@ -213,14 +214,14 @@ func innerFmtError(e error) ([]string, error) /* {
 		}
 	}
 	return s, GetNestedError(e)
+	*/
 }
-*/
 
 // FmtErrors formats a slice of errors for logging.
-func FmtErrors(es []error) string /*{
+func FmtErrors(es []error) string {
 	s := make([]string, 0, len(es))
-	for _, e := range es {
-		s = append(s, e.Error())
-	}
+//	for _, e := range es {
+//		s = append(s, e.Error())
+//	}
 	return strings.Join(s, "\n")
-}*/
+}
