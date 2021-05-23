@@ -217,6 +217,9 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 	// }
 // }
 
+requires typeOf(s.PathVar) == (*scion.Raw)
+requires acc((s.PathVar).(*scion.Raw))
+ensures acc((s.PathVar).(*scion.Raw))
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
 
@@ -267,7 +270,9 @@ type scionPacketProcessor struct {
 }
 
 requires acc(p)
+requires typeOf(p.scionLayer.PathVar) == *scion.Raw ==> acc((p.scionLayer.PathVar).(*scion.Raw))
 ensures acc(p)
+ensures typeOf(p.scionLayer.PathVar) == *scion.Raw ==> acc((p.scionLayer.PathVar).(*scion.Raw))
 func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
@@ -354,13 +359,35 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 //	)
 }
 
+(*scion.Raw) implements slayers.Path {
+
+	(r *scion.Raw) SerializeTo(b []byte) (err error) {
+		err = r.SerializeTo(b)
+	}
+
+	(r *scion.Raw) DecodeFromBytes(b []byte) (err error) {
+		err = r.DecodeFromBytes(b)
+	}
+	
+	(r *scion.Raw) Reverse() (err error) {
+		err = r.Reverse()
+	}
+	
+	(r *scion.Raw) Len() (l int) {
+		l = r.Len()
+	}
+}
+
 requires acc(p)
+requires typeOf(p.scionLayer.PathVar) == *scion.Raw ==> acc((p.scionLayer.PathVar).(*scion.Raw))
 ensures acc(p)
+ensures typeOf(p.scionLayer.PathVar) == *scion.Raw ==> acc((p.scionLayer.PathVar).(*scion.Raw))
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	var ok bool
 	//(joao) causes parser error
+	castPath, ok := (p.scionLayer.PathVar).(*scion.Raw)
 	// p.pathVar, ok = (p.scionLayer.Path).(*scion.Raw)
-	p.pathVar, ok = &scion.Raw{}, true //p.scionLayer.Path.(*scion.Raw)
+	// p.pathVar, ok = &scion.Raw{}, true //p.scionLayer.Path.(*scion.Raw)
 	if !ok {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, nil//malformedPath

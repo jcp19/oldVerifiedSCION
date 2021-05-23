@@ -100,7 +100,8 @@ func (s *Base) Len() int {
 type MetaHdr struct {
 	CurrINF uint8
 	CurrHF  uint8
-	SegLen  [3]uint8
+	// (lhalm) uncommenting causes non-termination in permission verification of dataplane.gobra
+	// SegLen  [3]uint8
 }
 
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
