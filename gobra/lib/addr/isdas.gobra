@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"strings"
 
- 	//corresponds to "github.com/scionproto/scion/go/lib/common"
 	"gobra/lib/common"
 )
 
@@ -32,15 +31,13 @@ const (
 	ISDBits       = 16
 	ASBits        = 48
 	BGPASBits     = 32
-	// (joao) no support for bitwise operations
-	// MaxISD    ISD = (1 << ISDBits) - 1
-	// MaxAS     AS  = (1 << ASBits) - 1
-	// MaxBGPAS  AS  = (1 << BGPASBits) - 1
+	MaxISD    ISD = (1 << ISDBits) - 1
+	MaxAS     AS  = (1 << ASBits) - 1
+	MaxBGPAS  AS  = (1 << BGPASBits) - 1
 
 	asPartBits = 16
 	asPartBase = 16
-	// (joao) no support for bitwise operations
-	// asPartMask = (1 << asPartBits) - 1
+	asPartMask = (1 << asPartBits) - 1
 	asParts    = ASBits / asPartBits
 
 	ISDFmtPrefix = "ISD"
@@ -160,35 +157,40 @@ func (as AS) FileFmt() string //{
 //	return as.fmt('_')
 //}
 
-func (as AS) fmt(sep byte) string // {
-//	if !as.inRange() {
+func (as AS) fmt(sep byte) string {
+	if !as.inRange() {
 //		return fmt.Sprintf("%d [Illegal AS: larger than %d]", as, MaxAS)
-//	}
-//	// Format BGP ASes as decimal
-//	if as <= MaxBGPAS {
+		; // (joao) makes this parse
+	}
+	// Format BGP ASes as decimal
+	if as <= MaxBGPAS {
 //		return strconv.FormatUint(uint64(as), 10)
-//	}
-//	// Format all other ASes as 'sep'-separated hex.
-//	const maxLen = len("ffff:ffff:ffff")
+		; // makes this parse
+	}
+	// Format all other ASes as 'sep'-separated hex.
+	// (joao) const is not const expression
+	// const maxLen = len("ffff:ffff:ffff")
 //	b := make([]byte, 0, maxLen)
-//	for i := 0; i < asParts; i++ {
-//		if i > 0 {
+	for i := 0; i < asParts; i++ {
+		if i > 0 {
 //			b = append(b, sep)
-//		}
+		}
 //		shift := uint(asPartBits * (asParts - i - 1))
 //		s := strconv.FormatUint(uint64(as>>shift)&asPartMask, asPartBase)
 //		b = append(b, s...)
-//	}
+	}
 //	return string(b)
-//}
+}
 
-func (as AS) inRange() bool //{
-//	return as <= MaxAS
-//}
+func (as AS) inRange() bool {
+	return as <= MaxAS
+}
 
 func (as AS) MarshalText() ([]byte, error) {
 	if !as.inRange() {
-//		return nil, common.NewBasicError("invalid AS", nil, "max", MaxAS, "actual", as)
+		// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
+		// return nil, common.NewBasicError("invalid AS", nil, "max", MaxAS, "actual", as)
+		return nil, common.NewBasicError(common.ErrMsg("invalid AS"), nil, "max", MaxAS, "actual", as)
 	}
 	return []byte(as.String()), nil
 }
@@ -338,20 +340,23 @@ func (ia *IA) Set(s string) error {
 // IAInt is an integer representation of an ISD-AS.
 type IAInt uint64
 
-func (iaI IAInt) IA() IA //{
-//	return IA{I: ISD(iaI >> ASBits), A: AS(iaI) & MaxAS}
-//}
+func (iaI IAInt) IA() IA {
+	return IA{I: ISD(iaI >> ASBits), A: AS(iaI) & MaxAS}
+}
 
-func (iaI IAInt) String() string /*{
-	return iaI.IA().String()
-} */
+func (iaI IAInt) String() string {
+	// (joao) parse error without parentheses
+	// return iaI.IA().String()
+	return (iaI.IA()).String()
+}
 
-ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
+// ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
 ensures e == nil
-func (ia IAInt) MarshalText() (res []byte, e error) // {
+func (ia IAInt) MarshalText() (res []byte, e error) {
 	// (joao) requires parentheses surrounding IAInt(ia) to make it parse
 	// return []byte(IAInt(ia).String()), nil
-// }
+	return []byte((IAInt(ia)).String()), nil
+}
 
 requires acc(ia)
 requires p > 0
