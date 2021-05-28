@@ -30,7 +30,7 @@ import (
 //	"github.com/google/gopacket/layers"
 //	"github.com/prometheus/client_golang/prometheus"
 //	"golang.org/x/net/ipv4"
-//
+
     //	"github.com/scionproto/scion/go/lib/addr"
 	"gobra/lib/addr"
     //	"github.com/scionproto/scion/go/lib/common"
@@ -47,7 +47,8 @@ import (
 //	"github.com/scionproto/scion/go/lib/slayers/path/empty"
 //	"github.com/scionproto/scion/go/lib/slayers/path/onehop"
 //	"github.com/scionproto/scion/go/lib/slayers/path/scion"
-//	"github.com/scionproto/scion/go/lib/topology"
+	//	"github.com/scionproto/scion/go/lib/topology"
+	"gobra/lib/topology"
 //	"github.com/scionproto/scion/go/lib/underlay/conn"
 //	underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
 //	"github.com/scionproto/scion/go/lib/util"
@@ -92,7 +93,7 @@ type BatchConn interface {
 //  - initializing connections; MUST be done prior to calling Run
 type DataPlane struct {
 	external         map[uint16]BatchConn
-//	linkTypes        map[uint16]topology.LinkType
+	linkTypes        map[uint16]topology.LinkType
 	neighborIAs      map[uint16]addr.IA
 	internal         BatchConn
 	internalIP       net.IP
@@ -107,12 +108,13 @@ type DataPlane struct {
 }
 
 pred DataPlaneMutexInvariant(d *DataPlane) {
-	acc(&d.external) &&
-	 acc(&d.neighborIAs) &&
+	acc(&d.external) && (d.external != nil ==> acc(d.external)) &&
+	acc(&d.linkTypes) && (d.linkTypes != nil ==> acc(d.linkTypes)) &&
+	acc(&d.neighborIAs) && (d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
 	acc(&d.internal) &&
 	acc(&d.internalIP) &&
-	acc(&d.internalNextHops) &&
-	acc(&d.bfdSessions) &&
+	acc(&d.internalNextHops) && (d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
+	acc(&d.bfdSessions) && (d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
 	acc(&d.localIA) &&
 	acc(&d.running)
 }
@@ -258,8 +260,8 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 	if d.external == nil {
 		d.external = make(map[uint16]BatchConn)
 	}
-// (joao) Inhale might fail. permission to d.external might not suffice
-// 	d.external[ifID] = conn
+// (joao) add parentheses surrounding `d.external` to make it parse
+ 	(d.external)[ifID] = conn
 	return nil
 }
 
@@ -282,31 +284,35 @@ func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
 // (joao) `;` added to make it parse 
         ;
 	}
-// (joao) Logic error: return type of multi-assignment should be an InternalTupleT
-//	if _, exists := d.neighborIAs[ifID]; exists {
+// (joao) requires acc to d.neighborIAs due to Gobra bug
+// (joao) added parentheses around d.neighborIAs to make it parse
+//	if _, exists := (d.neighborIAs)[ifID]; exists {
 //		return serrors.WithCtx(alreadySet, "ifID", ifID)
 //	}
 	if d.neighborIAs == nil {
 		d.neighborIAs = make(map[uint16]addr.IA)
 	}
-// (joao) Inhale might fail. permission to d.neighborIAs might not suffice
-//	d.neighborIAs[ifID] = remote
+// (joao) add parentheses surrounding `d.neighborIAs` to make it parse
+	(d.neighborIAs)[ifID] = remote
 	return nil
 }
 
 // AddLinkType adds the link type for a given interface ID. If a link type for
 // the given ID is already set, this method will return an error. This can only
 // be called on a not yet running dataplane.
-//func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
+requires acc(&d.linkTypes) && (d.linkTypes != nil ==> acc(d.linkTypes))
+ensures acc(&d.linkTypes) && acc(d.linkTypes)
+func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 //	if _, exists := d.linkTypes[ifID]; exists {
 //		return serrors.WithCtx(alreadySet, "ifID", ifID)
 //	}
-//	if d.linkTypes == nil {
-//		d.linkTypes = make(map[uint16]topology.LinkType)
-//	}
-//	d.linkTypes[ifID] = linkTo
-//	return nil
-//}
+	if d.linkTypes == nil {
+		d.linkTypes = make(map[uint16]topology.LinkType)
+	}
+	// (joao) added parentheses around d.linkTypes to make it parse
+	(d.linkTypes)[ifID] = linkTo
+	return nil
+}
 
 // AddExternalInterfaceBFD adds the inter AS connection BFD session.
 //func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
@@ -945,7 +951,7 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) {
 //	}
 }
 
-//func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error {
+func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error // {
 //	// against construction dir the ingress router updates the SegID, ifID == 0
 //	// means this comes from this AS itself, so nothing has to be done.
 //	// TODO(lukedirtwalker): For packets destined to peer links this shouldn't
@@ -1110,9 +1116,11 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error)
 	return p.handleSCMPTraceRouteRequest(p.ingressID)
 }
 
+// TODO: clean-up, minimize permissions, write postconditions
 requires acc(&p.infoField) && acc(&p.infoField.ConsDir)
 requires acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert)
 requires acc(&p.hopField.ConsIngress) && acc(&p.hopField.ConsEgress)
+requires acc(&p.d) && acc(&p.d.external) && /* (p.d.external != nil ==> acc(p.d.external)) */ acc(p.d.external)
 func (p *scionPacketProcessor) handleEgressRouterAlert() (processResult, error) {
 	egressAlert := (p.infoField.ConsDir && p.hopField.EgressRouterAlert) ||
 		(!p.infoField.ConsDir && p.hopField.IngressRouterAlert)
@@ -1120,9 +1128,11 @@ func (p *scionPacketProcessor) handleEgressRouterAlert() (processResult, error) 
 		return processResult{}, nil
 	}
 	egressID := p.egressInterface(1/2)
-//	if _, ok := p.d.external[egressID]; !ok {
-//		return processResult{}, nil
-//	}
+	// (joao) put parentheses surrounding p.d.external to make it parse
+	// (joao) Gobra requires maps to be non-null to check if they contain some value (bug)
+	if _, ok := (p.d.external)[egressID]; !ok {
+		return processResult{}, nil
+	}
 	p.hopField.EgressRouterAlert = false
 	return p.handleSCMPTraceRouteRequest(egressID)
 }
@@ -1174,22 +1184,22 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) // {
 //
 func (p *scionPacketProcessor) process() (processResult, error) {
 
-//	if r, err := p.parsePath(); err != nil {
-//		return r, err
-//	}
-//	if r, err := p.validatePktLen(); err != nil {
-//		return r, err
-//	}
-//	if err := p.updateNonConsDirIngressSegID(); err != nil {
-//		return processResult{}, err
-//	}
-//	if r, err := p.verifyCurrentMAC(); err != nil {
-//		return r, err
-//	}
+	if r, err := p.parsePath(); err != nil {
+		return r, err
+	}
+	if r, err := p.validatePktLen(); err != nil {
+		return r, err
+	}
+	if err := p.updateNonConsDirIngressSegID(); err != nil {
+		return processResult{}, err
+	}
+	if r, err := p.verifyCurrentMAC(); err != nil {
+		return r, err
+	}
 //	if r, err := p.handleIngressRouterAlert(); err != nil {
 //		return r, err
 //	}
-//
+
 //	// Inbound: pkts destined to the local IA.
 //	if p.scionLayer.DstIA.Equal(p.d.localIA) && int(p.path.PathMeta.CurrHF)+1 == p.path.NumHops {
 //		a, r, err := p.resolveInbound()
@@ -1198,10 +1208,11 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 //		}
 //		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
 //	}
-//
-//	// Outbound: pkts leaving the local IA.
-//	// BRTransit: pkts leaving from the same BR different interface.
-//
+
+	// Outbound: pkts leaving the local IA.
+	// BRTransit: pkts leaving from the same BR different interface.
+
+// (joao) initially, we will assume that there is no crossOver
 //	if p.path.IsXover() {
 //		if r, err := p.doXover(); err != nil {
 //			return r, err
