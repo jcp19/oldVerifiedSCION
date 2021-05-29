@@ -14,12 +14,10 @@
 
 package path
 
-// const ONE interface{} = 1
-
 import (
 	"encoding/binary"
 	// "fmt"
-	// "github.com/scionproto/scion/go/lib/serrors"
+	"gobra/lib/serrors"
 	// "github.com/scionproto/scion/go/lib/util"
 )
 
@@ -53,8 +51,6 @@ type InfoField struct {
 	Timestamp uint32
 }
 
-// (joao) no support for marshalling and unmarshalling InfoFields at the moment, given that there is no support for the "binary" package
-
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
 // path.InfoLen
 requires acc(inf)
@@ -63,13 +59,10 @@ ensures acc(inf)
 ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
 func (inf *InfoField) DecodeFromBytes(raw []byte) error {
 	if len(raw) < InfoLen {
-		// return serrors.New("InfoField raw too short", "expected", InfoLen, "actual", len(raw))
-		// TODO: fix
-		// return error(ONE) // as in unix, I'm using non-zero values to represent an error
-		return nil // TEMPORARY
+		return serrors.New("InfoField raw too short", "expected", InfoLen, "actual", len(raw))
 	}
-	inf.ConsDir = raw[0]%2 == 1
-	// inf.Peer = raw[0]&0x2 == 0x2
+	inf.ConsDir = raw[0]&0x1 == 0x1
+	inf.Peer = raw[0]&0x2 == 0x2
 	// inf.SegID = binary.BigEndian.Uint16(raw[2:4])
 	// inf.Timestamp = binary.BigEndian.Uint32(raw[4:8])
 	return nil
@@ -83,20 +76,16 @@ ensures acc(inf, 1/2)
 ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func (inf *InfoField) SerializeTo(b []byte) error {
 	if len(b) < InfoLen {
-		// return serrors.New("buffer for InfoField too short", "expected", InfoLen,
-		//	"actual", len(b))
-		// return error(ONE) // as in unix, I'm using non-zero values to represent an error
-		return nil // TEMPORARY
+		return serrors.New("buffer for InfoField too short", "expected", InfoLen,
+			"actual", len(b))
 	}
 	b[0] = 0
-	/* Unsupported for now
 	if inf.ConsDir {
 		b[0] |= 0x1
 	}
 	if inf.Peer {
 		b[0] |= 0x2
 	}
-	*/
 	b[1] = 0 // reserved
 	// (joao) leads to type error because binary.BigEndian is implemented as a type and not as
 	// a global variable as it should be in the std lib
@@ -116,9 +105,9 @@ func (inf *InfoField) UpdateSegID(hfMac []byte) {
 	// inf.SegID = inf.SegID ^ binary.BigEndian.Uint16(hfMac[:2])
 }
 
-/* (joao) no support for strings at the moment
 func (inf *InfoField) String() string {
+	/* (joao) no support for strings at the moment
 	return fmt.Sprintf("{Peer: %t, ConsDir: %t, SegID: %d, Timestamp: %s}",
 		inf.Peer, inf.ConsDir, inf.SegID, util.SecsToCompact(inf.Timestamp))
+	*/
 }
-*/

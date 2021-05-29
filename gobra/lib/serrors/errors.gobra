@@ -52,7 +52,7 @@ func (e basicError) Error() string {
 	return FmtError(e)
 }
 
-func (e basicError) Is(err error) bool // {
+func (e basicError) Is(err error) bool {
 //	switch other := err.(type) {
 //	case basicError:
 //		return e.msg == other.msg
@@ -62,7 +62,7 @@ func (e basicError) Is(err error) bool // {
 //		}
 //		return false
 //	}
-//}
+}
 
 func (e basicError) As(as interface{}) bool // {
 //	if e.msg.err != nil {
@@ -77,14 +77,14 @@ func (e basicError) Unwrap() error {
 	return e.cause
 }
 
-func (e basicError) TopError() string // {
-//	s := make([]string, 0, 1+(len(e.logCtx)/2))
+func (e basicError) TopError() string {
+	s := make([]string, 0, 1+(len(e.logCtx)/2))
 //	s = append(s, e.msgString())
-//	for i := 0; i < len(e.logCtx); i += 2 {
+	for i := 0; i < len(e.logCtx); i += 2 {
 //		s = append(s, fmt.Sprintf("%s=\"%v\"", e.logCtx[i], e.logCtx[i+1]))
-//	}
-//	return strings.Join(s, " ")
-//}
+	}
+	return strings.Join(s, " ")
+}
 
 func (e basicError) msgString() string // {
 //	if e.msg.err != nil {
@@ -94,16 +94,20 @@ func (e basicError) msgString() string // {
 //}
 
 // IsTimeout returns whether err is or is caused by a timeout error.
-func IsTimeout(err error) bool // {
-//	var t interface{ Timeout() bool }
+func IsTimeout(err error) bool {
+	// (joao) added `;` to make this parse
+	// var t interface{ Timeout() bool }
+	var t interface{ Timeout() bool; }
 //	return errors.As(err, &t) && t.Timeout()
-//}
+}
 
 // IsTemporary returns whether err is or is caused by a temporary error.
-func IsTemporary(err error) bool // {
-//	var t interface{ Temporary() bool }
+func IsTemporary(err error) bool {
+	// (joao) added `;` to make this parse
+	// var t interface{ Temporary() bool }
+	var t interface{ Temporary() bool; }
 //	return errors.As(err, &t) && t.Temporary()
-//}
+}
 
 // WithCtx returns an error that is the same as the given error but contains the
 // additional context. The additional context is printed in the Error method.
@@ -141,7 +145,7 @@ func WrapStr(msg string, cause error, logCtx ...interface{}) error // {
 //}
 
 // New creates a new error with the given message and context.
-func New(msg string, logCtx ...interface{}) error // {
+func New(msg string, logCtx ...interface{}) error {
 //	if len(logCtx) == 0 {
 //		return errors.New(msg)
 //	}
@@ -149,13 +153,14 @@ func New(msg string, logCtx ...interface{}) error // {
 //		msg:    errOrMsg{str: msg},
 //		logCtx: logCtx,
 //	}
-//}
+}
 
 // List is a slice of errors
 type List []error
 
 // ToError returns the object as error interface implementation.
 func (e List) ToError() error // {
+//	// (joao) len cannot be applied to types whose underlying type is a slice
 //	if len(e) == 0 {
 //		return nil
 //	}
@@ -171,21 +176,21 @@ func (e errList) Error() string // {
 
 // FmtError formats the error for logging. It walks through all wrapped errors,
 // putting each on a new line, and indenting multi-line errors.
-func FmtError(e error) string // {
-//	var s, ns []string
-//	for {
-//		ns, e = innerFmtError(e)
+func FmtError(e error) string {
+	var s, ns []string
+	for {
+		ns, e = innerFmtError(e)
 //		s = append(s, ns...)
-//		if e == nil {
+		if e == nil {
 //			break
-//		}
-//	}
-//	return strings.Join(s, "\n    ")
-//}
+		}
+	}
+	return strings.Join(s, "\n    ")
+}
 
-func innerFmtError(e error) ([]string, error) // {
-//	var s []string
-//	var lines []string
+func innerFmtError(e error) ([]string, error) {
+	var s []string
+	var lines []string
 //	switch e := e.(type) {
 //	case Wrapper:
 //		lines = strings.Split(e.TopError(), "\n")
@@ -205,14 +210,15 @@ func innerFmtError(e error) ([]string, error) // {
 //		}
 //	}
 //	return s, errors.Unwrap(e)
-//}
+}
 
 
 // fmtErrors formats a slice of errors for logging.
-func fmtErrors(errs []error) string //{
-//	s := make([]string, 0, len(errs))
+func fmtErrors(errs []error) string {
+	s := make([]string, 0, len(errs))
+	// (joao) no support for range statements
 //	for _, e := range errs {
 //		s = append(s, e.Error())
 //	}
-//	return strings.Join(s, "\n")
-//}
+	return strings.Join(s, "\n")
+}

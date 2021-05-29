@@ -28,7 +28,8 @@ import (
 type HostAddrType uint8
 
 const (
-    // (joao) defined in terms of iota before
+    // (joao) defined in terms of iota before, add support if
+	// there is time
 	HostTypeNone HostAddrType = 0
 	HostTypeIPv4 HostAddrType = 1
 	HostTypeIPv6 HostAddrType = 2
@@ -69,17 +70,16 @@ var (
 )
 */
 
-// (joao) used to be defined in hexadecimal
 const (
-	SvcDS       HostSVC = 1
-	SvcCS       HostSVC = 2
-	SvcSB       HostSVC = 3
-	SvcSIG      HostSVC = 4
-	SvcHPS      HostSVC = 5
-	SvcWildcard HostSVC = 16
-	SvcNone     HostSVC = 65535
+	SvcDS       HostSVC = 0x0001
+	SvcCS       HostSVC = 0x0002
+	SvcSB       HostSVC = 0x0003
+	SvcSIG      HostSVC = 0x0004
+	SvcHPS      HostSVC = 0x0005
+	SvcWildcard HostSVC = 0x0010
+	SvcNone     HostSVC = 0xffff
 
-	SVCMcast HostSVC = 32768
+	SVCMcast HostSVC = 0x8000
 )
 
 type HostAddr interface {
@@ -215,7 +215,6 @@ func HostSVCFromString(str string) HostSVC {
 		m = SVCMcast
 	}
 	switch str {
-	/*
 	case "DS":
 		return SvcDS | m
 	case "CS":
@@ -226,7 +225,6 @@ func HostSVCFromString(str string) HostSVC {
 		return SvcSIG | m
 	case "Wildcard":
 		return SvcWildcard | m
-	*/
 	default:
 		return SvcNone
 	}
@@ -240,37 +238,35 @@ func (h HostSVC) Type() HostAddrType {
 	return HostTypeSVC
 }
 
-func (h HostSVC) Pack() common.RawBytes /*{
-	out := make(common.RawBytes, HostLenSVC)
-	binary.BigEndian.PutUint16(out, uint16(h))
-	return out
-} */
+func (h HostSVC) Pack() common.RawBytes {
+	// out := make(common.RawBytes, HostLenSVC)
+	// binary.BigEndian.PutUint16(out, uint16(h))
+	// return out
+}
 
 requires HostLenSVC + pad >= 0 
 func (h HostSVC) PackWithPad(pad int) []byte {
-	out := make([]byte, HostLenSVC+pad)
+	// (joao) cannot make type common.RawBytes
+	// out := make([]byte, HostLenSVC+pad)
 	// binary.BigEndian.PutUint16(out, uint16(h))
-	return out
+	// return out
 }
 
 func (h HostSVC) IP() net.IP {
 	return nil
 }
 
-// (joao) no support for bitwise operators
-func (h HostSVC) IsMulticast() bool // {
-//	return (h & SVCMcast) != 0
-// }
+func (h HostSVC) IsMulticast() bool {
+	return (h & SVCMcast) != 0
+}
 
-// (joao) no support for bitwise operators
-func (h HostSVC) Base() HostSVC // {
-// 	return h & ^HostSVC(SVCMcast)
-// }
+func (h HostSVC) Base() HostSVC {
+ 	return h & ^HostSVC(SVCMcast)
+}
 
-// (joao) no support for bitwise operators
-func (h HostSVC) Multicast() HostSVC // {
-//	return h | HostSVC(SVCMcast)
-// }
+func (h HostSVC) Multicast() HostSVC {
+	return h | HostSVC(SVCMcast)
+}
 
 func (h HostSVC) Copy() HostAddr {
 	return h
@@ -314,29 +310,29 @@ func (h HostSVC) Network() string {
 	return ""
 }
 
-func HostFromRaw(b common.RawBytes, htype HostAddrType) (HostAddr, error) // {
-//	switch htype {
-//	case HostTypeNone:
+func HostFromRaw(b common.RawBytes, htype HostAddrType) (HostAddr, error) {
+	switch htype {
+	case HostTypeNone:
 //		return HostNone{}, nil
-//	case HostTypeIPv4:
+	case HostTypeIPv4:
 //		// (joao) no support for len(b) where b is of a declared type
 //		if len(b) < HostLenIPv4 {
 //			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
 //		}
 //		return HostIPv4(b[:HostLenIPv4]), nil
-//	case HostTypeIPv6:
+	case HostTypeIPv6:
 //		// (joao) no support for len(b) where b is of a declared type
 //		if len(b) < HostLenIPv6 {
 //			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
 //		}
 //		return HostIPv6(b[:HostLenIPv6]), nil
 //		
-//	case HostTypeSVC:
+	case HostTypeSVC:
 //		return HostSVC(binary.BigEndian.Uint16(b)), nil
-//	default:
+	default:
 //		return nil, serrors.WithCtx(ErrBadHostAddrType, "type", htype)
-//	}
-//}
+	}
+}
 
 func HostFromIP(ip net.IP) HostAddr {
 	if ip4 := ip.To4(); ip4 != nil {
@@ -364,7 +360,7 @@ func HostLen(htype HostAddrType) (uint8, error) {
 		length = HostLenIPv6
 	case HostTypeSVC:
 		length = HostLenSVC
-	// default:
+	default:
 	//	return 0, serrors.WithCtx(ErrBadHostAddrType, "type", htype)
 	}
 	return length, nil
