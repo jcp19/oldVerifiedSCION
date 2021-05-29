@@ -29,7 +29,7 @@ type Raw struct {
 
 // (lhalm) function added as a workaround because interface composition does not seem to be supported yet
 func (s *Raw) Len() int {
-	//return s.BaseEmbedded.Len()
+	return s.BaseEmbedded.Len()
 }
 
 // DecodeFromBytes only decodes the PathMetaHeader. Otherwise the nothing is decoded and simply kept
@@ -97,13 +97,11 @@ func (s *Raw) Reverse() error {
 // }
 
 // GetInfoField returns the InfoField at a given index.
-requires acc(&s.BaseEmbedded, 1/2)
-requires acc(&s.Raw, 1/2)
+requires acc(s, 1/2)
 requires idx >= 0
 requires (MetaLen + idx*path.InfoLen)+path.InfoLen < len(s.Raw)
 requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
-ensures acc(&s.BaseEmbedded, 1/2)
-ensures acc(&s.Raw, 1/2)
+ensures acc(s, 1/2)
 ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
 func (s *Raw) GetInfoField(idx int) (*path.InfoField, error) {
 	if idx >= s.BaseEmbedded.NumINF {
@@ -181,14 +179,11 @@ func (s *Raw) GetHopField(idx int) (*path.HopField, error) {
 
 // GetCurrentHopField is a convenience method that returns the current hop field pointed to by the
 // CurrHF index in the path meta header.
-requires acc(&s.BaseEmbedded, 1/2)
-requires acc(&s.Raw, 1/2)
+requires acc(s, 1/2)
 requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
 requires (MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + int(s.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
 requires (MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + int(s.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len(s.Raw)
-ensures acc(&s.BaseEmbedded, 1/2)
-ensures acc(&s.Raw, 1/2)
-// (lhalm) causes "NotInjective" error
+ensures acc(s, 1/2)
 ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/2)
 func (s *Raw) GetCurrentHopField() (*path.HopField, error) {
 	return s.GetHopField(int(s.BaseEmbedded.PathMeta.CurrHF))

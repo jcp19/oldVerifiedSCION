@@ -137,8 +137,6 @@ func (h *HopField) SerializeTo(b []byte) error {
 
 // ExpTimeToDuration calculates the relative expiration time in seconds.
 // Note that for a 0 value ExpTime, the minimal duration is expTimeUnit.
-/*
 func ExpTimeToDuration(expTime uint8) time.Duration {
-	return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit) * time.Second
+	return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit)// * time.Second
 }
-*/
