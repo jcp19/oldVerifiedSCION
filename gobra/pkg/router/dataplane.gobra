@@ -426,7 +426,7 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
-	fold rawMem(p.pathVar)
+	//fold rawMem(p.pathVar)
 //	if r, err := p.validateHopExpiry(); err != nil {
 //		return r, err
 //	}
