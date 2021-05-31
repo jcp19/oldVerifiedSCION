@@ -114,7 +114,7 @@ jobs:
             echo -e "${YELLOW}Verifying package $gobraPackage${RESET}"
             CMDARG="$(echo $gobraPackage/*.gobra | xargs)"
             if [ -n "$CMDARG" ]; then
-              if timeout 10m sbt "run -i $CMDARG -I $(realpath ../verifiedSCION)"; then
+              if timeout 4h sbt "run -i $CMDARG -I $(realpath ../verifiedSCION)"; then
                 echo -e "${GREEN} $gobraPackage successfully verified${RESET}"
               else
                 echo -e "${RED}Error in package $gobraPackage${RESET}"
