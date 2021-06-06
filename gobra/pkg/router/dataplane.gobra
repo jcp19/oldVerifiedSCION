@@ -393,9 +393,9 @@ pred rawMem(raw *scion.Raw) {
 requires acc(p)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires rawMem((p.scionLayer.PathVar).(*scion.Raw))
-//ensures acc(p)
-//ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
-//ensures acc((p.scionLayer.PathVar).(*scion.Raw))
+ensures acc(p)
+ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
+ensures acc((p.scionLayer.PathVar).(*scion.Raw))
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	var ok bool
 	//(joao) causes parser error
@@ -426,7 +426,7 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
-	//fold rawMem(p.pathVar)
+	fold rawMem(p.pathVar)
 //	if r, err := p.validateHopExpiry(); err != nil {
 //		return r, err
 //	}
