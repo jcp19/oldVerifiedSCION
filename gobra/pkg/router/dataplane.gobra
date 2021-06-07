@@ -395,7 +395,7 @@ requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires rawMem((p.scionLayer.PathVar).(*scion.Raw))
 ensures acc(p)
 ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
-ensures acc((p.scionLayer.PathVar).(*scion.Raw))
+ensures rawMem(p.pathVar)
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	var ok bool
 	//(joao) causes parser error
@@ -407,18 +407,14 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 		return processResult{}, nil//malformedPath
 	}
 	unfold rawMem(p.pathVar)
-	assert acc(p.pathVar)
 	var err error
 	// (lhalm) path was renamed to pathVar to avoid error
 	// p.hopField, err = p.path.GetCurrentHopField()
 	p.hopField, err = p.pathVar.GetCurrentHopField()
-	assert acc(p.pathVar)
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
-	assert acc(p.pathVar)
-	//assert rawMem(p.pathVar)
 	// // (lhalm) path was renamed to pathVar to avoid error
 	// // p.infoField, err = p.path.GetCurrentInfoField()
 	p.infoField, err = p.pathVar.GetCurrentInfoField()
