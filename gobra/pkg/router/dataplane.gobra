@@ -393,9 +393,9 @@ pred rawMem(raw *scion.Raw) {
 requires acc(p)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires rawMem((p.scionLayer.PathVar).(*scion.Raw))
-ensures acc(p)
-ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
-ensures rawMem(p.pathVar)
+// ensures acc(p)
+// ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
+// ensures rawMem(p.pathVar)
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	var ok bool
 	//(joao) causes parser error
@@ -410,14 +410,18 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	var err error
 	// (lhalm) path was renamed to pathVar to avoid error
 	// p.hopField, err = p.path.GetCurrentHopField()
+	fold scion.hopFieldAcc(p.pathVar, int(p.pathVar.BaseEmbedded.PathMeta.CurrHF))
 	p.hopField, err = p.pathVar.GetCurrentHopField()
+	unfold scion.hopFieldAcc(p.pathVar, int(p.pathVar.BaseEmbedded.PathMeta.CurrHF))
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
 	// // (lhalm) path was renamed to pathVar to avoid error
 	// // p.infoField, err = p.path.GetCurrentInfoField()
+	fold scion.infoFieldAcc(p.pathVar, int(p.pathVar.BaseEmbedded.PathMeta.CurrINF))
 	p.infoField, err = p.pathVar.GetCurrentInfoField()
+	unfold scion.infoFieldAcc(p.pathVar, int(p.pathVar.BaseEmbedded.PathMeta.CurrINF))
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
