@@ -382,21 +382,22 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 	}
 }
 
-pred rawMem(raw *scion.Raw) {
-	acc(raw) && (forall i int :: 0 <= i && i < len(raw.Raw) ==> acc(&(raw.Raw)[i])) &&
-	(scion.MetaLen + raw.BaseEmbedded.NumINF*path.InfoLen + int(raw.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0 &&
-	(scion.MetaLen + raw.BaseEmbedded.NumINF*path.InfoLen + int(raw.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len(raw.Raw) &&
-	raw.BaseEmbedded.PathMeta.CurrINF >= 0 &&
-	(scion.MetaLen + raw.BaseEmbedded.PathMeta.CurrINF*path.InfoLen)+path.InfoLen < len(raw.Raw)
+pred parsePathContract(p *scionPacketProcessor) {
+	acc(p) &&
+	typeOf(p.scionLayer.PathVar) == *scion.Raw &&
+	rawMem((p.scionLayer.PathVar).(*scion.Raw))
 }
 
-requires acc(p)
-requires typeOf(p.scionLayer.PathVar) == *scion.Raw
-requires rawMem((p.scionLayer.PathVar).(*scion.Raw))
-// ensures acc(p)
-// ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
-// ensures rawMem(p.pathVar)
+pred rawMem(raw *scion.Raw) {
+	acc(raw) && 
+	scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF)) &&
+	scion.hopFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrHF))
+}
+
+requires parsePathContract(p)
+ensures parsePathContract(p)
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
+	unfold parsePathContract(p)
 	var ok bool
 	//(joao) causes parser error
 	p.pathVar, ok = (p.scionLayer.PathVar).(*scion.Raw)
@@ -404,29 +405,31 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	// p.pathVar, ok = &scion.Raw{}, true //p.scionLayer.Path.(*scion.Raw)
 	if !ok {
 		// TODO(lukedirtwalker) parameter problem invalid path?
+		fold parsePathContract(p)
 		return processResult{}, nil//malformedPath
 	}
 	unfold rawMem(p.pathVar)
 	var err error
 	// (lhalm) path was renamed to pathVar to avoid error
 	// p.hopField, err = p.path.GetCurrentHopField()
-	fold scion.hopFieldAcc(p.pathVar, int(p.pathVar.BaseEmbedded.PathMeta.CurrHF))
 	p.hopField, err = p.pathVar.GetCurrentHopField()
-	unfold scion.hopFieldAcc(p.pathVar, int(p.pathVar.BaseEmbedded.PathMeta.CurrHF))
 	if err != nil {
+		fold rawMem(p.pathVar)
+		fold parsePathContract(p)
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
 	// // (lhalm) path was renamed to pathVar to avoid error
 	// // p.infoField, err = p.path.GetCurrentInfoField()
-	fold scion.infoFieldAcc(p.pathVar, int(p.pathVar.BaseEmbedded.PathMeta.CurrINF))
 	p.infoField, err = p.pathVar.GetCurrentInfoField()
-	unfold scion.infoFieldAcc(p.pathVar, int(p.pathVar.BaseEmbedded.PathMeta.CurrINF))
 	if err != nil {
+		fold rawMem(p.pathVar)
+		fold parsePathContract(p)
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
 	fold rawMem(p.pathVar)
+	fold parsePathContract(p)
 //	if r, err := p.validateHopExpiry(); err != nil {
 //		return r, err
 //	}
