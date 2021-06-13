@@ -219,9 +219,9 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 // }
 
 requires typeOf(s.PathVar) == (*scion.Raw)
-requires acc((s.PathVar).(*scion.Raw))
-//ensures typeOf(s.PathVar) == (*scion.Raw)
-//ensures acc((s.PathVar).(*scion.Raw))
+requires rawMem((s.PathVar).(*scion.Raw))
+ensures typeOf(s.PathVar) == (*scion.Raw)
+ensures rawMem((s.PathVar).(*scion.Raw))
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
 
@@ -233,7 +233,12 @@ func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCIO
 		origPacket: origPacket,
 		//buffer:     buffer,
 	}
-	return p.process()
+	fold parsePathContract(&p)
+	result, err := p.process();
+	unfold parsePathContract(&p)
+	return result, err
+	// (lhalm) define return values to allow folding of predicate
+	//return p.process()
 }
 
 // Establishes the restrictions on the scion packet processors
@@ -271,19 +276,15 @@ type scionPacketProcessor struct {
 	segmentChange bool
 }
 
-requires acc(p)
-requires typeOf(p.scionLayer.PathVar) == *scion.Raw
-requires acc((p.scionLayer.PathVar).(*scion.Raw))
-ensures acc(p)
-ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
-ensures acc((p.scionLayer.PathVar).(*scion.Raw))
+requires parsePathContract(p)
+ensures parsePathContract(p)
 func (p *scionPacketProcessor) process() (processResult, error) {
-	// if r, err := p.parsePath(); err != nil {
-	// 	return r, err
-	// }
-	if r, err := p.validatePktLen(); err != nil {
+	if r, err := p.parsePath(); err != nil {
 		return r, err
 	}
+	// if r, err := p.validatePktLen(); err != nil {
+	// 	return r, err
+	// }
 //	/* (joao) skip for now
 //	if err := p.updateNonConsDirIngressSegID(); err != nil {
 //		return processResult{}, err
@@ -383,7 +384,10 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 }
 
 pred parsePathContract(p *scionPacketProcessor) {
-	acc(p) &&
+	acc(p, 1/2) &&
+	acc(&p.pathVar, 1/2) &&
+	acc(&p.hopField, 1/2) &&
+	acc(&p.infoField, 1/2) &&
 	typeOf(p.scionLayer.PathVar) == *scion.Raw &&
 	rawMem((p.scionLayer.PathVar).(*scion.Raw))
 }
