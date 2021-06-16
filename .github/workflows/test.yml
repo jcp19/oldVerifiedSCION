@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: viperproject/gobra
-          ref: verified-scion-preview
+          ref: verified-scion-preview-without-selective
           path: gobra
 
       # clone Viper dependencies
