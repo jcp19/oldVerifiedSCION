@@ -163,7 +163,9 @@ pred hopFieldAcc(s *Raw, idx int) {
 // GetHopField returns the HopField at a given index.
 requires hopFieldAcc(s, idx)
 ensures hopFieldAcc(s, idx)
-func (s *Raw) GetHopField(idx int) (*path.HopField, error) {
+ensures hf != nil ==> acc(hf)
+//ensures err == nil ==> hf != nil // would like to have that, does not verify
+func (s *Raw) GetHopField(idx int) (hf *path.HopField, err error) {
 	unfold hopFieldAcc(s, idx)
 	if idx >= s.BaseEmbedded.NumHops {
 		// (lhalm) create error first to allow folding of the predicate
@@ -174,9 +176,6 @@ func (s *Raw) GetHopField(idx int) (*path.HopField, error) {
 	}
 	hopOffset := MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen
 	hop := &path.HopField{}
-	assert hopOffset >= 0
-	assert hopOffset + path.HopLen <= len(s.Raw)
-	assert forall i int :: hopOffset <= i && i < hopOffset+path.HopLen ==> acc(&(s.Raw)[i], 1/4)
 	// (lhalm) need to explicitly create the subslice and assert access permission
 	// if err := hop.DecodeFromBytes((s.Raw)[hopOffset : hopOffset+path.HopLen]); err != nil {
 	// 	return nil, err
@@ -184,11 +183,9 @@ func (s *Raw) GetHopField(idx int) (*path.HopField, error) {
 	subslice := (s.Raw)[hopOffset : hopOffset+path.HopLen]
 	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], 1/4)
 	if err := hop.DecodeFromBytes(subslice); err != nil {
-		assert forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/4)
 		fold hopFieldAcc(s, idx)
 		return nil, err
 	}
-	assert forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/4)
 	fold hopFieldAcc(s, idx)
 	return hop, nil
 }
@@ -199,7 +196,8 @@ requires acc(s, 1/2)
 requires hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF))
 ensures acc(s, 1/2)
 ensures hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF))
-func (s *Raw) GetCurrentHopField() (*path.HopField, error) {
+ensures hf != nil ==> acc(hf)
+func (s *Raw) GetCurrentHopField() (hf *path.HopField, error) {
 	return s.GetHopField(int(s.BaseEmbedded.PathMeta.CurrHF))
 }
 
