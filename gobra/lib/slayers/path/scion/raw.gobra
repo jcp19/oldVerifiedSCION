@@ -106,7 +106,8 @@ pred infoFieldAcc(s *Raw, idx int) {
 // GetInfoField returns the InfoField at a given index.
 requires infoFieldAcc(s, idx)
 ensures infoFieldAcc(s, idx)
-func (s *Raw) GetInfoField(idx int) (*path.InfoField, error) {
+ensures err == nil ==> infoField != nil && acc(infoField)
+func (s *Raw) GetInfoField(idx int) (infoField *path.InfoField, err error) {
 	unfold infoFieldAcc(s, idx)
 	if idx >= s.BaseEmbedded.NumINF {
 		// (lhalm) create error first to allow folding of the predicate
@@ -137,7 +138,8 @@ requires acc(s, 1/2)
 requires infoFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrINF))
 ensures acc(s, 1/2)
 ensures infoFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrINF))
-func (s *Raw) GetCurrentInfoField() (*path.InfoField, error) {
+ensures err == nil ==> infoField != nil && acc(infoField)
+func (s *Raw) GetCurrentInfoField() (infoField *path.InfoField, err error) {
 	return s.GetInfoField(int(s.BaseEmbedded.PathMeta.CurrINF))
 }
 
@@ -163,8 +165,7 @@ pred hopFieldAcc(s *Raw, idx int) {
 // GetHopField returns the HopField at a given index.
 requires hopFieldAcc(s, idx)
 ensures hopFieldAcc(s, idx)
-ensures hf != nil ==> acc(hf)
-//ensures err == nil ==> hf != nil // would like to have that, does not verify
+ensures err == nil ==> hf != nil && acc(hf)
 func (s *Raw) GetHopField(idx int) (hf *path.HopField, err error) {
 	unfold hopFieldAcc(s, idx)
 	if idx >= s.BaseEmbedded.NumHops {
@@ -196,8 +197,8 @@ requires acc(s, 1/2)
 requires hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF))
 ensures acc(s, 1/2)
 ensures hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF))
-ensures hf != nil ==> acc(hf)
-func (s *Raw) GetCurrentHopField() (hf *path.HopField, error) {
+ensures err == nil ==> hf != nil && acc(hf)
+func (s *Raw) GetCurrentHopField() (hf *path.HopField, err error) {
 	return s.GetHopField(int(s.BaseEmbedded.PathMeta.CurrHF))
 }
 

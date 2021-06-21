@@ -1,0 +1,12 @@
+package gopacket
+
+type LayerType int64
+
+type LayerTypeMetadata struct {
+	Name string
+	// (lhalm) Rename to DecoderField to avoid confusion with type
+	// Decoder Decoder
+	DecoderField Decoder
+}
+
+func RegisterLayerType(num int, meta LayerTypeMetadata) LayerType

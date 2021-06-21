@@ -1,0 +1,22 @@
+package gopacket
+
+type PacketBuilder interface {
+	// DecodeFeedback
+	// AddLayer(l Layer)
+	// SetLinkLayer(LinkLayer)
+	// SetNetworkLayer(NetworkLayer)
+	// SetTransportLayer(TransportLayer)
+	// SetApplicationLayer(ApplicationLayer)
+	// SetErrorLayer(ErrorLayer)
+	// NextDecoder(next Decoder) error
+	// DumpPacketData()
+	// DecodeOptions() *DecodeOptions
+}
+
+type Decoder interface {
+	Decode([]byte, PacketBuilder) error
+}
+
+// type DecodeFunc func([]byte, PacketBuilder) error
+
+// func (d DecodeFunc) Decode(data []byte, p PacketBuilder) error

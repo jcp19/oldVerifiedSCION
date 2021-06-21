@@ -1,0 +1,14 @@
+package layers
+
+import (
+	// "dependencies/gopacket"
+)
+
+type BaseLayer struct {
+	Contents []byte
+	Payload []byte
+}
+
+func (b *BaseLayer) LayerContents() []byte
+
+func (b *BaseLayer) LayerPayload() []byte

@@ -20,7 +20,7 @@ import (
 	"net"
 
 	//"github.com/google/gopacket"
-	//"github.com/google/gopacket/layers"
+	"dependencies/gopacket/layers"
 
 	"gobra/lib/addr"
 	"gobra/lib/common"
@@ -122,6 +122,7 @@ type Path interface {
 // SCION is the header of a SCION packet.
 type SCION struct {
 	// layers.BaseLayer // (joao) No support for embedded fields
+	EmbeddedLayer layers.BaseLayer
 	// Common Header fields
 
 	// Version is version of the SCION Header. Currently, only 0 is supported.

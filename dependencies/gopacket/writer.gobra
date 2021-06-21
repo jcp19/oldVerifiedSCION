@@ -1,0 +1,22 @@
+package gopacket
+
+type SerializableLayer interface {
+	SerializeTo(b SerializeBuffer, opts SerializeOptions) error
+	// (lhalm) rename to GetLayerType() to avoid confusion with the type LayerType
+	// LayerType() LayerType
+	GetLayerType() LayerType
+}
+
+type SerializeOptions struct {
+	FixLengths bool
+	ComputeChecksums bool
+}
+
+type SerializeBuffer interface {
+	Bytes() []byte
+	PrependBytes(num int) ([]byte, error)
+	AppendBytes(num int) ([]byte, error)
+	Clear() error
+	Layers() []LayerType
+	PushLayer(LayerType)
+}
