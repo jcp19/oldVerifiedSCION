@@ -146,7 +146,7 @@ func WrapStr(msg string, cause error, logCtx ...interface{}) error // {
 
 // New creates a new error with the given message and context.
 ensures err != nil
-func New(msg string, logCtx ...interface{}) (err error) {
+func New(msg string, logCtx ...interface{}) (err error) //{
 //	if len(logCtx) == 0 {
 //		return errors.New(msg)
 //	}
@@ -154,7 +154,7 @@ func New(msg string, logCtx ...interface{}) (err error) {
 //		msg:    errOrMsg{str: msg},
 //		logCtx: logCtx,
 //	}
-}
+// }
 
 // List is a slice of errors
 type List []error

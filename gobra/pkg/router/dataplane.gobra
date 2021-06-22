@@ -219,10 +219,10 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 	// }
 // }
 
-requires typeOf(s.PathVar) == (*scion.Raw)
-requires rawMem((s.PathVar).(*scion.Raw))
-ensures typeOf(s.PathVar) == (*scion.Raw)
-ensures rawMem((s.PathVar).(*scion.Raw))
+// requires typeOf(s.PathVar) == (*scion.Raw)
+// requires rawMem((s.PathVar).(*scion.Raw))
+// ensures typeOf(s.PathVar) == (*scion.Raw)
+// ensures rawMem((s.PathVar).(*scion.Raw))
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
 
@@ -385,47 +385,40 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 }
 
 pred parsePathContract(p *scionPacketProcessor) {
-	acc(p, 1/2) &&
-	acc(&p.pathVar, 1/2) &&
-	acc(&p.hopField, 1/2) &&
-	acc(&p.infoField, 1/2) &&
+	acc(p, 1/8) &&
 	typeOf(p.scionLayer.PathVar) == *scion.Raw &&
 	rawMem((p.scionLayer.PathVar).(*scion.Raw))
 }
 
 pred rawMem(raw *scion.Raw) {
-	acc(raw, 1/4) && 
+	acc(raw) && 
 	acc(&raw.BaseEmbedded.PathMeta.CurrINF, 1/4) &&
 	acc(&raw.BaseEmbedded.PathMeta.CurrHF, 1/4) &&
 	scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF)) &&
 	scion.hopFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrHF))
 }
 
-requires (scion.MetaLen + 0*path.InfoLen)+path.InfoLen < len(slice)
-requires (scion.MetaLen + 0*path.InfoLen + 0*path.HopLen) + path.HopLen < len(slice)
-requires forall i int :: 0 <= i && i < len(slice) ==> acc(&slice[i])
-func testMethod(slice []byte) {
-	raw := &scion.Raw{}
-	raw.Raw = slice
-	raw.BaseEmbedded = scion.Base{}
-	raw.BaseEmbedded.PathMeta = scion.MetaHdr{}
-	raw.BaseEmbedded.PathMeta.CurrINF = 0
-	raw.BaseEmbedded.PathMeta.CurrHF = 0
-	raw.BaseEmbedded.NumINF = 0
+// hopFieldAcc
+requires acc(raw)
+// requires acc(&raw.BaseEmbedded.NumINF) 
+requires (scion.MetaLen + raw.BaseEmbedded.NumINF*path.InfoLen + int(raw.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
+requires (scion.MetaLen + raw.BaseEmbedded.NumINF*path.InfoLen + int(raw.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len(raw.Raw)
+requires forall i int :: 0 <= i && i < len(raw.Raw) ==> acc(&(raw.Raw)[i])
+// infoFieldAcc
+requires int(raw.BaseEmbedded.PathMeta.CurrINF) >= 0
+requires (scion.MetaLen + int(raw.BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len(raw.Raw)
+// rawMem
+requires acc(&raw.BaseEmbedded.PathMeta.CurrINF)
+requires acc(&raw.BaseEmbedded.PathMeta.CurrHF)
+// parsePathContract
+requires acc(p)
+func testMethod(raw *scion.Raw, p *scionPacketProcessor) {
+	p.scionLayer.PathVar = raw
 	fold scion.hopFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrHF))
 	fold scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF))
-	assert acc(raw, 1/4)
-	// assert scion.hopFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrHF))
-	// assert scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF))
 	fold rawMem(raw)
-	p := &scionPacketProcessor{}
-	p.scionLayer = slayers.SCION{}
-	// p.scionLayer.PathVar = raw
-	// assert acc(p, 1/2)
-	// assert acc(&p.pathVar, 1/2)
-	// assert acc(&p.hopField, 1/2)
-	// assert acc(&p.infoField, 1/2)
-	// assert typeOf(p.scionLayer.PathVar) == *scion.Raw
+	fold parsePathContract(p)
+	assert false
 }
 
 // requires parsePathContract(p)
