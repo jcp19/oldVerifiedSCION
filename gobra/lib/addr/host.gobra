@@ -118,10 +118,10 @@ func (h HostNone) Copy() HostAddr // {
 //	return HostNone{}
 // }
 
-func (h HostNone) Equal(o HostAddr) bool // {
-//	_, ok := o.(HostNone)
-//	return ok
-// }
+func (h HostNone) Equal(o HostAddr) bool {
+	_, ok := o.(HostNone)
+	return ok
+}
 
 func (h HostNone) String() string {
 	return "<None>"
@@ -159,7 +159,8 @@ func (h HostIPv4) Equal(o HostAddr) bool // {
 // }
 
 func (h HostIPv4) String() string {
-	return (h.IP()).String() // (joao) add parentheses surrounding h.IP() otherwise causes parser error
+	// (joao) add parentheses surrounding h.IP() otherwise causes parser error
+	return (h.IP()).String()
 }
 
 // var _ HostAddr = (HostIPv6)(nil)

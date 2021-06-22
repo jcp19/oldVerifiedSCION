@@ -133,6 +133,22 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 //	errBFDDisabled                = serrors.New("BFD is disabled")
 //)
 
+// (joao): begin alternative to final global variables
+func alreadySet() error {
+	return serrors.New("already set")
+}
+//	cannotRoute                   = serrors.New("cannot route, dropping pkt")
+//	emptyValue                    = serrors.New("empty value")
+//	malformedPath                 = serrors.New("malformed path content")
+//	modifyExisting                = serrors.New("modifying a running dataplane is not allowed")
+//	noSVCBackend                  = serrors.New("cannot find internal IP for the SVC")
+//	unsupportedPathType           = serrors.New("unsupported path type")
+//	unsupportedPathTypeNextHeader = serrors.New("unsupported combination")
+//	noBFDSessionFound             = serrors.New("no BFD sessions was found")
+//	noBFDSessionConfigured        = serrors.New("no BFD sessions have been configured")
+//	errBFDDisabled                = serrors.New("BFD is disabled")
+// (joao): end alternative to final global variables
+
 type scmpError struct {
 //	TypeCode slayers.SCMPTypeCode
 	Cause    error
@@ -517,6 +533,8 @@ func (d *DataPlane) Run() error {
 
 	d.initMetrics()
 
+// (joao) TODO: extract this function to a new top level function to overcome limitations introduced by lack of support for
+//        closures
 //	read := func(ingressID uint16, rd BatchConn) {
 //		msgs := conn.NewReadMessages(inputBatchCnt)
 //		for _, msg := range msgs {

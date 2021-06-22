@@ -418,15 +418,18 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (net.Addr, error)
 
 func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) {
 // (joao) no support for type switch
-//	switch a := hostAddr.(type) {
+	switch a := hostAddr.(type) {
 //	case *net.IPAddr:
 //		if ip := a.IP.To4(); ip != nil {
 //			return AddrLen4, T4Ip, ip, nil
 //		}
 //		return AddrLen16, T16Ip, a.IP, nil
-//	case addr.HostSVC:
+	case addr.HostSVC:
 //		return AddrLen4, T4Svc, a.PackWithPad(2), nil
-//	}
+		;
+	default:
+		;
+	}
 // (joao) node not in tree: Network
 //	return 0, 0, nil, serrors.New("unsupported address", "addr", hostAddr)
 }
