@@ -157,6 +157,7 @@ func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
 
 pred hopFieldAcc(s *Raw, idx int) {
 	acc(s, 1/4) &&
+	acc(&s.BaseEmbedded.NumINF, 1/4) && 
 	(MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) >= 0 &&
 	(MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) + path.HopLen < len(s.Raw) &&
 	forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/4)
