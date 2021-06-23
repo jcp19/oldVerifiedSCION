@@ -391,7 +391,7 @@ pred parsePathContract(p *scionPacketProcessor) {
 }
 
 pred rawMem(raw *scion.Raw) {
-	acc(raw) && 
+	acc(raw, 1/4) && 
 	acc(&raw.BaseEmbedded.PathMeta.CurrINF, 1/4) &&
 	acc(&raw.BaseEmbedded.PathMeta.CurrHF, 1/4) &&
 	scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF)) &&
