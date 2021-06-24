@@ -400,7 +400,8 @@ pred rawMem(raw *scion.Raw) {
 
 // hopFieldAcc
 requires acc(raw)
-// requires acc(&raw.BaseEmbedded.NumINF) 
+// requires acc(&raw.BaseEmbedded) implied by acces to raw
+// requires acc(&raw.BaseEmbedded.NumINF) implied by access to raw
 requires (scion.MetaLen + raw.BaseEmbedded.NumINF*path.InfoLen + int(raw.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
 requires (scion.MetaLen + raw.BaseEmbedded.NumINF*path.InfoLen + int(raw.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len(raw.Raw)
 requires forall i int :: 0 <= i && i < len(raw.Raw) ==> acc(&(raw.Raw)[i])
@@ -413,12 +414,13 @@ requires acc(&raw.BaseEmbedded.PathMeta.CurrHF)
 // parsePathContract
 requires acc(p)
 func testMethod(raw *scion.Raw, p *scionPacketProcessor) {
-	p.scionLayer.PathVar = raw
+	// p.scionLayer.PathVar = raw
+	fold scion.rawBytesAcc(raw.Raw)
 	fold scion.hopFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrHF))
 	fold scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF))
 	fold rawMem(raw)
-	fold parsePathContract(p)
-	assert false
+	// fold parsePathContract(p)
+	// assert false
 }
 
 // requires parsePathContract(p)

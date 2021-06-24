@@ -96,11 +96,15 @@ func (s *Raw) Reverse() error {
 // 	return decoded, nil
 // }
 
+pred rawBytesAcc(slice []byte) {
+	forall i int :: 0 <= i && i < len(slice) ==> acc(&(slice)[i], 1/4)
+}
+
 pred infoFieldAcc(s *Raw, idx int) {
 	acc(s, 1/4) &&
 	idx >= 0 &&
 	(MetaLen + idx*path.InfoLen)+path.InfoLen < len(s.Raw) &&
-	forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/4)
+	rawBytesAcc(s.Raw)
 }
 
 // GetInfoField returns the InfoField at a given index.
@@ -122,12 +126,15 @@ func (s *Raw) GetInfoField(idx int) (infoField *path.InfoField, err error) {
 	// if err := info.DecodeFromBytes((s.Raw)[infOffset : infOffset+path.InfoLen]); err != nil {
 	// 	return nil, err
 	// }
+	unfold rawBytesAcc(s.Raw)
 	subslice := (s.Raw)[infOffset : infOffset+path.InfoLen]
 	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], 1/4)
 	if err := info.DecodeFromBytes(subslice); err != nil {
+		fold rawBytesAcc(s.Raw)
 		fold infoFieldAcc(s, idx)
 		return nil, err
 	}
+	fold rawBytesAcc(s.Raw)
 	fold infoFieldAcc(s, idx)
 	return info, nil
 }
@@ -157,10 +164,9 @@ func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
 
 pred hopFieldAcc(s *Raw, idx int) {
 	acc(s, 1/4) &&
-	acc(&s.BaseEmbedded.NumINF, 1/4) && 
 	(MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) >= 0 &&
 	(MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) + path.HopLen < len(s.Raw) &&
-	forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], 1/4)
+	rawBytesAcc(s.Raw)
 }
 
 // GetHopField returns the HopField at a given index.
@@ -182,12 +188,15 @@ func (s *Raw) GetHopField(idx int) (hf *path.HopField, err error) {
 	// if err := hop.DecodeFromBytes((s.Raw)[hopOffset : hopOffset+path.HopLen]); err != nil {
 	// 	return nil, err
 	// }
+	unfold rawBytesAcc(s.Raw)
 	subslice := (s.Raw)[hopOffset : hopOffset+path.HopLen]
 	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], 1/4)
 	if err := hop.DecodeFromBytes(subslice); err != nil {
+		fold rawBytesAcc(s.Raw)
 		fold hopFieldAcc(s, idx)
 		return nil, err
 	}
+	fold rawBytesAcc(s.Raw)
 	fold hopFieldAcc(s, idx)
 	return hop, nil
 }
