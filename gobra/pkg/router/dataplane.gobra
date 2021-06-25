@@ -419,6 +419,7 @@ func testMethod(raw *scion.Raw, p *scionPacketProcessor) {
 	fold scion.hopFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrHF))
 	fold scion.rawBytesAcc(raw.Raw)
 	fold scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF))
+	assert acc(raw, 1/4)
 	// fold rawMem(raw)
 	// fold parsePathContract(p)
 	// assert false
