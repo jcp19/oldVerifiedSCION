@@ -240,17 +240,19 @@ func (h HostSVC) Type() HostAddrType {
 }
 
 func (h HostSVC) Pack() common.RawBytes {
+	// (joao) cannot make type common.RawBytes
 	// out := make(common.RawBytes, HostLenSVC)
 	// binary.BigEndian.PutUint16(out, uint16(h))
 	// return out
 }
 
-requires HostLenSVC + pad >= 0 
-func (h HostSVC) PackWithPad(pad int) []byte {
-	// (joao) cannot make type common.RawBytes
-	// out := make([]byte, HostLenSVC+pad)
-	// binary.BigEndian.PutUint16(out, uint16(h))
-	// return out
+requires HostLenSVC + pad >= 2 
+ensures len(s) == HostLenSVC + pad
+ensures forall i int :: 0 <= i && i < len(s) ==> acc(&s[i])
+func (h HostSVC) PackWithPad(pad int) (s []byte) {
+	out := make([]byte, HostLenSVC+pad)
+	binary.BigEndian.PutUint16(out, uint16(h))
+	return out
 }
 
 func (h HostSVC) IP() net.IP {

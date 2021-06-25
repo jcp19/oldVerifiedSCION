@@ -133,20 +133,39 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 //	errBFDDisabled                = serrors.New("BFD is disabled")
 //)
 
-// (joao): begin alternative to final global variables
-func alreadySet() error {
-	return serrors.New("already set")
-}
-//	cannotRoute                   = serrors.New("cannot route, dropping pkt")
-//	emptyValue                    = serrors.New("empty value")
-//	malformedPath                 = serrors.New("malformed path content")
-//	modifyExisting                = serrors.New("modifying a running dataplane is not allowed")
-//	noSVCBackend                  = serrors.New("cannot find internal IP for the SVC")
-//	unsupportedPathType           = serrors.New("unsupported path type")
-//	unsupportedPathTypeNextHeader = serrors.New("unsupported combination")
-//	noBFDSessionFound             = serrors.New("no BFD sessions was found")
-//	noBFDSessionConfigured        = serrors.New("no BFD sessions have been configured")
-//	errBFDDisabled                = serrors.New("BFD is disabled")
+// (joao): begin alternative to final global variables defined in the previous var block
+ensures e != nil
+func alreadySet() (e error) { return serrors.New("already set") }
+
+ensures e != nil
+func cannotRoute() (e error) { return serrors.New("cannot route, dropping pkt") }
+
+ensures e != nil
+func emptyValue() (e error) { return serrors.New("empty value") }
+
+ensures e != nil
+func malformedPath() (e error) { return serrors.New("malformed path content") }
+
+ensures e != nil
+func modifyExisting() (e error) { return serrors.New("modifying a running dataplane is not allowed") }
+
+ensures e != nil
+func noSVCBackend() (e error) { return serrors.New("cannot find internal IP for the SVC") }
+
+ensures e != nil
+func unsupportedPathType() (e error) { return serrors.New("unsupported path type") }
+
+ensures e != nil
+func unsupportedPathTypeNextHeader() (e error) { return serrors.New("unsupported combination") }
+
+ensures e != nil
+func noBFDSessionFound() (e error) { return serrors.New("no BFD sessions was found") }
+
+ensures e != nil
+func noBFDSessionConfigured() (e error) { return serrors.New("no BFD sessions have been configured") }
+
+ensures e != nil
+func errBFDDisabled() (e error) { return serrors.New("BFD is disabled") }
 // (joao): end alternative to final global variables
 
 type scmpError struct {
@@ -169,20 +188,17 @@ func (d *DataPlane) SetIA(ia addr.IA) error {
 	if d.running {
 // (joao) no support for global variables
 //		return modifyExisting
-// (joao) `;` added to make it parse 
-        ;
+		return modifyExisting()
 	}
 	if ia.IsZero() {
 // (joao) no support for global variables
 //		return emptyValue
-// (joao) `;` added to make it parse 
-        ;
+		return emptyValue()
 	}
 	if !d.localIA.IsZero() {
 // (joao) no support for global variables
 //		return alreadySet
-// (joao) `;` added to make it parse 
-        ;
+		return alreadySet()
 	}
 	d.localIA = ia
 	return nil
@@ -197,14 +213,14 @@ func (d *DataPlane) SetKey(key []byte) error {
     unfold DataPlaneMutexInvariant!<d!>()
 //	defer d.mtx.Unlock()
 	if d.running {
+// (joao) no support for global variables
 //		return modifyExisting
-// (joao) `;` added to make it parse 
-        ;
+		return modifyExisting()
 	}
 	if len(key) == 0 {
+// (joao) no support for global variables
 //		return emptyValue
-// (joao) `;` added to make it parse 
-        ;
+		return emptyValue()
 	}
 //	if d.macFactory != nil {
 //		return alreadySet
@@ -231,19 +247,19 @@ func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error {
     unfold DataPlaneMutexInvariant!<d!>()
 //	defer d.mtx.Unlock()
 	if d.running {
+// (joao) no support for global variables
 //		return modifyExisting
-// (joao) `;` added to make it parse 
-        ;
+		return modifyExisting()
 	}
 	if conn == nil {
+// (joao) no support for global variables
 //		return emptyValue
-// (joao) `;` added to make it parse 
-        ;
+		return emptyValue()
 	}
 	if d.internal != nil {
+// (joao) no support for global variables
 //		return alreadySet
-// (joao) `;` added to make it parse 
-        ;
+		return alreadySet()
 	}
 	d.internal = conn
 	d.internalIP = ip
@@ -260,14 +276,14 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
     unfold DataPlaneMutexInvariant!<d!>()
 //	defer d.mtx.Unlock()
 	if d.running {
+// (joao) no support for global variables
 //		return modifyExisting
-// (joao) `;` added to make it parse 
-        ;
+		return modifyExisting()
 	}
 	if conn == nil {
+// (joao) no support for global variables
 //		return emptyValue
-// (joao) `;` added to make it parse 
-        ;
+		return emptyValue()
 	}
 // (joao) Leads to Logic error: return type of multi-assignment should be an InternalTupleT
 //	if _, exists := d.external[ifID]; exists {
@@ -291,19 +307,21 @@ func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
     unfold DataPlaneMutexInvariant!<d!>()
 //	defer d.mtx.Unlock()
 	if d.running {
+// (joao) no support for global variables
 //		return modifyExisting
-// (joao) `;` added to make it parse 
-        ;
+		return modifyExisting()
 	}
 	if remote.IsZero() {
+// (joao) no support for global variables
 //		return emptyValue
-// (joao) `;` added to make it parse 
-        ;
+		return emptyValue()
 	}
 // (joao) requires acc to d.neighborIAs due to Gobra bug
 // (joao) added parentheses around d.neighborIAs to make it parse
 //	if _, exists := (d.neighborIAs)[ifID]; exists {
+// (joao) no support for global variables
 //		return serrors.WithCtx(alreadySet, "ifID", ifID)
+//		return serrors.WithCtx(alreadySet(), "ifID", ifID)
 //	}
 	if d.neighborIAs == nil {
 		d.neighborIAs = make(map[uint16]addr.IA)
@@ -608,7 +626,7 @@ func (d *DataPlane) Run() error {
 //			}
 //		}
 //	}
-//
+
 //	for k, v := range d.bfdSessions {
 //		go func(ifID uint16, c bfdSession) {
 //			defer log.HandlePanic()

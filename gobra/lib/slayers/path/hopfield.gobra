@@ -15,7 +15,7 @@
 package path
 
 import (
-	// "encoding/binary"
+	"encoding/binary"
 	"time"
 
 	"gobra/lib/serrors"
@@ -81,9 +81,12 @@ func (h *HopField) DecodeFromBytes(raw []byte) error {
 	h.EgressRouterAlert = (raw[0] & 0x1) == 0x1
 	h.IngressRouterAlert = (raw[0] & 0x2) == 0x2
 	h.ExpTime = raw[1]
-	// (joao) binary implemented as a type instead of global expression
-	// h.ConsIngress = binary.BigEndian.Uint16(raw[2:4])
-	// h.ConsEgress = binary.BigEndian.Uint16(raw[4:6])
+
+	assert &raw[2:4][0] == &raw[2] && &raw[2:4][1] == &raw[3]
+	assert &raw[4:6][0] == &raw[4] && &raw[4:6][1] == &raw[5]
+
+	h.ConsIngress = binary.BigEndian.Uint16(raw[2:4])
+	h.ConsEgress = binary.BigEndian.Uint16(raw[4:6])
 	// (joao) append is not yet supported
 	// h.Mac = append([]byte(nil), raw[6:6+MacLen]...)
 	return nil
@@ -108,9 +111,11 @@ func (h *HopField) SerializeTo(b []byte) error {
 	}
 	b[1] = h.ExpTime
 
-	// (joao) No support for "binary" package yet
-	// binary.BigEndian.PutUint16(b[2:4], h.ConsIngress)
-	// binary.BigEndian.PutUint16(b[4:6], h.ConsEgress)
+	assert &b[2:4][0] == &b[2] && &b[2:4][1] == &b[3]
+	assert &b[4:6][0] == &b[4] && &b[4:6][1] == &b[5]
+
+	binary.BigEndian.PutUint16(b[2:4], h.ConsIngress)
+	binary.BigEndian.PutUint16(b[4:6], h.ConsEgress)
 
 	// (joao) copy method not supported
 	// copy(b[6:12], h.Mac)

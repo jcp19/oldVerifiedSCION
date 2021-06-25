@@ -168,14 +168,17 @@ func (as AS) fmt(sep byte) string {
 		; // makes this parse
 	}
 	// Format all other ASes as 'sep'-separated hex.
-	// (joao) const is not const expression
-	// const maxLen = len("ffff:ffff:ffff")
-//	b := make([]byte, 0, maxLen)
+//	(joao) local constants are not yet supported
+//	const maxLen = len("ffff:ffff:ffff")
+	var maxLen = len("ffff:ffff:ffff")
+	b := make([]byte, 0, maxLen)
+
+	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 	for i := 0; i < asParts; i++ {
 		if i > 0 {
-//			b = append(b, sep)
+			b = append(b, sep)
 		}
-//		shift := uint(asPartBits * (asParts - i - 1))
+		shift := uint(asPartBits * (asParts - i - 1))
 //		s := strconv.FormatUint(uint64(as>>shift)&asPartMask, asPartBase)
 //		b = append(b, s...)
 	}
