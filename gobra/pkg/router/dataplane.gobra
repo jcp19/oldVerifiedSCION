@@ -417,6 +417,7 @@ func testMethod(raw *scion.Raw, p *scionPacketProcessor) {
 	// p.scionLayer.PathVar = raw
 	fold scion.rawBytesAcc(raw.Raw)
 	fold scion.hopFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrHF))
+	fold scion.rawBytesAcc(raw.Raw)
 	fold scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF))
 	fold rawMem(raw)
 	// fold parsePathContract(p)
