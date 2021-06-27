@@ -91,9 +91,9 @@ func (h *HopField) DecodeFromBytes(raw []byte) error {
 
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // path.HopLen
-requires acc(h, 1/8)
+requires acc(h, 1/16)
 requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/8)
-ensures acc(h, 1/8)
+ensures acc(h, 1/16)
 ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/8)
 func (h *HopField) SerializeTo(b []byte) error {
 	if len(b) < HopLen {
