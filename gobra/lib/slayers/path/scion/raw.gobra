@@ -97,11 +97,11 @@ func (s *Raw) Reverse() error {
 // }
 
 pred rawBytesAcc(slice []byte) {
-	forall i int :: 0 <= i && i < len(slice) ==> acc(&(slice)[i], 1/4)
+	forall i int :: 0 <= i && i < len(slice) ==> acc(&(slice)[i], 1/8)
 }
 
 pred infoFieldAcc(s *Raw, idx int) {
-	acc(s, 1/4) &&
+	acc(s, 1/8) &&
 	idx >= 0 &&
 	(MetaLen + idx*path.InfoLen)+path.InfoLen < len(s.Raw) &&
 	rawBytesAcc(s.Raw)
@@ -128,7 +128,7 @@ func (s *Raw) GetInfoField(idx int) (infoField *path.InfoField, err error) {
 	// }
 	unfold rawBytesAcc(s.Raw)
 	subslice := (s.Raw)[infOffset : infOffset+path.InfoLen]
-	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], 1/4)
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], 1/8)
 	if err := info.DecodeFromBytes(subslice); err != nil {
 		fold rawBytesAcc(s.Raw)
 		fold infoFieldAcc(s, idx)
@@ -141,9 +141,9 @@ func (s *Raw) GetInfoField(idx int) (infoField *path.InfoField, err error) {
 
 // GetCurrentInfoField is a convenience method that returns the current hop field pointed to by the
 // CurrINF index in the path meta header.
-requires acc(s, 1/2)
+requires acc(s, 1/8)
 requires infoFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrINF))
-ensures acc(s, 1/2)
+ensures acc(s, 1/8)
 ensures infoFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrINF))
 ensures err == nil ==> infoField != nil && acc(infoField)
 func (s *Raw) GetCurrentInfoField() (infoField *path.InfoField, err error) {
@@ -151,19 +151,36 @@ func (s *Raw) GetCurrentInfoField() (infoField *path.InfoField, err error) {
 }
 
 // SetInfoField updates the InfoField at a given index.
+requires infoFieldAcc(s, idx)
+requires acc(info, 1/16)
+ensures infoFieldAcc(s, idx)
+ensures acc(info, 1/16)
 func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
-	// if idx >= s.BaseEmbedded.NumINF {
-	// 	return serrors.New("InfoField index out of bounds", "max", s.BaseEmbedded.NumINF-1, "actual", idx)
-	// }
-	// if info == nil {
-	// 	return serrors.New("Infofield cannot be nil")
-	// }
-	// infOffset := MetaLen + idx*path.InfoLen
-	// return info.SerializeTo((s.Raw)[infOffset : infOffset+path.InfoLen])
+	unfold infoFieldAcc(s, idx)
+	if idx >= s.BaseEmbedded.NumINF {
+		// (lhalm) create error first to allow folding of the predicate
+		err := serrors.New("InfoField index out of bounds", "max", s.BaseEmbedded.NumINF-1, "actual", idx)
+		fold infoFieldAcc(s, idx)
+		return err
+	}
+	if info == nil {
+		fold infoFieldAcc(s, idx)
+		return serrors.New("Infofield cannot be nil")
+	}
+	infOffset := MetaLen + idx*path.InfoLen
+	// (lhalm) need to explicitly create the subslice and assert access permission
+	unfold rawBytesAcc(s.Raw)
+	subslice := (s.Raw)[infOffset : infOffset+path.InfoLen]
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], 1/8)
+	// (lhalm) create error first to allow folding of the predicate
+	err := info.SerializeTo(subslice)
+	fold rawBytesAcc(s.Raw)
+	fold infoFieldAcc(s, idx)
+	return err
 }
 
 pred hopFieldAcc(s *Raw, idx int) {
-	acc(s, 1/4) &&
+	acc(s, 1/8) &&
 	(MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) >= 0 &&
 	(MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) + path.HopLen < len(s.Raw) &&
 	rawBytesAcc(s.Raw)
@@ -190,7 +207,7 @@ func (s *Raw) GetHopField(idx int) (hf *path.HopField, err error) {
 	// }
 	unfold rawBytesAcc(s.Raw)
 	subslice := (s.Raw)[hopOffset : hopOffset+path.HopLen]
-	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], 1/4)
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], 1/8)
 	if err := hop.DecodeFromBytes(subslice); err != nil {
 		fold rawBytesAcc(s.Raw)
 		fold hopFieldAcc(s, idx)
@@ -203,9 +220,9 @@ func (s *Raw) GetHopField(idx int) (hf *path.HopField, err error) {
 
 // GetCurrentHopField is a convenience method that returns the current hop field pointed to by the
 // CurrHF index in the path meta header.
-requires acc(s, 1/2)
+requires acc(s, 1/8)
 requires hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF))
-ensures acc(s, 1/2)
+ensures acc(s, 1/8)
 ensures hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF))
 ensures err == nil ==> hf != nil && acc(hf)
 func (s *Raw) GetCurrentHopField() (hf *path.HopField, err error) {
@@ -213,13 +230,30 @@ func (s *Raw) GetCurrentHopField() (hf *path.HopField, err error) {
 }
 
 // SetHopField updates the HopField at a given index.
-// func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
-// 	if idx >= s.NumHops {
-// 		return serrors.New("HopField index out of bounds", "max", s.NumHops-1, "actual", idx)
-// 	}
-// 	if hop == nil {
-// 		return serrors.New("Hopfield cannot be nil")
-// 	}
-// 	hopOffset := MetaLen + s.NumINF*path.InfoLen + idx*path.HopLen
-// 	return hop.SerializeTo((s.Raw)[hopOffset : hopOffset+path.HopLen])
-// }
+requires hopFieldAcc(s, idx)
+requires acc(hop, 1/16)
+ensures hopFieldAcc(s, idx)
+ensures acc(hop, 1/16)
+func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
+	unfold hopFieldAcc(s, idx)
+	if idx >= s.BaseEmbedded.NumHops {
+		// (lhalm) create error first to allow folding of the predicate
+		err := serrors.New("HopField index out of bounds", "max", s.BaseEmbedded.NumHops-1, "actual", idx)
+		fold hopFieldAcc(s, idx)
+		return err
+	}
+	if hop == nil {
+		fold hopFieldAcc(s, idx)
+		return serrors.New("Hopfield cannot be nil")
+	}
+	hopOffset := MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen
+	// (lhalm) need to explicitly create the subslice and assert access permission
+	unfold rawBytesAcc(s.Raw)
+	subslice := (s.Raw)[hopOffset : hopOffset+path.HopLen]
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], 1/8)
+	// (lhalm) create error first to allow folding of the predicate
+	err := hop.SerializeTo(subslice)
+	fold rawBytesAcc(s.Raw)
+	fold hopFieldAcc(s, idx)
+	return err
+}

@@ -19,7 +19,7 @@ import (
 	// "fmt" // (joao) fmt will be supported when variadic functions are merged in Gobra's main branch
 	"net"
 
-	//"github.com/google/gopacket"
+	"dependencies/gopacket"
 	"dependencies/gopacket/layers"
 
 	"gobra/lib/addr"
@@ -210,8 +210,8 @@ func (s *SCION) LayerPayload() []byte
 //	return gopacket.Flow{}
 //}
 
-// (joao) no support for gopacket
-//func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
+// TODO: Uncomment
+func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 //	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
 //	buf, err := b.PrependBytes(scnLen)
 //	if err != nil {
@@ -240,7 +240,7 @@ func (s *SCION) LayerPayload() []byte
 //
 //	// Serialize path header.
 //	return s.Path.SerializeTo(buf[offset:])
-//}
+}
 
 // DecodeFromBytes decodes the SCION layer. DecodeFromBytes resets the internal state of this layer
 // to the state defined by the passed-in bytes. Slices in the SCION layer reference the passed-in

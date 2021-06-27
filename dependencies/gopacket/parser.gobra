@@ -1,0 +1,21 @@
+package gopacket
+
+type DecodingLayer interface {
+	// DecodeFromBytes(data []byte, df DecodeFeedback) error
+	// CanDecode() LayerClass
+	// NextLayerType() LayerType
+	// LayerPayload() []byte
+}
+
+type DecodingLayerParser struct {
+	// DecodingLayerParserOptions
+	// dlc   DecodingLayerContainer
+	// first LayerType
+	// df    DecodeFeedback
+
+	// decodeFunc DecodingLayerFunc
+
+	// Truncated bool
+}
+
+func NewDecodingLayerParser(first LayerType, decoders ...DecodingLayer) *DecodingLayerParser
