@@ -53,15 +53,17 @@ func (e basicError) Error() string {
 }
 
 func (e basicError) Is(err error) bool {
-//	switch other := err.(type) {
-//	case basicError:
-//		return e.msg == other.msg
-//	default:
-//		if e.msg.err != nil {
-//			return e.msg.err == err
-//		}
-//		return false
-//	}
+	switch other := err.(type) {
+	case basicError:
+		return e.msg == other.msg
+	default:
+		if e.msg.err != nil {
+			// (joao) possibly another error! might panic
+			// return e.msg.err == err
+			;
+		}
+		return false
+	}
 }
 
 func (e basicError) As(as interface{}) bool // {
@@ -86,12 +88,12 @@ func (e basicError) TopError() string {
 	return strings.Join(s, " ")
 }
 
-func (e basicError) msgString() string // {
-//	if e.msg.err != nil {
-//		return e.msg.err.Error()
-//	}
-//	return e.msg.str
-//}
+func (e basicError) msgString() string {
+	if e.msg.err != nil {
+		return e.msg.err.Error()
+	}
+	return e.msg.str
+}
 
 // IsTimeout returns whether err is or is caused by a timeout error.
 func IsTimeout(err error) bool {
@@ -112,49 +114,49 @@ func IsTemporary(err error) bool {
 // WithCtx returns an error that is the same as the given error but contains the
 // additional context. The additional context is printed in the Error method.
 // The returned error implements Is and Is(err) returns true.
-func WithCtx(err error, logCtx ...interface{}) error // {
-//	// (joao) error, logCtx not assignable to a slice
-//	return basicError{
-//		msg:    errOrMsg{err: err},
-//		logCtx: logCtx,
-//	}
-//}
+func WithCtx(err error, logCtx ...interface{}) error {
+	return basicError{
+		msg:    errOrMsg{err: err},
+		logCtx: logCtx,
+	}
+}
 
 
 // Wrap wraps the cause with the msg error and adds context to the resulting
 // error. The returned error implements Is and Is(msg) and Is(cause) returns
 // true.
-func Wrap(msg, cause error, logCtx ...interface{}) error // {
-	// (joao) error, logCtx not assignable to a slice
-//	return basicError{
-//		msg:    errOrMsg{err: msg},
-//		cause:  cause,
-//		logCtx: logCtx,
-//	}
-//}
+func Wrap(msg, cause error, logCtx ...interface{}) error {
+	return basicError{
+		msg:    errOrMsg{err: msg},
+		cause:  cause,
+		logCtx: logCtx,
+	}
+}
 
 // WrapStr wraps the cause with an error that has msg in the error message and
 // adds the additional context. The returned error implements Is and Is(cause)
 // returns true.
-func WrapStr(msg string, cause error, logCtx ...interface{}) error // {
-//	return basicError{
-//		msg:    errOrMsg{str: msg},
-//		cause:  cause,
-//		logCtx: logCtx,
-//	}
-//}
+func WrapStr(msg string, cause error, logCtx ...interface{}) error {
+	return basicError{
+		msg:    errOrMsg{str: msg},
+		cause:  cause,
+		logCtx: logCtx,
+	}
+}
 
 // New creates a new error with the given message and context.
 ensures res != nil
-func New(msg string, logCtx ...interface{}) (res error) // {
-//	if len(logCtx) == 0 {
-//		return errors.New(msg)
-//	}
-//	return &basicError{
-//		msg:    errOrMsg{str: msg},
-//		logCtx: logCtx,
-//	}
-// }
+func New(msg string, logCtx ...interface{}) (res error) {
+	if len(logCtx) == 0 {
+		// (joao) not supported yet
+		// return errors.New(msg)
+		assume false //TODO: remove
+	}
+	return &basicError{
+		msg:    errOrMsg{str: msg},
+		logCtx: logCtx,
+	}
+}
 
 // List is a slice of errors
 type List []error
