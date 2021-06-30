@@ -26,9 +26,9 @@ func (r RawBytes) String() string //{
 //  return fmt.Sprintf("%x", []byte(r))
 //}
 
-func (r RawBytes) Len() int //{
-//	return len(r)
-//}
+func (r RawBytes) Len() int {
+	return len(r)
+}
 
 //func (r RawBytes) Copy() (Payload, error) // {
 //	return append(RawBytes{}, r...), nil

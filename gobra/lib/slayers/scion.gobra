@@ -541,11 +541,9 @@ ensures forall i int :: 0 <= i && i < len(s.RawDstAddr) ==> acc(&(s.RawDstAddr)[
 ensures (len(s.RawSrcAddr) > 0 && len(s.RawDstAddr) > 0) ==> resErr != nil
 func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8, ghost p perm) (resUint uint32, resErr error) {
 	if len(s.RawDstAddr) == 0 {
-		assume false // TODO: remove
 		return 0, serrors.New("destination address missing")
 	}
 	if len(s.RawSrcAddr) == 0 {
-		assume false // TODO: remove
 		return 0, serrors.New("source address missing")
 	}
 	assume false

@@ -105,18 +105,17 @@ func (h HostNone) Type() HostAddrType {
 }
 
 // (joao) Logic error: expected composite type but got DefinedT(RawBytes_common_T,Exclusive)
-func (h HostNone) Pack() common.RawBytes // {
-//	return common.RawBytes{}
-//}
+func (h HostNone) Pack() common.RawBytes {
+	return common.RawBytes{}
+}
 
 func (h HostNone) IP() net.IP {
 	return nil
 }
 
-func (h HostNone) Copy() HostAddr // {
-// (joao) Logic error: expected composite type but got DefinedT(HostNone_addr_T,Exclusive) 
-//	return HostNone{}
-// }
+func (h HostNone) Copy() HostAddr {
+	return HostNone{}
+}
 
 func (h HostNone) Equal(o HostAddr) bool {
 	_, ok := o.(HostNone)
@@ -139,9 +138,9 @@ func (h HostIPv4) Type() HostAddrType {
 	return HostTypeIPv4
 }
 
-func (h HostIPv4) Pack() common.RawBytes //{
-//	return common.RawBytes(h.IP())
-// }
+func (h HostIPv4) Pack() common.RawBytes {
+	return common.RawBytes(h.IP())
+}
 
 func (h HostIPv4) IP() net.IP {
 	// XXX(kormat): ensure the reply is the 4-byte representation.
@@ -153,10 +152,12 @@ func (h HostIPv4) Copy() HostAddr // {
 //	return HostIPv4(append(net.IP(nil), h...))
 // }
 
-func (h HostIPv4) Equal(o HostAddr) bool // {
-//	ha, ok := o.(HostIPv4)
-//	return ok && net.IP(h).Equal(net.IP(ha))
-// }
+func (h HostIPv4) Equal(o HostAddr) bool {
+	ha, ok := o.(HostIPv4)
+	// (joao) add parentheses surrounding net.IP(h)
+	//	return ok && net.IP(h).Equal(net.IP(ha))
+	return ok && (net.IP(h)).Equal(net.IP(ha))
+}
 
 func (h HostIPv4) String() string {
 	// (joao) add parentheses surrounding h.IP() otherwise causes parser error
@@ -175,7 +176,9 @@ func (h HostIPv6) Type() HostAddrType {
 	return HostTypeIPv6
 }
 
-func (h HostIPv6) Pack() common.RawBytes //{
+// (joao) conversion to common.RawBytes not memory safe yet
+// (joao) slice expression leads to error
+func (h HostIPv6) Pack() common.RawBytes // {
 //	return (common.RawBytes(h))[:HostLenIPv6]
 //}
 
@@ -240,10 +243,9 @@ func (h HostSVC) Type() HostAddrType {
 }
 
 func (h HostSVC) Pack() common.RawBytes {
-	// (joao) cannot make type common.RawBytes
-	// out := make(common.RawBytes, HostLenSVC)
-	// binary.BigEndian.PutUint16(out, uint16(h))
-	// return out
+	out := make(common.RawBytes, HostLenSVC)
+	binary.BigEndian.PutUint16(out, uint16(h))
+	return out
 }
 
 requires HostLenSVC + pad >= 2 
@@ -313,25 +315,30 @@ func (h HostSVC) Network() string {
 	return ""
 }
 
-func HostFromRaw(b common.RawBytes, htype HostAddrType) (HostAddr, error) {
+requires p > 0
+requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
+func HostFromRaw(b common.RawBytes, htype HostAddrType, ghost p perm) (HostAddr, error) {
 	switch htype {
 	case HostTypeNone:
-//		return HostNone{}, nil
+		return HostNone{}, nil
 	case HostTypeIPv4:
-//		// (joao) no support for len(b) where b is of a declared type
-//		if len(b) < HostLenIPv4 {
+		if len(b) < HostLenIPv4 {
 //			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
-//		}
+			;
+		}
 //		return HostIPv4(b[:HostLenIPv4]), nil
 	case HostTypeIPv6:
-//		// (joao) no support for len(b) where b is of a declared type
-//		if len(b) < HostLenIPv6 {
+		if len(b) < HostLenIPv6 {
 //			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
-//		}
+			;
+		}
 //		return HostIPv6(b[:HostLenIPv6]), nil
 //		
 	case HostTypeSVC:
-//		return HostSVC(binary.BigEndian.Uint16(b)), nil
+		// (joao) possible memory safety issue: len(b) not checked like in the other cases
+		// assert acc(&b[0]) && acc(&b[1])
+		// return HostSVC(binary.BigEndian.Uint16(b)), nil
 	default:
 //		return nil, serrors.WithCtx(ErrBadHostAddrType, "type", htype)
 	}

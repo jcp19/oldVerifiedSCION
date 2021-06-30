@@ -146,7 +146,7 @@ func WrapStr(msg string, cause error, logCtx ...interface{}) error // {
 
 // New creates a new error with the given message and context.
 ensures res != nil
-func New(msg string, logCtx ...interface{}) (res error) {
+func New(msg string, logCtx ...interface{}) (res error) // {
 //	if len(logCtx) == 0 {
 //		return errors.New(msg)
 //	}
@@ -154,19 +154,18 @@ func New(msg string, logCtx ...interface{}) (res error) {
 //		msg:    errOrMsg{str: msg},
 //		logCtx: logCtx,
 //	}
-}
+// }
 
 // List is a slice of errors
 type List []error
 
 // ToError returns the object as error interface implementation.
-func (e List) ToError() error // {
-//	// (joao) len cannot be applied to types whose underlying type is a slice
-//	if len(e) == 0 {
-//		return nil
-//	}
-//	return errList(e)
-//}
+func (e List) ToError() error {
+	if len(e) == 0 {
+		return nil
+	}
+	return errList(e)
+}
 
 // errList is the internal error interface implementation of error List.
 type errList []error
