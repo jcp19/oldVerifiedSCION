@@ -31,18 +31,18 @@ import (
 //	"github.com/prometheus/client_golang/prometheus"
 //	"golang.org/x/net/ipv4"
 
-    //	"github.com/scionproto/scion/go/lib/addr"
+	//	"github.com/scionproto/scion/go/lib/addr"
 	"gobra/lib/addr"
-    //	"github.com/scionproto/scion/go/lib/common"
+	//	"github.com/scionproto/scion/go/lib/common"
 	"gobra/lib/common"
 //	"github.com/scionproto/scion/go/lib/log"
 //	"github.com/scionproto/scion/go/lib/metrics"
 //	"github.com/scionproto/scion/go/lib/scrypto"
-    //	"github.com/scionproto/scion/go/lib/serrors"
+	//	"github.com/scionproto/scion/go/lib/serrors"
 	"gobra/lib/serrors"
-    //	"github.com/scionproto/scion/go/lib/slayers"
+	//	"github.com/scionproto/scion/go/lib/slayers"
 	"gobra/lib/slayers"
-    //	"github.com/scionproto/scion/go/lib/slayers/path"
+	//	"github.com/scionproto/scion/go/lib/slayers/path"
 	"gobra/lib/slayers/path"
 //	"github.com/scionproto/scion/go/lib/slayers/path/empty"
 //	"github.com/scionproto/scion/go/lib/slayers/path/onehop"
@@ -108,15 +108,20 @@ type DataPlane struct {
 }
 
 pred DataPlaneMutexInvariant(d *DataPlane) {
-	acc(&d.external) && (d.external != nil ==> acc(d.external)) &&
-	acc(&d.linkTypes) && (d.linkTypes != nil ==> acc(d.linkTypes)) &&
-	acc(&d.neighborIAs) && (d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
-	acc(&d.internal) &&
-	acc(&d.internalIP) &&
-	acc(&d.internalNextHops) && (d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
-	acc(&d.bfdSessions) && (d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
-	acc(&d.localIA) &&
-	acc(&d.running)
+	acc(d) &&
+	(d.external != nil ==> acc(d.external)) &&
+	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
+	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
+	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
+	(d.bfdSessions != nil ==> acc(d.bfdSessions))
+}
+
+ghost
+ensures DataPlaneMutexInvariant(res)
+func soundDataPlaneMutexInvariant() (res *DataPlane) {
+	d@ := DataPlane{}
+	res = &d
+	fold DataPlaneMutexInvariant(res)
 }
 
 //var (
@@ -180,27 +185,40 @@ func (e scmpError) Error() string // {
 // SetIA sets the local IA for the dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) SetIA(ia addr.IA) error {
 	d.mtx.Lock()
 // (joao) no support for defer
 //	defer d.mtx.Unlock()
-    unfold DataPlaneMutexInvariant!<d!>()
+	unfold DataPlaneMutexInvariant!<d!>()
 	if d.running {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return modifyExisting
 		return modifyExisting()
 	}
 	if ia.IsZero() {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return emptyValue
 		return emptyValue()
 	}
 	if !d.localIA.IsZero() {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return alreadySet
 		return alreadySet()
 	}
 	d.localIA = ia
+// (joao) no support for defer
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
@@ -208,16 +226,24 @@ func (d *DataPlane) SetIA(ia addr.IA) error {
 // already be derived as in scrypto.HFMacFactory.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) SetKey(key []byte) error {
 	d.mtx.Lock()
-    unfold DataPlaneMutexInvariant!<d!>()
+	unfold DataPlaneMutexInvariant!<d!>()
+// (joao) no support for defer
 //	defer d.mtx.Unlock()
 	if d.running {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return modifyExisting
 		return modifyExisting()
 	}
 	if len(key) == 0 {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return emptyValue
 		return emptyValue()
@@ -233,6 +259,10 @@ func (d *DataPlane) SetKey(key []byte) error {
 //		mac, _ := scrypto.InitMac(key)
 //		return mac
 //	}
+
+// (joao) no support for defer
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
@@ -242,27 +272,41 @@ func (d *DataPlane) SetKey(key []byte) error {
 // dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error {
 	d.mtx.Lock()
-    unfold DataPlaneMutexInvariant!<d!>()
+	unfold DataPlaneMutexInvariant!<d!>()
+// (joao) no support for defer
 //	defer d.mtx.Unlock()
 	if d.running {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return modifyExisting
 		return modifyExisting()
 	}
 	if conn == nil {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return emptyValue
 		return emptyValue()
 	}
 	if d.internal != nil {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return alreadySet
 		return alreadySet()
 	}
 	d.internal = conn
 	d.internalIP = ip
+// (joao) no support for defer
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
@@ -271,29 +315,45 @@ func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error {
 // error. This can only be called on a not yet running dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 	d.mtx.Lock()
-    unfold DataPlaneMutexInvariant!<d!>()
+	unfold DataPlaneMutexInvariant!<d!>()
+// (joao) no support for defer
 //	defer d.mtx.Unlock()
 	if d.running {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return modifyExisting
 		return modifyExisting()
 	}
 	if conn == nil {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return emptyValue
 		return emptyValue()
 	}
-// (joao) Leads to Logic error: return type of multi-assignment should be an InternalTupleT
+// (joao) original code:
 //	if _, exists := d.external[ifID]; exists {
 //		return serrors.WithCtx(alreadySet, "ifID", ifID)
-//	}
+	if _, exists := (d.external)[ifID]; exists {
+// (joao) no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
+		return serrors.WithCtx(alreadySet(), "ifID", ifID)
+	}
 	if d.external == nil {
 		d.external = make(map[uint16]BatchConn)
 	}
 // (joao) add parentheses surrounding `d.external` to make it parse
  	(d.external)[ifID] = conn
+// (joao) no support for defer
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
@@ -302,49 +362,70 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 // be called on a yet running dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
 	d.mtx.Lock()
-    unfold DataPlaneMutexInvariant!<d!>()
+	unfold DataPlaneMutexInvariant!<d!>()
+// (joao) defer not supported
 //	defer d.mtx.Unlock()
 	if d.running {
+		// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return modifyExisting
 		return modifyExisting()
 	}
 	if remote.IsZero() {
+		// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 // (joao) no support for global variables
 //		return emptyValue
 		return emptyValue()
 	}
-// (joao) requires acc to d.neighborIAs due to Gobra bug
-// (joao) added parentheses around d.neighborIAs to make it parse
-//	if _, exists := (d.neighborIAs)[ifID]; exists {
-// (joao) no support for global variables
+// (joao) original code (changed below):
+//	if _, exists := d.neighborIAs[ifID]; exists {
 //		return serrors.WithCtx(alreadySet, "ifID", ifID)
-//		return serrors.WithCtx(alreadySet(), "ifID", ifID)
 //	}
+	if _, exists := (d.neighborIAs)[ifID]; exists {
+		// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
+		return serrors.WithCtx(alreadySet(), "ifID", ifID)
+	}
 	if d.neighborIAs == nil {
 		d.neighborIAs = make(map[uint16]addr.IA)
 	}
 // (joao) add parentheses surrounding `d.neighborIAs` to make it parse
 	(d.neighborIAs)[ifID] = remote
+// (joao) Unlock explictly added, no support for defer
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
 // AddLinkType adds the link type for a given interface ID. If a link type for
 // the given ID is already set, this method will return an error. This can only
 // be called on a not yet running dataplane.
-requires acc(&d.linkTypes) && (d.linkTypes != nil ==> acc(d.linkTypes))
-ensures acc(&d.linkTypes) && acc(d.linkTypes)
+requires DataPlaneMutexInvariant(d)
+ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
+// (joao) original code (changed below):
 //	if _, exists := d.linkTypes[ifID]; exists {
 //		return serrors.WithCtx(alreadySet, "ifID", ifID)
 //	}
+	unfold DataPlaneMutexInvariant(d)
+	if _, exists := (d.linkTypes)[ifID]; exists {
+		fold DataPlaneMutexInvariant(d)
+		return serrors.WithCtx(alreadySet(), "ifID", ifID)
+	}
 	if d.linkTypes == nil {
 		d.linkTypes = make(map[uint16]topology.LinkType)
 	}
 	// (joao) added parentheses around d.linkTypes to make it parse
 	(d.linkTypes)[ifID] = linkTo
+	fold DataPlaneMutexInvariant(d)
 	return nil
 }
 
@@ -466,27 +547,44 @@ func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 // only be called on a not yet running dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	d.mtx.Lock()
+// (joao) defer not supported
 //	defer d.mtx.Unlock()
-    unfold DataPlaneMutexInvariant!<d!>()
+	unfold DataPlaneMutexInvariant!<d!>()
 	if d.running {
+// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 //		return modifyExisting
-// (joao) `;` added to make it parse 
-        ;
+		return modifyExisting()
 	}
 	if a == nil {
+// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 //		return emptyValue
-// (joao) `;` added to make it parse 
-        ;
+		return emptyValue()
 	}
+// (joao) original code (changed below):
 //	if _, exists := d.internalNextHops[ifID]; exists {
 //		return serrors.WithCtx(alreadySet, "ifID", ifID)
 //	}
+	if _, exists := (d.internalNextHops)[ifID]; exists {
+// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
+		return serrors.WithCtx(alreadySet(), "ifID", ifID)
+	}
 	if d.internalNextHops == nil {
 		d.internalNextHops = make(map[uint16]net.Addr)
 	}
 //	d.internalNextHops[ifID] = a
+	(d.internalNextHops)[ifID] = a
+// (joao) Unlock explictly added, no support for defer
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
@@ -546,14 +644,41 @@ requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 func (d *DataPlane) Run() error {
 	d.mtx.Lock()
-    unfold DataPlaneMutexInvariant!<d!>()
+	unfold DataPlaneMutexInvariant!<d!>()
 	d.running = true
 
 	d.initMetrics()
 
-// (joao) TODO: extract this function to a new top level function to overcome limitations introduced by lack of support for
-//        closures
-//	read := func(ingressID uint16, rd BatchConn) {
+// (joao) At this point, there used to be a closure definition, saved in a variable called "read"
+
+//	for k, v := range d.bfdSessions {
+//		go func(ifID uint16, c bfdSession) {
+//			defer log.HandlePanic()
+//			if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
+//				log.Error("BFD session failed to start", "ifID", ifID, "err", err)
+//			}
+//		}(k, v)
+//	}
+//	for ifID, v := range d.external {
+//		go func(i uint16, c BatchConn) {
+//			defer log.HandlePanic()
+//			read(i, c)
+//		}(ifID, v)
+//	}
+//	go func(c BatchConn) {
+//		defer log.HandlePanic()
+//		read(0, c)
+//	}(d.internal)
+//
+//	d.mtx.Unlock()
+//	for d.running {
+//		time.Sleep(time.Second)
+//	}
+	return nil
+}
+
+// (joao) Closure extracted from the body of the Run function
+func RunReadClosure(ingressID uint16, rd BatchConn) // {
 //		msgs := conn.NewReadMessages(inputBatchCnt)
 //		for _, msg := range msgs {
 //			msg.Buffers[0] = make([]byte, bufSize)
@@ -626,32 +751,6 @@ func (d *DataPlane) Run() error {
 //			}
 //		}
 //	}
-
-//	for k, v := range d.bfdSessions {
-//		go func(ifID uint16, c bfdSession) {
-//			defer log.HandlePanic()
-//			if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
-//				log.Error("BFD session failed to start", "ifID", ifID, "err", err)
-//			}
-//		}(k, v)
-//	}
-//	for ifID, v := range d.external {
-//		go func(i uint16, c BatchConn) {
-//			defer log.HandlePanic()
-//			read(i, c)
-//		}(ifID, v)
-//	}
-//	go func(c BatchConn) {
-//		defer log.HandlePanic()
-//		read(0, c)
-//	}(d.internal)
-//
-//	d.mtx.Unlock()
-//	for d.running {
-//		time.Sleep(time.Second)
-//	}
-	return nil
-}
 
 func (d *DataPlane) initMetrics() {
 //	labels := interfaceToMetricLabels(0, d.localIA, d.neighborIAs)
@@ -799,7 +898,7 @@ type scionPacketProcessor struct {
 //	buffer gopacket.SerializeBuffer
 
 	// path is the raw SCION path. Will be set during processing.
-	path *scion.Raw
+//	path *scion.Raw
 	// hopField is the current hopField field, is updated during processing.
 	hopField *path.HopField
 	// infoField is the current infoField field, is updated during processing.
@@ -882,7 +981,7 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 //		return processResult{}, malformedPath
 // (joao) added `;` to make this parse
-        ;
+		;
 	}
 	var err error
 //	p.hopField, err = p.path.GetCurrentHopField()
@@ -942,7 +1041,7 @@ func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
 }
 
 func (p *scionPacketProcessor) validateEgressID() (processResult, error) {
-    ;
+	;
 //	pktEgressID := p.egressInterface()
 //	_, ih := p.d.internalNextHops[pktEgressID]
 //	_, eh := p.d.external[pktEgressID]
@@ -1137,8 +1236,8 @@ func (p *scionPacketProcessor) validateEgressUp() (processResult, error) {
 
 requires acc(&p.ingressID)
 requires p.ingressID != 0 ==>
-    acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert) &&
-    acc(&p.infoField) && acc(&p.infoField.ConsDir)
+	acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert) &&
+	acc(&p.infoField) && acc(&p.infoField.ConsDir)
 func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error) {
 	if p.ingressID == 0 {
 		return processResult{}, nil
@@ -1458,9 +1557,9 @@ type bfdSend struct {
 //	return err
 //}
 
-type pathUpdater interface {
-	update(p *scion.Raw) error
-}
+//type pathUpdater interface {
+//	update(p *scion.Raw) error
+//}
 
 type scmpPacker struct {
 	internalIP net.IP
