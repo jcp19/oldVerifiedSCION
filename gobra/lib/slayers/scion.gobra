@@ -177,6 +177,7 @@ type SCION struct {
 	// Path Path //(joao) leads to cycles in kiama
 }
 
+
 pred InvariantSCION(s SCION) {
 	validAddrLen(s.DstAddrLen) && validAddrLen(s.SrcAddrLen)
 }
@@ -424,9 +425,9 @@ func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) {
 //			return AddrLen4, T4Ip, ip, nil
 //		}
 //		return AddrLen16, T16Ip, a.IP, nil
-	case addr.HostSVC:
+//	case addr.HostSVC:
 //		return AddrLen4, T4Svc, a.PackWithPad(2), nil
-		;
+//		;
 	default:
 		;
 	}

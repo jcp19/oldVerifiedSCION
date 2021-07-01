@@ -799,7 +799,7 @@ type scionPacketProcessor struct {
 //	buffer gopacket.SerializeBuffer
 
 	// path is the raw SCION path. Will be set during processing.
-//	path *scion.Raw
+	path *scion.Raw
 	// hopField is the current hopField field, is updated during processing.
 	hopField *path.HopField
 	// infoField is the current infoField field, is updated during processing.
@@ -1458,9 +1458,9 @@ type bfdSend struct {
 //	return err
 //}
 
-//type pathUpdater interface {
-//	update(p *scion.Raw) error
-//}
+type pathUpdater interface {
+	update(p *scion.Raw) error
+}
 
 type scmpPacker struct {
 	internalIP net.IP
