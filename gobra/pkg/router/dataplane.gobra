@@ -980,8 +980,7 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	if !ok {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 //		return processResult{}, malformedPath
-// (joao) added `;` to make this parse
-		;
+		return processResult{}, malformedPath()
 	}
 	var err error
 //	p.hopField, err = p.path.GetCurrentHopField()
@@ -1452,8 +1451,7 @@ func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 // (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 //	dst, err := s.DstAddr()
 //	if err != nil {
-//      // (joao) this is an original comment from SCION
-//		// TODO parameter problem.
+//		// TODO parameter problem. // (joao) this is an original comment from SCION
 //		return nil, err
 //	}
 //	if v, ok := dst.(addr.HostSVC); ok {
