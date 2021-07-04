@@ -50,10 +50,12 @@ import (
 	//	"github.com/scionproto/scion/go/lib/topology"
 	"gobra/lib/topology"
 //	"github.com/scionproto/scion/go/lib/underlay/conn"
+	"gobra/lib/underlay/conn"
 //	underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
 //	"github.com/scionproto/scion/go/lib/util"
 //	"github.com/scionproto/scion/go/pkg/router/bfd"
 //	"github.com/scionproto/scion/go/pkg/router/control"
+	"gobra/pkg/router/control"
 )
 
 const (
@@ -430,17 +432,23 @@ func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 }
 
 // AddExternalInterfaceBFD adds the inter AS connection BFD session.
-//func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
-//	src, dst control.LinkEnd, cfg control.BFD) error {
-//
-//	d.mtx.Lock()
+requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
+func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
+	src, dst control.LinkEnd, cfg control.BFD) error {
+
+	d.mtx.Lock()
 //	defer d.mtx.Unlock()
-//	if d.running {
+	unfold DataPlaneMutexInvariant!<d!>()
+	if d.running {
 //		return modifyExisting
-//	}
-//	if conn == nil {
+		return modifyExisting()
+	}
+	if conn == nil {
 //		return emptyValue
-//	}
+		return emptyValue()
+	}
 //	var m bfd.Metrics
 //	if d.Metrics != nil {
 //		labels := []string{
@@ -459,20 +467,23 @@ func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 //				With(labels...),
 //		}
 //	}
-//	s := &bfdSend{
-//		conn:       conn,
+	s := &bfdSend{
+		conn:       conn,
 //		srcAddr:    src.Addr,
 //		dstAddr:    dst.Addr,
-//		srcIA:      src.IA,
-//		dstIA:      dst.IA,
-//		ifID:       ifID,
+		srcIA:      src.IA,
+		dstIA:      dst.IA,
+		ifID:       ifID,
 //		macFactory: d.macFactory,
-//	}
-//	return d.addBFDController(ifID, s, cfg, m)
-//}
+	}
+	fold DataPlaneMutexInvariant!<d!>()
+	return d.addBFDController(ifID, s, cfg, /* m */)
+}
 
-//func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
-//	metrics bfd.Metrics) error {
+requires DataPlaneMutexInvariant(d)
+ensures DataPlaneMutexInvariant(d)
+func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
+	/* metrics bfd.Metrics */) error // {
 //
 //	if cfg.Disable {
 //		return errBFDDisabled

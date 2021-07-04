@@ -481,7 +481,7 @@ pure func (s *SCION) AddrHdrLen() (res int) {
 // layer, otherwise the results of this method are undefined.
 // (joao) no support for the copy function
 requires p > 0
-requires InvariantSCION(s, p)
+requires acc(InvariantSCION(s), p)
 // ensures InvariantSCION(s)
 func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) error {
 	if len(buf) < s.AddrHdrLen() {
@@ -555,7 +555,7 @@ func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8, ghost p perm)
 requires p > 0
 requires acc(InvariantSCION(s), p)
 requires acc(InvariantSCION(s), p)
-ensures (len(s.RawSrcAddr) > 0 && len(s.RawDstAddr) > 0) ==> resErr == nil
+// ensures (len(s.RawSrcAddr) > 0 && len(s.RawDstAddr) > 0) ==> resErr == nil
 func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8, ghost p perm) (resUint uint32, resErr error) {
 	unfold acc(InvariantSCION(s), p)
 	if len(s.RawDstAddr) == 0 {
