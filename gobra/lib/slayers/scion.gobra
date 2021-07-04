@@ -545,7 +545,6 @@ func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8, ghost p perm)
 	if s == nil {
 		return 0, serrors.New("SCION header missing")
 	}
-	assume false // TODO: remove
 	csum, err := s.pseudoHeaderChecksum(len(upperLayer), protocol, p)
 	if err != nil {
 		return 0, err
