@@ -52,6 +52,7 @@ import (
 //	"github.com/scionproto/scion/go/lib/underlay/conn"
 	"gobra/lib/underlay/conn"
 //	underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
+	underlayconn "gobra/lib/underlay/conn"
 //	"github.com/scionproto/scion/go/lib/util"
 //	"github.com/scionproto/scion/go/pkg/router/bfd"
 //	"github.com/scionproto/scion/go/pkg/router/control"
