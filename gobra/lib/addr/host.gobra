@@ -59,16 +59,26 @@ const (
 )
 
 // (joao) no support for global variables
-/*
-var (
-	// ErrBadHostAddrType indicates an invalid host address type.
-	ErrBadHostAddrType = serrors.New("unsupported host address type")
-	// ErrMalformedHostAddrType indicates a malformed host address type.
-	ErrMalformedHostAddrType = serrors.New("malformed host address type")
-	// ErrUnsupportedSVCAddress indicates an unsupported SVC address.
-	ErrUnsupportedSVCAddress = serrors.New("unsupported SVC address")
-)
-*/
+//var (
+//	// ErrBadHostAddrType indicates an invalid host address type.
+//	ErrBadHostAddrType = serrors.New("unsupported host address type")
+//	// ErrMalformedHostAddrType indicates a malformed host address type.
+//	ErrMalformedHostAddrType = serrors.New("malformed host address type")
+//	// ErrUnsupportedSVCAddress indicates an unsupported SVC address.
+//	ErrUnsupportedSVCAddress = serrors.New("unsupported SVC address")
+//)
+
+// (joao) Current alternative to ghost variables
+// ErrBadHostAddrType indicates an invalid host address type.
+ensures err != nil
+func ErrBadHostAddrType() (err error) { return serrors.New("unsupported host address type") }
+// ErrMalformedHostAddrType indicates a malformed host address type.
+ensures err != nil
+func ErrMalformedHostAddrType() (err error) { return serrors.New("malformed host address type") }
+// ErrUnsupportedSVCAddress indicates an unsupported SVC address.
+ensures err != nil
+func ErrUnsupportedSVCAddress() (err error) { return serrors.New("unsupported SVC address") }
+// End current alternative to ghost variables
 
 const (
 	SvcDS       HostSVC = 0x0001
@@ -104,7 +114,6 @@ func (h HostNone) Type() HostAddrType {
 	return HostTypeNone
 }
 
-// (joao) Logic error: expected composite type but got DefinedT(RawBytes_common_T,Exclusive)
 func (h HostNone) Pack() common.RawBytes {
 	return common.RawBytes{}
 }
@@ -324,23 +333,31 @@ func HostFromRaw(b common.RawBytes, htype HostAddrType, ghost p perm) (HostAddr,
 		return HostNone{}, nil
 	case HostTypeIPv4:
 		if len(b) < HostLenIPv4 {
+// (joao) no support for global variables
 //			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
-			;
+			return nil, serrors.WithCtx(ErrMalformedHostAddrType(), "type", htype)
 		}
+// (joao) no support for global variables
 //		return HostIPv4(b[:HostLenIPv4]), nil
 	case HostTypeIPv6:
 		if len(b) < HostLenIPv6 {
+// (joao) no support for global variables
 //			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
-			;
+			return nil, serrors.WithCtx(ErrMalformedHostAddrType(), "type", htype)
 		}
+// (joao) no support for global variables
 //		return HostIPv6(b[:HostLenIPv6]), nil
-//		
 	case HostTypeSVC:
-		// (joao) possible memory safety issue: len(b) not checked like in the other cases
-		// assert acc(&b[0]) && acc(&b[1])
-		// return HostSVC(binary.BigEndian.Uint16(b)), nil
+		if len(b) < HostLenSVC {
+// (joao) no support for global variables
+//			return nil, serrors.WithCtx(ErrMalformedHostAddrType, "type", htype)
+			return nil, serrors.WithCtx(ErrMalformedHostAddrType(), "type", htype)
+		}
+		return HostSVC(binary.BigEndian.Uint16(b)), nil
 	default:
+// (joao) no support for global variables
 //		return nil, serrors.WithCtx(ErrBadHostAddrType, "type", htype)
+		return nil, serrors.WithCtx(ErrBadHostAddrType(), "type", htype)
 	}
 }
 
@@ -372,6 +389,7 @@ func HostLen(htype HostAddrType) (uint8, error) {
 		length = HostLenSVC
 	default:
 	//	return 0, serrors.WithCtx(ErrBadHostAddrType, "type", htype)
+		return 0, serrors.WithCtx(ErrBadHostAddrType(), "type", htype)
 	}
 	return length, nil
 }

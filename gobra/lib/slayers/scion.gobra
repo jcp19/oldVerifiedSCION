@@ -188,10 +188,8 @@ pure func addrBytes(addrLen AddrLen) (res int) {
 
 pred InvariantSCION(s *SCION) {
 	acc(s) &&
-	validAddrLen(s.SrcAddrLen) && lengthToAddrLen(len(s.RawSrcAddr)) == s.SrcAddrLen &&
-	validAddrLen(s.DstAddrLen) && lengthToAddrLen(len(s.RawDstAddr)) == s.DstAddrLen &&
-	(forall i int :: 0 <= i && i < len(s.RawSrcAddr) ==> acc(&(s.RawSrcAddr)[i])) &&
-	(forall i int :: 0 <= i && i < len(s.RawDstAddr) ==> acc(&(s.RawDstAddr)[i]))
+	(s.RawSrcAddr != nil ==> (validAddrLen(s.SrcAddrLen) && lengthToAddrLen(len(s.RawSrcAddr)) == s.SrcAddrLen && forall i int :: 0 <= i && i < len(s.RawSrcAddr) ==> acc(&(s.RawSrcAddr)[i]))) &&
+	(s.RawDstAddr != nil ==> (validAddrLen(s.DstAddrLen) && lengthToAddrLen(len(s.RawDstAddr)) == s.DstAddrLen && forall i int :: 0 <= i && i < len(s.RawDstAddr) ==> acc(&(s.RawDstAddr)[i])))
 }
 
 ghost
@@ -409,9 +407,9 @@ func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) {
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
 // SetDstAddr takes ownership of dst and callers should not write to it after calling SetDstAddr.
 // Changes to dst might leave the layer in an inconsistent state.
-requires InvariantSCION(s)
+requires InvariantSCION(s) && dst.mem()
 ensures InvariantSCION(s)
-func (s *SCION) SetDstAddr(dst net.Addr) error {
+func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	unfold InvariantSCION(s)
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
@@ -422,9 +420,9 @@ func (s *SCION) SetDstAddr(dst net.Addr) error {
 // SetSrcAddr sets the source address and updates the DstAddrLen/Type fields accordingly.
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
 // Changes to src might leave the layer in an inconsistent state.
-requires InvariantSCION(s)
+requires InvariantSCION(s) && src.mem()
 ensures InvariantSCION(s)
-func (s *SCION) SetSrcAddr(src net.Addr) error {
+func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	var err error
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)
 	return err
@@ -454,7 +452,12 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (ne
 		"type", addrType, "len", addrLen)
 }
 
-func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) // {
+requires hostAddr.mem()
+ensures err == nil ==> validAddrLen(addrLen)
+ensures err == nil ==> lengthToAddrLen(len(s)) == addrLen
+ensures err == nil ==> forall i int :: 0 <= i && i < len(s) ==> acc(&s[i])
+ensures err != nil ==> addrLen == 0 && addrType == 0 && s == nil
+func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) // {
 //	switch a := hostAddr.(type) {
 //	case *net.IPAddr:
 //		if ip := a.IP.To4(); ip != nil {
