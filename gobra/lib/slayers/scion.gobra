@@ -180,7 +180,6 @@ type SCION struct {
 	// Path Path //(joao) leads to cycles in kiama
 }
 
-requires validAddrLen(addrLen)
 ensures res == (int(addrLen) + 1) * LineLen
 pure func addrBytes(addrLen AddrLen) (res int) {
 	return (int(addrLen) + 1) * LineLen

@@ -111,7 +111,16 @@ type DataPlane struct {
 }
 
 pred DataPlaneMutexInvariant(d *DataPlane) {
-	acc(d) &&
+	// access to mtx field ommited
+	acc(&d.external) &&
+	acc(&d.linkTypes) &&
+	acc(&d.neighborIAs) &&
+	acc(&d.internal) &&
+	acc(&d.internalIP) &&
+	acc(&d.internalNextHops) &&
+	acc(&d.bfdSessions) &&
+	acc(&d.localIA) &&
+	acc(&d.running) &&
 	(d.external != nil ==> acc(d.external)) &&
 	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
 	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
@@ -438,10 +447,10 @@ requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	src, dst control.LinkEnd, cfg control.BFD) error {
-
 	d.mtx.Lock()
 //	defer d.mtx.Unlock()
 	unfold DataPlaneMutexInvariant!<d!>()
+	assert DataPlaneMutexInvariant(d) 
 	if d.running {
 //		return modifyExisting
 		return modifyExisting()
@@ -477,22 +486,29 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 		ifID:       ifID,
 //		macFactory: d.macFactory,
 	}
+	// (joao) rewrote to unfold before returning. Original code:
+	// return d.addBFDController(ifID, s, cfg, /* m */)
+	// changed code:
+	res := d.addBFDController(ifID, s, cfg, /* m */)
 	fold DataPlaneMutexInvariant!<d!>()
-	return d.addBFDController(ifID, s, cfg, /* m */)
+	d.mtx.Unlock()
+	return res
 }
 
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
-	/* metrics bfd.Metrics */) error // {
-//
-//	if cfg.Disable {
+	/* metrics bfd.Metrics */) error {
+	unfold DataPlaneMutexInvariant(d)
+	if cfg.Disable {
+		fold DataPlaneMutexInvariant(d)
 //		return errBFDDisabled
-//	}
-//	if d.bfdSessions == nil {
-//		d.bfdSessions = make(map[uint16]bfdSession)
-//	}
-//
+		return errBFDDisabled()
+	}
+	if d.bfdSessions == nil {
+		d.bfdSessions = make(map[uint16]bfdSession)
+	}
+
 //	// Generate random discriminator. It can't be zero.
 //	discInt, err := rand.Int(rand.Reader, big.NewInt(0xfffffffe))
 //	if err != nil {
@@ -509,19 +525,24 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 //		ReceiveQueueSize:      10,
 //		Metrics:               metrics,
 //	}
-//	return nil
-//}
+	fold DataPlaneMutexInvariant(d)
+	return nil
+}
 
 // AddSvc adds the address for the given service. This can be called multiple
 // times for the same service, with the address added to the list of addresses
 // that provide the service.
-// (joao) net.UDPAddr not supported yet
-// func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
-//	d.mtx.Lock()
+requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
+func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
+	d.mtx.Lock()
+	unfold DataPlaneMutexInvariant!<d!>()
 //	defer d.mtx.Unlock()
-//	if a == nil {
+	if a == nil {
 //		return emptyValue
-//	}
+		return emptyValue()
+	}
 //	if d.svc == nil {
 //		d.svc = newServices()
 //	}
@@ -531,17 +552,20 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 //		d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
 //		d.Metrics.ServiceInstanceCount.With(labels).Add(1)
 //	}
-//	return nil
-//}
+	return nil
+}
 
 // DelSvc deletes the address for the given service.
-// (joao) net.UDPAddr not supported yet
-//func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
-//	d.mtx.Lock()
+requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
+func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
+	d.mtx.Lock()
 //	defer d.mtx.Unlock()
-//	if a == nil {
+	if a == nil {
 //		return emptyValue
-//	}
+		return emptyValue()
+	}
 //	if d.svc == nil {
 //		return nil
 //	}
@@ -551,8 +575,8 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 //		d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
 //		d.Metrics.ServiceInstanceCount.With(labels).Add(-1)
 //	}
-//	return nil
-//}
+	return nil
+}
 
 // AddNextHop sets the next hop address for the given interface ID. If the
 // interface ID already has an address associated this operation fails. This can
@@ -603,19 +627,25 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 // AddNextHopBFD adds the BFD session for the next hop address.
 // If the remote ifID belongs to an existing address, the existing
 // BFD session will be re-used.
-//func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg control.BFD,
-//	sibling string) error {
-//
-//	d.mtx.Lock()
+requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+ensures acc(&d.mtx, _) && d.mtx.LockP()
+func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg control.BFD,
+	sibling string) error {
+
+	d.mtx.Lock()
+	unfold DataPlaneMutexInvariant!<d!>()
 //	defer d.mtx.Unlock()
-//	if d.running {
+	if d.running {
 //		return modifyExisting
-//	}
+		return modifyExisting()
+	}
 //
-//	if dst == nil {
+	if dst == nil {
 //		return emptyValue
-//	}
-//
+		return emptyValue()
+	}
+
 //	for k, v := range d.internalNextHops {
 //		if v.String() == dst.String() {
 //			if c, ok := d.bfdSessions[k]; ok {
@@ -648,7 +678,7 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 //		macFactory: d.macFactory,
 //	}
 //	return d.addBFDController(ifID, s, cfg, m)
-//}
+}
 
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
@@ -842,21 +872,28 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 //	return noBFDSessionFound
 //}
 
-func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error // {
-//	if len(d.bfdSessions) == 0 {
+requires DataPlaneMutexInvariant(d)
+ensures DataPlaneMutexInvariant(d)
+func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
+	unfold DataPlaneMutexInvariant(d)
+	if len(d.bfdSessions) == 0 {
+		fold DataPlaneMutexInvariant(d)
 //		return noBFDSessionConfigured
-//	}
+		return noBFDSessionConfigured()
+	}
 //	p := &layers.BFD{}
 //	if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
 //		return err
 //	}
 
-//	ifID := uint16(0)
-//	srcUDPAddr, ok := src.(*net.UDPAddr)
-//	if !ok {
-//		return serrors.New("type assertion failure", "from", fmt.Sprintf("%v(%T)", src, src),
-//			"expected", "*net.IPAddr")
-//	}
+	ifID := uint16(0)
+	srcUDPAddr, ok := src.(*net.UDPAddr)
+	if !ok {
+		fold DataPlaneMutexInvariant(d)
+		// return serrors.New("type assertion failure", "from", fmt.Sprintf("%v(%T)", src, src),
+		//	"expected", "*net.IPAddr")
+		return serrors.New("error") // TODO: remove after adding support for fmt
+	}
 //
 //	for k, v := range d.internalNextHops {
 //		remoteUDPAddr, ok := v.(*net.UDPAddr)
@@ -870,13 +907,18 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error // {
 //		}
 //	}
 
+// (joao) introduced parentheses surrounding b.bfdSessions
 //	if v, ok := d.bfdSessions[ifID]; ok {
+	if v, ok := (d.bfdSessions)[ifID]; ok {
 //		v.Messages() <- p
-//		return nil
-//	}
+		fold DataPlaneMutexInvariant(d)
+		return nil
+	}
 
+	fold DataPlaneMutexInvariant(d)
 //	return noBFDSessionFound
-//}
+	return noBFDSessionFound()
+}
 
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
@@ -1503,7 +1545,7 @@ func addEndhostPort(dst net.Addr) net.Addr {
 
 type bfdSend struct {
 	conn             BatchConn
-//	srcAddr, dstAddr *net.UDPAddr
+	srcAddr, dstAddr *net.UDPAddr
 	srcIA, dstIA     addr.IA
 //	macFactory       func() hash.Hash
 	ifID             uint16
