@@ -961,6 +961,13 @@ type scionPacketProcessor struct {
 	segmentChange bool
 }
 
+pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
+	acc(p) &&
+	acc(&p.d.mtx, _) &&
+	p.d.mtx.LockP() &&
+	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
+}
+
 //func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 //	cause error) (processResult, error) {
 //

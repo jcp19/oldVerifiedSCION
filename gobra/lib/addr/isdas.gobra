@@ -221,9 +221,13 @@ type IA struct {
 	A AS
 }
 
-func IAFromRaw(b common.RawBytes) IA {
+requires p > 0
+requires b.Len() >= 8
+requires forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], p)
+ensures forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], p)
+func IAFromRaw(b common.RawBytes, ghost p perm) (ret IA) {
 	ia := &IA{}
-	ia.Parse(b)
+	ia.Parse(b, p)
 	return *ia
 }
 
@@ -285,15 +289,21 @@ func (ia *IA) UnmarshalText(text []byte) error {
 	return nil
 }
 
-requires acc(ia)
-ensures acc(ia)
-func (ia *IA) Parse(b common.RawBytes) //{
-//	*ia = IAInt(binary.BigEndian.Uint64(b)).IA()
-//}
+requires p > 0
+requires b.Len() >= 8
+requires acc(ia) && forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], p)
+ensures acc(ia) && forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], p)
+func (ia *IA) Parse(b common.RawBytes, ghost p perm) {
+	//*ia = IAInt(binary.BigEndian.Uint64(b)).IA()
+	*ia = (IAInt(binary.BigEndian.Uint64(b))).IA()
+}
 
-func (ia IA) Write(b common.RawBytes) // {
-//	binary.BigEndian.PutUint64(b, uint64(ia.IAInt()))
-//}
+// avoiding quantification on purpose in the specification of Write
+requires acc(&b[0]) && acc(&b[1]) && acc(&b[2]) && acc(&b[3]) && acc(&b[4]) && acc(&b[5]) && acc(&b[6]) && acc(&b[7])
+ensures acc(&b[0]) && acc(&b[1]) && acc(&b[2]) && acc(&b[3]) && acc(&b[4]) && acc(&b[5]) && acc(&b[6]) && acc(&b[7])
+func (ia IA) Write(b common.RawBytes) {
+	binary.BigEndian.PutUint64(b, uint64(ia.IAInt()))
+}
 
 func (ia IA) IAInt() IAInt // {
 //	return IAInt(ia.I)<<ASBits | IAInt(ia.A&MaxAS)
