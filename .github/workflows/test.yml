@@ -19,11 +19,12 @@ jobs:
       SILICON_REF: "v.21.01-release"
       CARBON_REF: "v.21.01-release"
     steps:
+      #- name: apt-get update
+      #  run: |
+      #    apt-get update
       - name: Install realpath
         run: | 
-          apt-get update
           apt-get install coreutils
-
       - name: Checkout Gobra
         uses: actions/checkout@v2
         with:
