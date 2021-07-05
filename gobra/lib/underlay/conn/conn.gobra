@@ -383,9 +383,9 @@ func (c *connUDPBase) Close() error {
 // ReadMeta contains extra information about socket reads.
 type ReadMeta struct {
 	// Src is the remote address from which the datagram was received
-//	Src *net.UDPAddr
+	Src *net.UDPAddr
 	// Local is the address on which the datagram was received
-//	Local *net.UDPAddr
+	Local *net.UDPAddr
 	// RcvOvfl is the total number of packets that were dropped by the OS due
 	// to the receive buffers being full.
 	RcvOvfl uint32

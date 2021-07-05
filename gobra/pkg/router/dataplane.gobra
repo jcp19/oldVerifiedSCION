@@ -450,7 +450,6 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	d.mtx.Lock()
 //	defer d.mtx.Unlock()
 	unfold DataPlaneMutexInvariant!<d!>()
-	assert DataPlaneMutexInvariant(d) 
 	if d.running {
 //		return modifyExisting
 		return modifyExisting()
@@ -489,7 +488,9 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	// (joao) rewrote to unfold before returning. Original code:
 	// return d.addBFDController(ifID, s, cfg, /* m */)
 	// changed code:
+	fold DataPlaneMutexInvariant(d)
 	res := d.addBFDController(ifID, s, cfg, /* m */)
+	unfold DataPlaneMutexInvariant(d)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return res
@@ -1528,13 +1529,13 @@ func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 //}
 
 func addEndhostPort(dst net.Addr) net.Addr {
-// (joao) net.IPAddr still not supported
 //	if ip, ok := dst.(*net.IPAddr); ok {
+// (joao) IP IP field not supported
 //		return &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
 //	}
 	return dst
 }
-//
+
 //func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 //	if err := buffer.Clear(); err != nil {
 //		return err
