@@ -1,0 +1,204 @@
+// Copyright 2020 Anapaya Systems
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package scion
+
+import (
+	"encoding/binary"
+//	"fmt"
+
+//	"github.com/scionproto/scion/go/lib/serrors"
+	"gobra/lib/serrors"
+//	"github.com/scionproto/scion/go/lib/slayers/path"
+	"gobra/lib/slayers/path"
+)
+
+// MetaLen is the length of the PathMetaHeader.
+const MetaLen = 4
+
+// Base holds the basic information that is used by both raw and fully decoded paths.
+type Base struct {
+	// PathMeta is the SCION path meta header. It is always instantiated when
+	// decoding a path from bytes.
+	PathMeta MetaHdr
+	// NumINF is the number of InfoFields in the path.
+	NumINF int
+	// NumHops is the number HopFields in the path.
+	NumHops int
+}
+
+pred BaseInvariant(b *Base) {
+    acc(b) &&
+    b.NumINF >= 0 && b.NumINF <= 3 && // there are at most 3 InfoFields, one per segment
+    b.NumHops >= 0 
+}
+
+requires acc(s)
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures acc(s)
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+func (s *Base) DecodeFromBytes(data []byte) error {
+	// PathMeta takes care of bounds check.
+	err := s.PathMeta.DecodeFromBytes(data)
+	if err != nil {
+		return err
+	}
+	s.NumINF = 0
+	s.NumHops = 0
+
+    invariant -1 <= i && i <= 2
+    invariant acc(s)
+	for i := 2; i >= 0; i-- {
+// (joao) added paretheses surrounding `s.PathMeta.SegLen`
+		if (s.PathMeta.SegLen)[i] == 0 && s.NumINF > 0 {
+// (joao) introduced dummy return error becase fmt is not supported
+//			return serrors.New(
+//				fmt.Sprintf("Meta.SegLen[%d] == 0, but Meta.SegLen[%d] > 0", i, s.NumINF-1))
+            return serrors.New("")
+		}
+// (joao) added paretheses surrounding `s.PathMeta.SegLen`
+		if (s.PathMeta.SegLen)[i] > 0 && s.NumINF == 0 {
+			s.NumINF = i + 1
+		}
+// (joao) added paretheses surrounding `s.PathMeta.SegLen`
+		s.NumHops += int((s.PathMeta.SegLen)[i])
+	}
+	return nil
+}
+
+// IncPath increases the currHF index and currINF index if appropriate.
+requires BaseInvariant(s)
+ensures BaseInvariant(s)
+func (s *Base) IncPath() error {
+	unfold BaseInvariant(s)
+	if s.NumINF == 0 {
+		fold BaseInvariant(s)
+		return serrors.New("empty path cannot be increased")
+	}
+	if int(s.PathMeta.CurrHF) >= s.NumHops-1 {
+		s.PathMeta.CurrHF = uint8(s.NumHops - 1)
+		fold BaseInvariant(s)
+		return serrors.New("path already at end")
+	}
+	s.PathMeta.CurrHF++
+	// Update CurrINF
+	// (joao) introduce tmp1 and tmp2 be able to fold required predicates
+	tmp1 := s.PathMeta.CurrHF
+	fold BaseInvariant(s)
+	tmp2 := s.infIndexForHF(tmp1, 1/2)
+	unfold BaseInvariant(s)
+	s.PathMeta.CurrINF = tmp2
+	fold BaseInvariant(s)
+	return nil
+}
+
+// IsXover returns whether we are at a crossover point.
+requires p > 0
+requires acc(BaseInvariant(s), p)
+ensures acc(BaseInvariant(s), p)
+func (s *Base) IsXover(ghost p perm) bool {
+// (joao) tmp was introduced by me to simplify the unfoldings of BaseInvariant(s)
+    tmp := unfolding acc(BaseInvariant(s), p) in s.PathMeta.CurrINF
+    return tmp != s.infIndexForHF(tmp+1, p)
+}
+
+requires p > 0
+requires acc(BaseInvariant(s), p)
+ensures acc(BaseInvariant(s), p)
+func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
+	left := uint8(0)
+
+	unfold acc(BaseInvariant(s), p)
+
+    invariant acc(s, p)
+    invariant s.NumINF >= 0 && s.NumINF <= 3
+    invariant s.NumHops >= 0 
+    invariant 0 <= i && i <= 3
+	for i := 0; i < s.NumINF; i++ {
+		if hf >= left {
+// (joao) added paretheses surrounding `s.PathMeta.SegLen`
+			if hf < left+(s.PathMeta.SegLen)[i] {
+                fold acc(BaseInvariant(s), p)
+				return uint8(i)
+			}
+		}
+// (joao) added paretheses surrounding `s.PathMeta.SegLen`
+		left += (s.PathMeta.SegLen)[i]
+	}
+	// at the end we just return the last index.
+// (joao) the RHS of the following declaration used to be in the return statement
+    ret := uint8(s.NumINF - 1)
+    fold acc(BaseInvariant(s), p)
+	return ret
+}
+
+// Len returns the length of the path in bytes.
+requires acc(s, _)
+pure func (s *Base) Len() int {
+	return MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
+}
+
+// MetaHdr is the PathMetaHdr of a SCION (data-plane) path type.
+type MetaHdr struct {
+	CurrINF uint8
+	CurrHF  uint8
+	SegLen  [3]uint8
+}
+
+// DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
+// scion.MetaLen
+requires acc(m)
+requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i])
+ensures acc(m)
+ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i])
+func (m *MetaHdr) DecodeFromBytes(raw []byte) error {
+	if len(raw) < MetaLen {
+		return serrors.New("MetaHdr raw too short", "expected", MetaLen, "actual", len(raw))
+	}
+	line := binary.BigEndian.Uint32(raw)
+	m.CurrINF = uint8(line >> 30)
+	m.CurrHF = uint8(line>>24) & 0x3F
+// (joao) introduced parentheses surrounding `m.SegLen`
+	(m.SegLen)[0] = uint8(line>>12) & 0x3F
+	(m.SegLen)[1] = uint8(line>>6) & 0x3F
+	(m.SegLen)[2] = uint8(line) & 0x3F
+
+	return nil
+}
+
+// SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
+// scion.MetaLen
+requires p > 0
+requires acc(m, p)
+requires forall i int :: 0 <= i && i < MetaLen ==> acc(&b[i])
+ensures acc(m, p)
+ensures forall i int :: 0 <= i && i < MetaLen ==> acc(&b[i])
+func (m *MetaHdr) SerializeTo(b []byte, ghost p perm) error {
+	if len(b) < MetaLen {
+		return serrors.New("buffer for MetaHdr too short", "expected", MetaLen, "actual", len(b))
+	}
+	line := uint32(m.CurrINF)<<30 | uint32(m.CurrHF&0x3F)<<24
+// (joao) introduced parentheses surrounding `m.SegLen`
+	line |= uint32((m.SegLen)[0]&0x3F) << 12
+	line |= uint32((m.SegLen)[1]&0x3F) << 6
+	line |= uint32((m.SegLen)[2] & 0x3F)
+	binary.BigEndian.PutUint32(b, line)
+
+	return nil
+}
+
+// (joao) fmt still not supported
+func (m MetaHdr) String() string // {
+//	return fmt.Sprintf("{CurrInf: %d, CurrHF: %d, SegLen: %v}", m.CurrINF, m.CurrHF, m.SegLen)
+// }

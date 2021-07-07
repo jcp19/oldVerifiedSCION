@@ -214,6 +214,20 @@ func (h HostIPv6) String() string {
 
 type HostSVC uint16
 
+pred (h HostSVC) mem() {
+	true
+}
+
+(HostSVC) implements net.Addr {
+	(e HostSVC) Network(ghost p perm) string {
+		return e.Network(p)
+	}
+
+	(e HostSVC) String(ghost p perm) string {
+		return e.String(p)
+	}
+}
+
 // HostSVCFromString returns the SVC address corresponding to str. For anycast
 // SVC addresses, use BS_A, PS_A, CS_A, and SB_A; shorthand versions without
 // the _A suffix (e.g., PS) also return anycast SVC addresses. For multicast,
@@ -292,7 +306,7 @@ func (h HostSVC) Equal(o HostAddr) bool {
 }
 
 // (joao) no support for rune literals
-func (h HostSVC) String() string {
+func (h HostSVC) String(ghost p perm) string {
 	name := h.BaseString()
 	// cast := 'A'
 	if h.IsMulticast() {
@@ -320,7 +334,7 @@ func (h HostSVC) BaseString() string {
 	}
 }
 
-func (h HostSVC) Network() string {
+func (h HostSVC) Network(ghost p perm) string {
 	return ""
 }
 
