@@ -70,11 +70,15 @@ type HopField struct {
 
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
 // path.HopLen
+requires p > 0
 requires acc(h)
-requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
+requires len(raw) >= 6 + MacLen
+requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
 ensures acc(h)
-ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
-func (h *HopField) DecodeFromBytes(raw []byte) error {
+ensures len(h.Mac) == MacLen
+ensures forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i])
+ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
+func (h *HopField) DecodeFromBytes(raw []byte, ghost p perm) error {
 	if len(raw) < HopLen {
 		return serrors.New("HopField raw too short", "expected", HopLen, "actual", len(raw))
 	}
@@ -83,22 +87,35 @@ func (h *HopField) DecodeFromBytes(raw []byte) error {
 	h.ExpTime = raw[1]
 
 	assert &raw[2:4][0] == &raw[2] && &raw[2:4][1] == &raw[3]
-	assert &raw[4:6][0] == &raw[4] && &raw[4:6][1] == &raw[5]
-
 	h.ConsIngress = binary.BigEndian.Uint16(raw[2:4])
+	assert &raw[4:6][0] == &raw[4] && &raw[4:6][1] == &raw[5]
 	h.ConsEgress = binary.BigEndian.Uint16(raw[4:6])
-	// (joao) append is not yet supported
-	// h.Mac = append([]byte(nil), raw[6:6+MacLen]...)
+
+	// (joao) introduced temporary variable tmp to simplify intermediate assertions
+	assert len(raw[6:6+MacLen]) == MacLen
+	assert &raw[6:6+MacLen][0] == &raw[6]
+	assert &raw[6:6+MacLen][1] == &raw[7]
+	assert &raw[6:6+MacLen][2] == &raw[8]
+	assert &raw[6:6+MacLen][3] == &raw[9]
+	assert &raw[6:6+MacLen][4] == &raw[10]
+	assert &raw[6:6+MacLen][5] == &raw[11]
+
+	tmp := append(p, []byte(nil), raw[6:6+MacLen]...)
+	assert len(tmp) == MacLen
+	assert forall i int :: 0 <= i && i < len(tmp) ==> acc(&tmp[i])
+	h.Mac = tmp
 	return nil
 }
 
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // path.HopLen
-requires acc(h, 1/2)
+requires p > 0
+requires acc(h, p) && forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i], p)
+requires len(b) >= 12
 requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures acc(h, 1/2)
+ensures acc(h, p) && forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i], p)
 ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (h *HopField) SerializeTo(b []byte) error {
+func (h *HopField) SerializeTo(b []byte, ghost p perm) error {
 	if len(b) < HopLen {
 		return serrors.New("buffer for HopField too short", "expected", MacLen, "actual", len(b))
 	}
@@ -112,20 +129,20 @@ func (h *HopField) SerializeTo(b []byte) error {
 	b[1] = h.ExpTime
 
 	assert &b[2:4][0] == &b[2] && &b[2:4][1] == &b[3]
-	assert &b[4:6][0] == &b[4] && &b[4:6][1] == &b[5]
-
 	binary.BigEndian.PutUint16(b[2:4], h.ConsIngress)
+	assert &b[4:6][0] == &b[4] && &b[4:6][1] == &b[5]
 	binary.BigEndian.PutUint16(b[4:6], h.ConsEgress)
 
-	// (joao) copy method not supported
-	// copy(b[6:12], h.Mac)
+	assert &b[6:12][0] == &b[6] && &b[6:12][1] == &b[7]
+	assert &b[6:12][2] == &b[8] && &b[6:12][3] == &b[9]
+	assert &b[6:12][4] == &b[10] && &b[6:12][5] == &b[11]
+	copy(b[6:12], h.Mac, p/2)
 
 	return nil
 }
 
 // ExpTimeToDuration calculates the relative expiration time in seconds.
 // Note that for a 0 value ExpTime, the minimal duration is expTimeUnit.
-func ExpTimeToDuration(expTime uint8) time.Duration {
-	// (joao) node not in tree: Millisecond
-	// return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit) * time.Second
-}
+func ExpTimeToDuration(expTime uint8) time.Duration // {
+//	return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit) * time.Second
+//}
