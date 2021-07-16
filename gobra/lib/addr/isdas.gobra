@@ -70,15 +70,16 @@ func ISDFromFileFmt(s string, prefix bool) (ISD, error) {
 			// return 0, common.NewBasicError("prefix missing", nil, "prefix", ISDFmtPrefix, "raw", s)
 			return 0, common.NewBasicError(common.ErrMsg("prefix missing"), nil, "prefix", ISDFmtPrefix, "raw", s)
 		}
-		// (joao) slicing a string is not yet supported
-		// s = s[len(ISDFmtPrefix):]
+		s = s[len(ISDFmtPrefix):]
 	}
 	return ISDFromString(s)
 }
 
-func (isd ISD) String() string //{
-//	return strconv.FormatUint(uint64(isd), 10)
-//}
+func (isd ISD) String() string {
+	// (joao) Gobra is not able to prove this automatically yet
+	assume uint64(isd) >= 0
+	return strconv.FormatUint(uint64(isd), 10)
+}
 
 // (joao) no support for global variables
 // var _ encoding.TextUnmarshaler = (*AS)(nil)
@@ -104,8 +105,7 @@ func ASFromFileFmt(s string, prefix bool) (AS, error) {
 			// return 0, common.NewBasicError("prefix missing", nil, "prefix", ASFmtPrefix, "raw", s)
 			return 0, common.NewBasicError(common.ErrMsg("prefix missing"), nil, "prefix", ASFmtPrefix, "raw", s)
 		}
-		// (joao) slicing a string is not yet supported
-		// s = s[len(ASFmtPrefix):]
+		s = s[len(ASFmtPrefix):]
 	}
 	return asParse(s, "_")
 }
@@ -134,6 +134,7 @@ func asParse(s string, sep string) (AS, error) {
 	invariant 0 <= i && i <= asParts
 	invariant forall j int :: 0 <= j && j < len(parts) ==> acc(&parts[j])
 	for i := 0; i < asParts; i++ {
+// (joao) leads to error, types not comptabile with >>
 //		as <<= asPartBits
 		v, err := strconv.ParseUint(parts[i], asPartBase, asPartBits)
 		if err != nil {
@@ -160,15 +161,16 @@ func (as AS) FileFmt() string //{
 func (as AS) fmt(sep byte) string {
 	if !as.inRange() {
 //		return fmt.Sprintf("%d [Illegal AS: larger than %d]", as, MaxAS)
-		; // (joao) makes this parse
+		return ""; // (joao) added to mimic the correct control flow of the program
 	}
 	// Format BGP ASes as decimal
 	if as <= MaxBGPAS {
-//		return strconv.FormatUint(uint64(as), 10)
-		; // makes this parse
+		// (joao) Gobra is not able to prove this automatically yet
+		assume uint64(as) >= 0
+		return strconv.FormatUint(uint64(as), 10)
 	}
 	// Format all other ASes as 'sep'-separated hex.
-//	(joao) local constants are not yet supported
+//	(joao) local constants are not yet supported, use `var` instead
 //	const maxLen = len("ffff:ffff:ffff")
 	var maxLen = len("ffff:ffff:ffff")
 	b := make([]byte, 0, maxLen)
@@ -176,13 +178,16 @@ func (as AS) fmt(sep byte) string {
 	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 	for i := 0; i < asParts; i++ {
 		if i > 0 {
-			b = append(b, sep)
+			b = append(perm(1/2), b, sep)
 		}
 		shift := uint(asPartBits * (asParts - i - 1))
-//		s := strconv.FormatUint(uint64(as>>shift)&asPartMask, asPartBase)
-//		b = append(b, s...)
+		// (joao) Gobra is not able to prove this automatically yet
+		assume uint64(as>>shift)&asPartMask >= 0
+		s := strconv.FormatUint(uint64(as>>shift)&asPartMask, asPartBase)
+		// (joao) type error: only slices can be unpacked
+		// b = append(perm(1/2), b, s...)
 	}
-//	return string(b)
+	return string(b)
 }
 
 func (as AS) inRange() bool {
@@ -274,9 +279,14 @@ func (ia IA) MarshalText() ([]byte, error) {
 }
 
 // UnmarshalText allows IA to be used as a map key in JSON.
+requires p > 0
 requires acc(ia)
+// (joao) this precondition is required even though Gobra does not complain about
+// it if is missing (check issue #246 of Gobra)
+requires forall i int :: 0 <= i && i < len(text) ==> acc(&text[i], p)
 ensures acc(ia)
-func (ia *IA) UnmarshalText(text []byte) error {
+ensures forall i int :: 0 <= i && i < len(text) ==> acc(&text[i], p)
+func (ia *IA) UnmarshalText(text []byte, ghost p perm) error {
 	if len(text) == 0 {
 		*ia = IA{}
 		return nil
@@ -306,8 +316,9 @@ func (ia IA) Write(b common.RawBytes) {
 }
 
 func (ia IA) IAInt() IAInt // {
+// (joao) Logic error: unexpected type IAInt
 //	return IAInt(ia.I)<<ASBits | IAInt(ia.A&MaxAS)
-//}
+// }
 
 func (ia IA) IsZero() bool {
 	return ia.I == 0 && ia.A == 0
@@ -371,10 +382,11 @@ func (ia IAInt) MarshalText() (res []byte, e error) {
 	return []byte((IAInt(ia)).String()), nil
 }
 
-requires acc(ia)
 requires p > 0
+requires acc(ia)
 requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
 ensures acc(ia)
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
 func (ia *IAInt) UnmarshalText(b []byte, ghost p perm) error {
 	tIA, err := IAFromString(string(b))
 	if err != nil {
