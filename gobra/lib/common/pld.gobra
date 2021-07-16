@@ -1,0 +1,43 @@
+// Copyright 2016 ETH Zurich
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package common
+
+import (
+//	"fmt"
+)
+
+type Payload interface {
+	pred Mem()
+
+// (joao) fmt.Stringer not supported
+//	fmt.Stringer
+
+	requires acc(Mem(), _)
+	pure Len() int
+
+	requires q > 0
+	requires acc(Mem(), q)
+	// (joao) should work correctly after Gobra issues #312 and #318 have been fixed
+	ensures  acc(Mem(), q) // && res.Mem()
+	Copy(ghost q perm) (res Payload, err error)
+
+	// Writes payload to buffer
+	requires 0 < p && p < 1
+	requires b.Mem()
+	requires acc(Mem(), p)
+	ensures  b.Mem()
+	ensures  acc(Mem(), p)
+	WritePld(b RawBytes, ghost p perm) (int, error)
+}
