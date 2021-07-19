@@ -1,0 +1,68 @@
+package gopacket
+
+type Layer interface {
+	// (lhalm) rename to GetLayerType to avoid name confision
+	//LayerType() LayerType
+	GetLayerType() LayerType
+	LayerContents() []byte
+	LayerPayload() []byte
+}
+
+type NetworkLayer interface {
+	pred mem()
+	// (lhalm) composition not supported, add methods manually
+	// Layer	
+	// (lhalm) rename to GetLayerType to avoid name confision
+	//LayerType() LayerType
+	requires mem()
+	ensures mem()
+	GetLayerType() LayerType
+
+	requires mem()
+	ensures mem()
+	LayerContents() []byte
+
+	requires mem()
+	ensures mem()
+	LayerPayload() []byte
+	// (lhalm) end of parent methods
+	// NetworkFlow() Flow
+}
+
+// pred (s Payload) mem() { true }
+// (Payload) implements SerializableLayer {
+
+// 	(p Payload) GetLayerType() (lt LayerType) {
+// 		lt = p.GetLayerType()
+// 	} 
+
+// 	(p Payload) SerializeTo(b SerializeBuffer, opts SerializeOptions) (err error) {
+// 		err = p.SerializeTo(b, opts)
+// 	}
+// }
+
+type Payload []byte
+
+// (lhalm) Rename LayerType() to GetLayerType() to match modified interface
+func (p Payload) GetLayerType() LayerType
+
+func (p Payload) LayerContents() []byte
+
+func (p Payload) LayerPayload() []byte
+
+func (p Payload) Payload() []byte { return []byte(p) }
+
+func (p Payload) String() string
+
+func (p Payload) GoString() string
+
+// func (p Payload) CanDecode() LayerClass { return LayerTypePayload }
+
+// func (p Payload) NextLayerType() LayerType { return LayerTypeZero }
+
+// func (p *Payload) DecodeFromBytes(data []byte, df DecodeFeedback) error {
+// 	*p = Payload(data)
+// 	return nil
+// }
+
+func (p Payload) SerializeTo(b SerializeBuffer, opts SerializeOptions) error

@@ -86,9 +86,9 @@ const (
 type SCMPTypeCode uint16
 
 // Type returns the SCMP type field.
-// func (a SCMPTypeCode) Type() SCMPType {
+func (a SCMPTypeCode) Type() SCMPType {
 // 	return SCMPType(a >> 8)
-// }
+}
 
 // Code returns the SCMP code field.
 // func (a SCMPTypeCode) Code() SCMPCode {

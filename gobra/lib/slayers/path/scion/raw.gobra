@@ -84,7 +84,13 @@ func (s *Raw) Reverse() error {
 }
 
 // ToDecoded transforms a scion.Raw to a scion.Decoded.
-// func (s *Raw) ToDecoded() (*Decoded, error) {
+ensures acc(&decoded.InfoFields)
+ensures forall i int :: 0 <= i && i < len(decoded.InfoFields) ==> acc(&(decoded.InfoFields)[i])
+ensures acc(&decoded.HopFields)
+ensures forall i int :: 0 <= i && i < len(decoded.HopFields) ==> acc(&(decoded.HopFields)[i])
+ensures acc(&decoded.BaseEmbedded)
+ensures acc(&decoded.BaseEmbedded.PathMeta)
+func (s *Raw) ToDecoded() (decoded *Decoded, error) //{
 // 	// Serialize PathMeta to ensure potential changes are reflected Raw.
 // 	if err := s.PathMeta.SerializeTo((s.Raw)[:MetaLen]); err != nil {
 // 		return nil, err
@@ -94,7 +100,7 @@ func (s *Raw) Reverse() error {
 // 		return nil, err
 // 	}
 // 	return decoded, nil
-// }
+//}
 
 pred rawBytesAcc(slice []byte) {
 	forall i int :: 0 <= i && i < len(slice) ==> acc(&(slice)[i], 1/8)

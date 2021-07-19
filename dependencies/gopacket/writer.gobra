@@ -1,9 +1,16 @@
 package gopacket
 
 type SerializableLayer interface {
+	pred mem()
+
+	requires mem()
+	ensures mem()
 	SerializeTo(b SerializeBuffer, opts SerializeOptions) error
+
 	// (lhalm) rename to GetLayerType() to avoid confusion with the type LayerType
 	// LayerType() LayerType
+	requires mem()
+	ensures mem()
 	GetLayerType() LayerType
 }
 
@@ -20,3 +27,19 @@ type SerializeBuffer interface {
 	Layers() []LayerType
 	PushLayer(LayerType)
 }
+
+requires forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i])
+ensures forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i])
+func SerializeLayers(w SerializeBuffer, opts SerializeOptions, layers ...SerializableLayer) error 
+// {
+// 	w.Clear()
+// 	for i := len(layers) - 1; i >= 0; i-- {
+// 		layer := layers[i]
+// 		err := layer.SerializeTo(w, opts)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		w.PushLayer(layer.LayerType())
+// 	}
+// 	return nil
+// }

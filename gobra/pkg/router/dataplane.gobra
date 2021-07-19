@@ -10,12 +10,45 @@ import (
 	"gobra/lib/slayers/path/scion"
 	"gobra/lib/util"
 	"gobra/lib/serrors"
+	"gobra/lib/common"
 	"sync"
 	"net"
 	"time"
 
 	"dependencies/gopacket"
 ) 
+
+var (
+	// alreadySet                    = serrors.New("already set")
+	// cannotRoute                   = serrors.New("cannot route, dropping pkt")
+	// emptyValue                    = serrors.New("empty value")
+	// malformedPath                 = serrors.New("malformed path content")
+	// modifyExisting                = serrors.New("modifying a running dataplane is not allowed")
+	// noSVCBackend                  = serrors.New("cannot find internal IP for the SVC")
+	// unsupportedPathType           = serrors.New("unsupported path type")
+	// unsupportedPathTypeNextHeader = serrors.New("unsupported combination")
+	// noBFDSessionFound             = serrors.New("no BFD sessions was found")
+	// noBFDSessionConfigured        = serrors.New("no BFD sessions have been configured")
+	// errBFDDisabled                = serrors.New("BFD is disabled")
+)
+
+(scmpError) implements error {
+
+	(s scmpError) Error() (err string) {
+		err = s.Error()
+	}
+}
+
+type scmpError struct {
+	TypeCode slayers.SCMPTypeCode
+	Cause    error
+}
+
+func (e scmpError) Error() string {
+	// (lhalm) throws NodeNotInTree exception
+	//err := serrors.New("scmp", "typecode", e.TypeCode, "cause", e.Cause)
+	// return err.Error()
+}
 
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
@@ -240,7 +273,9 @@ func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCIO
 		origPacket: origPacket,
 		//buffer:     buffer,
 	}
+	assert acc(&p.scionLayer.PathVar)
 	fold parsePathContract(&p)
+	assert acc(&p.scionLayer.PathVar)
 	result, err := p.process();
 	unfold parsePathContract(&p)
 	return result, err
@@ -284,7 +319,9 @@ type scionPacketProcessor struct {
 }
 
 requires parsePathContract(p)
+requires acc(&p.scionLayer.PathVar)
 ensures parsePathContract(p)
+ensures acc(&p.scionLayer.PathVar)
 func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
@@ -410,7 +447,8 @@ func testMethod(raw *scion.Raw, p *scionPacketProcessor) {
 
 	// fold scion.rawBytesAcc(raw.Raw)
 	// fold scion.hopFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrHF))
-	// assert acc(raw, 3/4)
+	// assert acc(raw, 3/4) // Takes 8 minutes
+	// assert acc(raw)
 
 	// fold scion.rawBytesAcc(raw.Raw)
 	// fold scion.infoFieldAcc(raw, int(raw.BaseEmbedded.PathMeta.CurrINF))
@@ -439,7 +477,9 @@ pred rawMem(raw *scion.Raw) {
 }
 
 requires parsePathContract(p)
+requires acc(&p.scionLayer.PathVar)
 ensures parsePathContract(p)
+requires acc(&p.scionLayer.PathVar)
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	unfold parsePathContract(p)
 	var ok bool
@@ -470,15 +510,17 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
-	fold rawMem(p.pathVar)
-	if r, err := p.validateHopExpiry(); err != nil {		
+	if r, err := p.validateHopExpiry(); err != nil {	
+		fold rawMem(p.pathVar)
 		fold parsePathContract(p)
 		return r, err
 	}
 	if r, err := p.validateIngressID(); err != nil {
+		fold rawMem(p.pathVar)
 		fold parsePathContract(p)
 		return r, err
 	}
+	fold rawMem(p.pathVar)
 	fold parsePathContract(p)
 	return processResult{}, nil
 }
@@ -489,6 +531,8 @@ requires acc(p.infoField, 1/8)
 requires acc(p.d, 1/8)
 requires acc(p.d.external, 1/8)
 requires acc(&p.pathVar.BaseEmbedded.PathMeta, 1/8)
+requires acc(&p.scionLayer.PathVar)
+requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires rawMem(p.pathVar)
 ensures acc(p, 1/8)
 ensures acc(p.hopField, 1/8)
@@ -496,6 +540,8 @@ ensures acc(p.infoField, 1/8)
 ensures acc(p.d, 1/8)
 ensures acc(p.d.external, 1/8)
 ensures acc(&p.pathVar.BaseEmbedded.PathMeta, 1/8)
+ensures acc(&p.scionLayer.PathVar)
+ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
 ensures rawMem(p.pathVar)
 func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) {
 	expiration := (util.SecsToTime(p.infoField.Timestamp)).Add(path.ExpTimeToDuration(p.hopField.ExpTime))
@@ -521,12 +567,16 @@ requires acc(p.hopField, 1/8)
 requires acc(p.infoField, 1/8)
 requires acc(p.d, 1/8)
 requires acc(p.d.external, 1/8)
+requires acc(&p.scionLayer.PathVar)
+requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires rawMem(p.pathVar)
 ensures acc(p, 1/8)
 ensures acc(p.hopField, 1/8)
 ensures acc(p.infoField, 1/8)
 ensures acc(p.d, 1/8)
 ensures acc(p.d.external, 1/8)
+ensures acc(&p.scionLayer.PathVar)
+ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
 ensures rawMem(p.pathVar)
 func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
 	pktIngressID := p.hopField.ConsIngress
@@ -555,6 +605,8 @@ requires acc(p.d, 1/8)
 requires acc(p.d.external, 1/8)
 requires acc(p.infoField, 1/8)
 requires acc(p.hopField, 1/8)
+requires acc(&p.scionLayer.PathVar)
+requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires rawMem(p.pathVar)
 ensures acc(p, 1/8)
 ensures acc(&p.scionLayer.PayloadLen, 1/2)
@@ -563,6 +615,8 @@ ensures acc(p.d, 1/8)
 ensures acc(p.d.external, 1/8)
 ensures acc(p.infoField, 1/8)
 ensures acc(p.hopField, 1/8)
+ensures acc(&p.scionLayer.PathVar)
+ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
 ensures rawMem(p.pathVar)
 func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.EmbeddedLayer.Payload) {
@@ -579,14 +633,10 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 	)
 }
 
-(*slayers.SCMPParameterProblem) implements gopacket.SerializableLayer {
+(gopacket.UnsupportedLayerType) implements error {
 
-	(s *slayers.SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
-		err = s.SerializeTo(b, opts)
-	}
-
-	(s *slayers.SCMPParameterProblem) GetLayerType() (lt gopacket.LayerType) {
-		lt = s.GetLayerType()
+	(e gopacket.UnsupportedLayerType) Error() (err string) {
+		err = e.Error()
 	}
 }
 
@@ -595,52 +645,62 @@ requires acc(p.d, 1/16)
 requires acc(p.d.external, 1/16)
 requires acc(p.infoField, 1/16)
 requires acc(p.hopField, 1/16)
+requires acc(&p.scionLayer.PathVar)
+requires typeOf(p.scionLayer.PathVar) == *scion.Raw
+requires acc(&((p.scionLayer.PathVar).(*scion.Raw)).Raw)
 requires rawMem(p.pathVar)
 ensures acc(p, 1/16)
 ensures acc(p.d, 1/16)
 ensures acc(p.d.external, 1/16)
 ensures acc(p.infoField, 1/16)
 ensures acc(p.hopField, 1/16)
+ensures acc(&p.scionLayer.PathVar)
+ensures typeOf(p.scionLayer.PathVar) == *scion.Raw
+ensures acc(&((p.scionLayer.PathVar).(*scion.Raw)).Raw)
 ensures rawMem(p.pathVar)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (processResult, error) {
 	// parse everything to see if the original packet was an SCMP error.
 	var (
-		scionLayer slayers.SCION
-		udpLayer   slayers.UDP
-		hbhExtn    slayers.HopByHopExtn
-		e2eExtn    slayers.EndToEndExtn
-		scmpLayer  slayers.SCMP
+		scionLayer@ slayers.SCION
+		udpLayer@   slayers.UDP
+		hbhExtn@    slayers.HopByHopExtn
+		e2eExtn@    slayers.EndToEndExtn
+		scmpLayer@  slayers.SCMP
 	)
-	// parser := gopacket.NewDecodingLayerParser(
-	// 	slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
-	// )
-	// decoded := make([]gopacket.LayerType, 5)
-	// if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
-	// 	if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
-	// 		return processResult{}, serrors.WrapStr("decoding packet", err)
-	// 	}
-	// }
+	parser := gopacket.NewDecodingLayerParser(
+		0 /* slayers.LayerTypeSCION */, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
+	)
+	// (lhalm) extremely slow, why?
+	//decoded := make(gopacket.LayerType, 5)
+	var decoded@ []gopacket.LayerType
+	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
+		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
+			return processResult{}, serrors.WrapStr("decoding packet", err)
+		}
+	}
 	// // in reply to an SCMP error do nothing:
 	// if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
 	// 	return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
 	// }
 
 	unfold rawMem(p.pathVar)
+
+	// (lhalm): Rename p.path to p.pathVar
+	// (lhalm): Add BaseEmbedded due to missing composition
 	// the quoted packet is the packet in its current state
 	// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
 	// 	return processResult{}, serrors.WrapStr("update info field", err)
 	// }
-	// (lhalm): Rename p.path to p.pathVar
-	// (lhalm): Add BaseEmbedded due to missing composition
 	if err := p.pathVar.SetInfoField(p.infoField, int(p.pathVar.BaseEmbedded.PathMeta.CurrINF)); err != nil {
 		fold rawMem(p.pathVar)
 		return processResult{}, serrors.WrapStr("update info field", err)
 	}
+	
+	// (lhalm): Rename p.path to p.pathVar
+	// (lhalm): Add BaseEmbedded due to missing composition
 	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
 	// 	return processResult{}, serrors.WrapStr("update hop field", err)
 	// }
-	// (lhalm): Rename p.path to p.pathVar
-	// (lhalm): Add BaseEmbedded due to missing composition
 	if err := p.pathVar.SetHopField(p.hopField, int(p.pathVar.BaseEmbedded.PathMeta.CurrHF)); err != nil {
 		fold rawMem(p.pathVar)
 		return processResult{}, serrors.WrapStr("update hop field", err)
@@ -660,26 +720,28 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	}
 	// (lhalm) Very slow, why?
 	// quote := make([]byte, quoteLen)
+	var quote []byte
+	// inhale forall i int :: 0 <= i && i < (quoteLen) ==> acc(&quote[i])
 	updated := p.buffer.Bytes()
 	// copy(quote[:len(updated)], updated)
 	// copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
 
 	_, external := (p.d.external)[p.ingressID]
-	// rawSCMP, err := scmpPacker{
-	// 	internalIP: p.d.internalIP,
-	// 	localIA:    p.d.localIA,
-	// 	origPacket: p.origPacket,
-	// 	ingressID:  p.ingressID,
-	// 	scionL:     &p.scionLayer,
-	// 	buffer:     p.buffer,
-	// 	quote:      quote,
-	// }.prepareSCMP(
-	// 	scmpH,
-	// 	scmpP,
-	// 	external,
-	// 	cause,
-	// )
-	// return processResult{OutPkt: rawSCMP}, err
+	rawSCMP, err := scmpPacker{
+		internalIP: p.d.internalIP,
+		localIA:    p.d.localIA,
+		origPacket: p.origPacket,
+		ingressID:  p.ingressID,
+		scionL:     &p.scionLayer,
+		buffer:     p.buffer,
+		quote:      quote,
+	}.prepareSCMP(
+		scmpH,
+		scmpP,
+		external,
+		cause,
+	)
+	return processResult{OutPkt: rawSCMP}, err
 }
 
 func (p *scionPacketProcessor) currentHopPointer() uint16 {
@@ -692,6 +754,162 @@ type processResult struct {
 	OutConn  BatchConn
 	OutAddr  net.Addr
 	OutPkt   []byte
+}
+
+type scmpPacker struct {
+	internalIP net.IP
+	localIA    addr.IA
+	origPacket []byte
+	ingressID  uint16
+
+	scionL *slayers.SCION
+	buffer gopacket.SerializeBuffer
+	quote  []byte
+}
+
+(*scion.Decoded) implements slayers.Path {
+
+	(d *scion.Decoded) SerializeTo(b []byte) (err error) {
+		err = d.SerializeTo(b)
+	}
+
+	(d *scion.Decoded) DecodeFromBytes(b []byte) (err error) {
+		err = d.DecodeFromBytes(b)
+	}
+	
+	(d *scion.Decoded) Reverse() (err error) {
+		err = d.Reverse()
+	}
+	
+	(d *scion.Decoded) Len() (l int) {
+		l = d.Len()
+	}
+}
+
+requires acc(&s.scionL.PathVar)
+requires typeOf(s.scionL.PathVar) == *scion.Raw
+requires acc(&((s.scionL.PathVar).(*scion.Raw)).Raw)
+requires acc(&s.scionL.DstIA)
+requires acc(&s.scionL.SrcIA)
+func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
+	incPath bool, cause error) ([]byte, error) {
+
+	// We use the original packet but put the already updated path, because usually a router will
+	// not keep a copy of the original/unmodified packet around.
+
+	// (lhalm) rename to PathVar
+	// pathRaw := s.scionL.Path.(*scion.Raw).Raw
+	pathRaw := ((s.scionL.PathVar).(*scion.Raw)).Raw
+
+	// (lhalm) create local variable because global ones do not work
+	tmp := gopacket.NilDecodeFeedback{}
+	// if err := s.scionL.DecodeFromBytes(s.origPacket, gopacket.NilDecodeFeedback); err != nil {
+	// 	panic(err)
+	// }
+	err := s.scionL.DecodeFromBytes(s.origPacket, tmp)
+	if err != nil {
+		// (lhalm) causes NodeNotInTree exception
+		//panic(err)
+	}
+	// (lhalm) rename to PathVar
+	// path := s.scionL.Path.(*scion.Raw)
+	path := (s.scionL.PathVar).(*scion.Raw)
+
+	path.Raw = pathRaw
+	decPath, err := path.ToDecoded()
+	if err != nil {
+		// (lhalm) create local var since global is not supported
+		cannotRoute := serrors.New("cannot route, dropping pkt")
+		return nil, serrors.Wrap(cannotRoute, err, "details", "decoding raw path")
+	}
+	// (lhalm) rename to PathVar
+	// s.scionL.Path = decPath
+	s.scionL.PathVar = decPath
+	if err := decPath.Reverse(); err != nil {
+		// (lhalm) create local var since global is not supported
+		cannotRoute := serrors.New("cannot route, dropping pkt")
+		return nil, serrors.Wrap(cannotRoute, err, "details", "reversing path for SCMP")
+	}
+	// (lhalm) call IsXover on embedded struct since composition is not supported
+	// if incPath || decPath.IsXover() {
+	if incPath || decPath.BaseEmbedded.IsXover() {
+		// (lhalm) read PathMeta from embedded since composition is not supported
+		//infoField := (decPath.InfoFields)[decPath.PathMeta.CurrINF]
+		infoField := (decPath.InfoFields)[decPath.BaseEmbedded.PathMeta.CurrINF]
+		if infoField.ConsDir {
+			// (lhalm) read PathMeta from embedded since composition is not supported
+			// hopField := decPath.HopFields[decPath.PathMeta.CurrHF]
+			hopField := (decPath.HopFields)[decPath.BaseEmbedded.PathMeta.CurrHF]
+			infoField.UpdateSegID(hopField.Mac)
+		}
+		// (lhalm) call IncPath on embedded since composition is not supported
+		// if err := decPath.IncPath(); err != nil {
+		if err := decPath.BaseEmbedded.IncPath(); err != nil {
+			// (lhalm) create local var since global is not supported
+			cannotRoute := serrors.New("cannot route, dropping pkt")
+			return nil, serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
+		}
+	}
+
+	s.scionL.DstIA = s.scionL.SrcIA
+	s.scionL.SrcIA = s.localIA
+	srcA, err := s.scionL.SrcAddr()
+	if err != nil {
+		// (lhalm) create local var since global is not supported
+		cannotRoute := serrors.New("cannot route, dropping pkt")
+		return nil, serrors.Wrap(cannotRoute, err, "details", "extracting src addr")
+	}
+	if err := s.scionL.SetDstAddr(srcA); err != nil {
+		// (lhalm) create local var since global is not supported
+		cannotRoute := serrors.New("cannot route, dropping pkt")
+		return nil, serrors.Wrap(cannotRoute, err, "details", "setting dest addr")
+	}
+	// (lhalm) net package not yet supported it seems
+	// if err := s.scionL.SetSrcAddr(&net.IPAddr{IP: s.internalIP}); err != nil {
+	// 	// (lhalm) create local var since global is not supported
+	// 	cannotRoute := serrors.New("cannot route, dropping pkt")
+	// 	return nil, serrors.Wrap(cannotRoute, err, "details", "setting src addr")
+	// }
+	s.scionL.NextHdr = common.L4SCMP
+
+	scmpH.SetNetworkLayerForChecksum(s.scionL)
+
+	if err := s.buffer.Clear(); err != nil {
+		return nil, err
+	}
+
+	sopts := gopacket.SerializeOptions{
+		ComputeChecksums: true,
+		FixLengths:       true,
+	}
+	scmpLayers := []gopacket.SerializableLayer{s.scionL ,scmpH, scmpP}
+	if cause != nil {
+		// add quote for errors.
+		// (lhalm) rename to PathVar
+		// hdrLen := slayers.CmnHdrLen + s.scionL.AddrHdrLen() + s.scionL.Path.Len()
+		hdrLen := slayers.CmnHdrLen + s.scionL.AddrHdrLen() + s.scionL.PathVar.Len()
+		switch scmpH.TypeCode.Type() {
+		case slayers.SCMPTypeExternalInterfaceDown:
+			hdrLen += 20
+		case slayers.SCMPTypeInternalConnectivityDown:
+			hdrLen += 28
+		default:
+			hdrLen += 8
+		}
+		maxQuoteLen := slayers.MaxSCMPPacketLen - hdrLen
+		if len(s.quote) > maxQuoteLen {
+			s.quote = (s.quote)[:maxQuoteLen]
+		}
+		// (lhalm) implementation proof for type alias []byte currently not possible
+		// scmpLayers = append(scmpLayers, gopacket.Payload(s.quote))
+	}
+	err = gopacket.SerializeLayers(s.buffer, sopts, scmpLayers...)
+	if err != nil {
+		// (lhalm) create local var since global is not supported
+		cannotRoute := serrors.New("cannot route, dropping pkt")
+		return nil, serrors.Wrap(cannotRoute, err, "details", "serializing SCMP message")
+	}
+	return s.buffer.Bytes(), scmpError{TypeCode: scmpH.TypeCode, Cause: cause}
 }
 
 /*func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,

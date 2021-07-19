@@ -19,3 +19,13 @@ type DecodingLayerParser struct {
 }
 
 func NewDecodingLayerParser(first LayerType, decoders ...DecodingLayer) *DecodingLayerParser
+
+//requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+//requires acc(decoded) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
+//ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+//ensures acc(decoded) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
+func (l *DecodingLayerParser) DecodeLayers(data []byte, decoded *[]LayerType) (err error)
+
+type UnsupportedLayerType LayerType
+
+func (e UnsupportedLayerType) Error() string

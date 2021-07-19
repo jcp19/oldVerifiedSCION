@@ -1,14 +1,20 @@
 package gopacket
 
+type DecodeFeedback interface {
+	SetTruncated()
+}
+
 type PacketBuilder interface {
+	// (lhalm) composition not supported, add method manually
 	// DecodeFeedback
-	// AddLayer(l Layer)
+	SetTruncated()
+	AddLayer(l Layer)
 	// SetLinkLayer(LinkLayer)
-	// SetNetworkLayer(NetworkLayer)
+	SetNetworkLayer(NetworkLayer)
 	// SetTransportLayer(TransportLayer)
 	// SetApplicationLayer(ApplicationLayer)
 	// SetErrorLayer(ErrorLayer)
-	// NextDecoder(next Decoder) error
+	NextDecoder(next Decoder) error
 	// DumpPacketData()
 	// DecodeOptions() *DecodeOptions
 }
@@ -20,3 +26,27 @@ type Decoder interface {
 // type DecodeFunc func([]byte, PacketBuilder) error
 
 // func (d DecodeFunc) Decode(data []byte, p PacketBuilder) error
+
+type DecodeFunc DecodeFuncInterface
+
+type DecodeFuncInterface interface {
+
+	requires forall i int :: i >= 0 && i < len(data) ==> acc(&data[i]) // add others
+	Decode(data []byte, p PacketBuilder) error
+	// Decode([]byte, PacketBuilder) error // dirty
+}
+
+(NilDecodeFeedback) implements DecodeFeedback {
+
+	(n NilDecodeFeedback) SetTruncated() {
+		n.SetTruncated()
+	}
+}
+
+// (lhalm) make global since the actual global variable is not supported
+type NilDecodeFeedback struct{}
+
+func (n NilDecodeFeedback) SetTruncated() {}
+
+// (lhalm) doesn't work
+// var NilDecodeFeedback DecodeFeedback = nilDecodeFeedback{}

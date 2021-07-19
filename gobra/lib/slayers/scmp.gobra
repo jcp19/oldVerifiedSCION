@@ -18,7 +18,7 @@ import (
 	// "encoding/binary"
 	// "fmt"
 
-	// "github.com/google/gopacket"
+	"dependencies/gopacket"
 	// "github.com/google/gopacket/layers"
 
 	"gobra/lib/common"
@@ -39,6 +39,18 @@ import (
 //  |         L4 Orig         |  /
 //  +-------------------------+
 const MaxSCMPPacketLen = 1232
+
+pred (s *SCMP) mem() { acc(s) }
+(*SCMP) implements gopacket.SerializableLayer {
+
+	(s *SCMP) GetLayerType() (lt gopacket.LayerType) {
+		lt = s.GetLayerType()
+	} 
+
+	(s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = s.SerializeTo(b, opts)
+	}
+}
 
 // SCMP is the SCMP header on top of SCION header.
 //
@@ -65,9 +77,10 @@ type SCMP struct {
 }
 
 // LayerType returns LayerTypeSCMP.
-// func (s *SCMP) LayerType() gopacket.LayerType {
+// (lhalm) Rename LayerType() to GetLayerType() to match the modified interface.
+func (s *SCMP) GetLayerType() gopacket.LayerType {
 // 	return LayerTypeSCMP
-// }
+}
 
 // CanDecode returns the set of layer types that this DecodingLayer can decode.
 // func (s *SCMP) CanDecode() gopacket.LayerClass {
@@ -96,7 +109,8 @@ type SCMP struct {
 
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-// func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
+// (lhalm) TODO
+func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 // 	bytes, err := b.PrependBytes(4)
 // 	if err != nil {
 // 		return err
@@ -118,7 +132,7 @@ type SCMP struct {
 // 	}
 // 	binary.BigEndian.PutUint16(bytes[2:], s.Checksum)
 // 	return nil
-// }
+}
 
 // DecodeFromBytes decodes the given bytes into this layer.
 // func (s *SCMP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
@@ -138,7 +152,8 @@ type SCMP struct {
 
 // SetNetworkLayerForChecksum tells this layer which network layer is wrapping it.
 // This is needed for computing the checksum when serializing,
-// func (s *SCMP) SetNetworkLayerForChecksum(l gopacket.NetworkLayer) error {
+// (lhalm) TODO
+func (s *SCMP) SetNetworkLayerForChecksum(l gopacket.NetworkLayer) error {
 // 	if l == nil {
 // 		return serrors.New("cannot use nil layer type for scmp checksum network layer")
 // 	}
@@ -148,7 +163,7 @@ type SCMP struct {
 // 	}
 // 	s.scn = l.(*SCION)
 // 	return nil
-// }
+}
 
 // func decodeSCMP(data []byte, pb gopacket.PacketBuilder) error {
 // 	scmp := &SCMP{}

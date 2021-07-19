@@ -119,6 +119,36 @@ type Path interface {
 	Len() int
 }
 
+pred (s *SCION) mem() { acc(s) }
+(*SCION) implements gopacket.SerializableLayer {
+
+	(s *SCION) GetLayerType() (lt gopacket.LayerType) {
+		lt = s.GetLayerType()
+	} 
+
+	(s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = s.SerializeTo(b, opts)
+	}
+}
+
+pred (s *SCION) mem() { acc(s) }
+(*SCION) implements gopacket.NetworkLayer {
+
+	(s *SCION) GetLayerType() (lt gopacket.LayerType) {
+		lt = s.GetLayerType()
+	} 
+
+	(s *SCION) LayerContents() (data []byte) {
+		data = s.LayerContents()
+	}
+
+	(s *SCION) LayerPayload() (data []byte) {
+		unfold s.mem()
+		data = s.LayerPayload()
+		fold s.mem()
+	}
+}
+
 // SCION is the header of a SCION packet.
 type SCION struct {
 	// layers.BaseLayer // (joao) No support for embedded fields
@@ -139,7 +169,7 @@ type SCION struct {
 	// SCION extension or a layer-4 protocol such as TCP or UDP. Values of this field respect and
 	// extend IANA’s assigned internet protocol numbers.
 
-	// NextHdr common.L4ProtocolType // (joao) ignored for now
+	NextHdr common.L4ProtocolType
 
 	// HdrLen is the length of the SCION header in multiples of 4 bytes. The SCION header length is
 	// computed as HdrLen * 4 bytes. The 8 bits of the HdrLen field limit the SCION header to a
@@ -182,11 +212,18 @@ type SCION struct {
 pred InvariantSCION(s SCION) {
 	validAddrLen(s.DstAddrLen) && validAddrLen(s.SrcAddrLen)
 }
+// (lhalm) include from composite layer because composition is not supported
+func (s *SCION) LayerContents() []byte {
+	return s.EmbeddedLayer.LayerContents()
+}
 
-// (joao) gopacket not supported for now
+// (lhalm) renamed to GetLayerType to avoid name confusion with type
 //func (s *SCION) LayerType() gopacket.LayerType {
 //	return LayerTypeSCION
 //}
+func (s *SCION) GetLayerType() gopacket.LayerType {
+	// return LayerTypeSCION
+}
 
 //func (s *SCION) CanDecode() gopacket.LayerClass {
 //	return LayerTypeSCION
@@ -198,7 +235,8 @@ pred InvariantSCION(s SCION) {
 
 // (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`
 // (joao) `layers.BaseLayer` is implemented in a third party package
-requires acc(s, _)
+requires acc(s, 1/2)
+ensures acc(s, 1/2)
 func (s *SCION) LayerPayload() []byte
 //{
 //	return s.Payload
@@ -210,7 +248,7 @@ func (s *SCION) LayerPayload() []byte
 //	return gopacket.Flow{}
 //}
 
-// TODO: Uncomment
+// (lhalm) TODO
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 //	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
 //	buf, err := b.PrependBytes(scnLen)
@@ -246,8 +284,8 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 // to the state defined by the passed-in bytes. Slices in the SCION layer reference the passed-in
 // data, so care should be taken to copy it first should later modification of data be required
 // before the SCION layer is discarded.
-// (joao) no support for gopacket
-//func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
+// (lhalm) TODO
+func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 //	// Decode common header.
 //	if len(data) < CmnHdrLen {
 //		df.SetTruncated()
@@ -324,22 +362,29 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 //	s.Payload = data[hdrBytes:]
 //
 //	return nil
-//}
+}
 
-// (joao) no support for gopacket
-//func decodeSCION(data []byte, pb gopacket.PacketBuilder) error {
-//	scn := &SCION{}
-//	err := scn.DecodeFromBytes(data, pb)
-//	if err != nil {
-//		return err
-//	}
-//	pb.AddLayer(scn)
-//	pb.SetNetworkLayer(scn)
-//	return pb.NextDecoder(scionNextLayerType(scn.NextHdr))
-//}
+const DecodeScionWrapper decodeScionWrapper = 0
 
-// (joao) no support for gopacket
-//func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
+type decodeScionWrapper int
+
+func (w decodeScionWrapper) Decode(data []byte, p gopacket.PacketBuilder) error {
+	return decodeSCION(data, p)
+}
+
+func decodeSCION(data []byte, pb gopacket.PacketBuilder) error {
+	// scn := &SCION{}
+	// err := scn.DecodeFromBytes(data, pb)
+	// if err != nil {
+	// 	return err
+	// }
+	// pb.AddLayer(scn)
+	// pb.SetNetworkLayer(scn)
+	// return pb.NextDecoder(scionNextLayerType(scn.NextHdr))
+}
+
+// (lhalm) TODO
+func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
 //	switch t {
 //	case common.L4UDP:
 //		return LayerTypeSCIONUDP
@@ -354,7 +399,7 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 //	default:
 //		return gopacket.LayerTypePayload
 //	}
-//}
+}
 
 // DstAddr parses the destination address into a net.Addr. The returned net.Addr references data
 // from the underlaying layer data. Changing the net.Addr object might lead to inconsistent layer

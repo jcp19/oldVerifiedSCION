@@ -10,3 +10,5 @@ type LayerTypeMetadata struct {
 }
 
 func RegisterLayerType(num int, meta LayerTypeMetadata) LayerType
+
+func (t LayerType) Decode(data []byte, c PacketBuilder) error

@@ -18,12 +18,20 @@ import (
 	"dependencies/gopacket"
 )
 
+// (decodeScionWrapper) implements gopacket.Decoder {
+
+// 	(r decodeScionWrapper) Decode(data []byte, c gopacket.PacketBuilder) (err error) {
+// 		err = r.Decode(data, c)
+// 	}
+// }
+
 var (
 	// LayerTypeSCION = gopacket.RegisterLayerType(
 	// 	1000,
 	// 	gopacket.LayerTypeMetadata{
 	// 		Name:    "SCION",
-	// 		DecoderField: gopacket.DecodeFunc(decodeSCION),
+	// 		//DecoderField: gopacket.DecodeFunc(decodeSCION),
+	// 		DecoderField: DecodeScionWrapper,
 	// 	},
 	// )
 	// LayerTypeSCIONUDP = gopacket.RegisterLayerType(
