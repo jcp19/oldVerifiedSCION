@@ -1,6 +1,8 @@
 package gopacket
 
 type DecodingLayer interface {
+	pred Mem()
+
 	// DecodeFromBytes(data []byte, df DecodeFeedback) error
 	// CanDecode() LayerClass
 	// NextLayerType() LayerType
@@ -18,12 +20,15 @@ type DecodingLayerParser struct {
 	// Truncated bool
 }
 
-func NewDecodingLayerParser(first LayerType, decoders ...DecodingLayer) *DecodingLayerParser
+requires forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i]) && decoders[i].Mem()
+ensures forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i]) && decoders[i].Mem()
+ensures acc(d)
+func NewDecodingLayerParser(first LayerType, decoders ...DecodingLayer) (d *DecodingLayerParser)
 
-//requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-//requires acc(decoded) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
-//ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-//ensures acc(decoded) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+requires acc(decoded) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures acc(decoded) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
 func (l *DecodingLayerParser) DecodeLayers(data []byte, decoded *[]LayerType) (err error)
 
 type UnsupportedLayerType LayerType

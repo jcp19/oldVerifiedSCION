@@ -1,26 +1,51 @@
 package gopacket
 
 type DecodeFeedback interface {
+	pred Mem()
+
+	requires Mem()
+	ensures Mem()
 	SetTruncated()
 }
 
 type PacketBuilder interface {
+	pred Mem()
+
 	// (lhalm) composition not supported, add method manually
 	// DecodeFeedback
+
+	requires Mem()
+	ensures Mem()
 	SetTruncated()
+
+	requires Mem()
+	ensures Mem()
 	AddLayer(l Layer)
+
 	// SetLinkLayer(LinkLayer)
-	SetNetworkLayer(NetworkLayer)
+
+	requires Mem() && l.Mem()
+	ensures Mem() && l.Mem()
+	SetNetworkLayer(l NetworkLayer)
+
 	// SetTransportLayer(TransportLayer)
 	// SetApplicationLayer(ApplicationLayer)
 	// SetErrorLayer(ErrorLayer)
+
+	requires Mem() && next.Mem()
+	ensures Mem() && next.Mem()
 	NextDecoder(next Decoder) error
+
 	// DumpPacketData()
 	// DecodeOptions() *DecodeOptions
 }
 
 type Decoder interface {
-	Decode([]byte, PacketBuilder) error
+	pred Mem()
+
+	requires Mem() && forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+	ensures Mem() && forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+	Decode(data []byte, pb PacketBuilder) error
 }
 
 // type DecodeFunc func([]byte, PacketBuilder) error
@@ -31,9 +56,9 @@ type DecodeFunc DecodeFuncInterface
 
 type DecodeFuncInterface interface {
 
-	requires forall i int :: i >= 0 && i < len(data) ==> acc(&data[i]) // add others
+	requires forall i int :: i >= 0 && i < len(data) ==> acc(&data[i]) && p.Mem()
+	ensures forall i int :: i >= 0 && i < len(data) ==> acc(&data[i]) && p.Mem()
 	Decode(data []byte, p PacketBuilder) error
-	// Decode([]byte, PacketBuilder) error // dirty
 }
 
 (NilDecodeFeedback) implements DecodeFeedback {
@@ -43,10 +68,12 @@ type DecodeFuncInterface interface {
 	}
 }
 
+pred (n NilDecodeFeedback) Mem() {true}
+
 // (lhalm) make global since the actual global variable is not supported
 type NilDecodeFeedback struct{}
 
-func (n NilDecodeFeedback) SetTruncated() {}
+func (n NilDecodeFeedback) SetTruncated()
 
 // (lhalm) doesn't work
 // var NilDecodeFeedback DecodeFeedback = nilDecodeFeedback{}

@@ -9,6 +9,10 @@ type BaseLayer struct {
 	Payload []byte
 }
 
+requires acc(&b.Contents)
+ensures acc(&b.Contents)
 func (b *BaseLayer) LayerContents() []byte
 
+requires acc(&b.Payload)
+ensures acc(&b.Payload)
 func (b *BaseLayer) LayerPayload() []byte

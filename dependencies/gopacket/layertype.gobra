@@ -4,11 +4,11 @@ type LayerType int64
 
 type LayerTypeMetadata struct {
 	Name string
-	// (lhalm) Rename to DecoderField to avoid confusion with type
-	// Decoder Decoder
-	DecoderField Decoder
+	Decoder Decoder
 }
 
 func RegisterLayerType(num int, meta LayerTypeMetadata) LayerType
 
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i]) && c.Mem()
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i]) && c.Mem()
 func (t LayerType) Decode(data []byte, c PacketBuilder) error

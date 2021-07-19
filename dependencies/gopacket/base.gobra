@@ -1,29 +1,35 @@
 package gopacket
 
 type Layer interface {
-	// (lhalm) rename to GetLayerType to avoid name confision
-	//LayerType() LayerType
-	GetLayerType() LayerType
+	pred Mem()
+
+	requires Mem()
+	ensures Mem()
+	LayerType() LayerType
+
+	requires Mem()
+	ensures Mem()
 	LayerContents() []byte
+
+	requires Mem()
+	ensures Mem()
 	LayerPayload() []byte
 }
 
 type NetworkLayer interface {
-	pred mem()
+	pred Mem()
 	// (lhalm) composition not supported, add methods manually
 	// Layer	
-	// (lhalm) rename to GetLayerType to avoid name confision
-	//LayerType() LayerType
-	requires mem()
-	ensures mem()
-	GetLayerType() LayerType
+	requires Mem()
+	ensures Mem()
+	LayerType() LayerType
 
-	requires mem()
-	ensures mem()
+	requires Mem()
+	ensures Mem()
 	LayerContents() []byte
 
-	requires mem()
-	ensures mem()
+	requires Mem()
+	ensures Mem()
 	LayerPayload() []byte
 	// (lhalm) end of parent methods
 	// NetworkFlow() Flow
@@ -43,8 +49,7 @@ type NetworkLayer interface {
 
 type Payload []byte
 
-// (lhalm) Rename LayerType() to GetLayerType() to match modified interface
-func (p Payload) GetLayerType() LayerType
+func (p Payload) LayerType() LayerType
 
 func (p Payload) LayerContents() []byte
 
