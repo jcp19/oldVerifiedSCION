@@ -107,45 +107,72 @@ const (
 
 // Path is the path contained in the SCION header.
 type Path interface {
+	pred Mem()
 	// SerializeTo serializes the path into the provided buffer.
+	requires Mem()
+	requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	ensures Mem()
+	ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 	SerializeTo(b []byte) error
+
 	// DecodesFromBytes decodes the path from the provided buffer.
+	requires Mem()
+	requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	ensures Mem()
+	ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 	DecodeFromBytes(b []byte) error
+	
 	// Reverse reverses a path such that it can be used in the reversed direction.
 	//
 	// XXX(shitz): This method should possibly be moved to a higher-level path manipulation package.
+	requires Mem()
+	ensures Mem()
 	Reverse() error
+
 	// Len returns the length of a path in bytes.
+	requires Mem()
+	ensures Mem()
 	Len() int
 }
 
-pred (s *SCION) mem() { acc(s) }
+pred (s *SCION) Mem() {
+	acc(&s.PathVar) && 
+	acc(s)
+
+}
 (*SCION) implements gopacket.SerializableLayer {
 
-	(s *SCION) GetLayerType() (lt gopacket.LayerType) {
-		lt = s.GetLayerType()
+	(s *SCION) LayerType() (lt gopacket.LayerType) {
+		lt = s.LayerType()
 	} 
 
 	(s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		unfold s.Mem()
 		err = s.SerializeTo(b, opts)
+		fold s.Mem()
 	}
 }
 
-pred (s *SCION) mem() { acc(s) }
+pred (s *SCION) Mem() {
+	acc(s) &&
+	acc(&s.EmbeddedLayer)
+}
 (*SCION) implements gopacket.NetworkLayer {
 
-	(s *SCION) GetLayerType() (lt gopacket.LayerType) {
-		lt = s.GetLayerType()
+	(s *SCION) LayerType() (lt gopacket.LayerType) {
+		lt = s.LayerType()
 	} 
 
 	(s *SCION) LayerContents() (data []byte) {
+		unfold s.Mem()
 		data = s.LayerContents()
+		fold s.Mem()
 	}
 
 	(s *SCION) LayerPayload() (data []byte) {
-		unfold s.mem()
+		unfold s.Mem()
 		data = s.LayerPayload()
-		fold s.mem()
+		fold s.Mem()
 	}
 }
 
@@ -213,15 +240,13 @@ pred InvariantSCION(s SCION) {
 	validAddrLen(s.DstAddrLen) && validAddrLen(s.SrcAddrLen)
 }
 // (lhalm) include from composite layer because composition is not supported
+requires acc(&s.EmbeddedLayer.Contents)
+ensures acc(&s.EmbeddedLayer.Contents)
 func (s *SCION) LayerContents() []byte {
 	return s.EmbeddedLayer.LayerContents()
 }
 
-// (lhalm) renamed to GetLayerType to avoid name confusion with type
-//func (s *SCION) LayerType() gopacket.LayerType {
-//	return LayerTypeSCION
-//}
-func (s *SCION) GetLayerType() gopacket.LayerType {
+func (s *SCION) LayerType() gopacket.LayerType {
 	// return LayerTypeSCION
 }
 
@@ -248,7 +273,8 @@ func (s *SCION) LayerPayload() []byte
 //	return gopacket.Flow{}
 //}
 
-// (lhalm) TODO
+requires b.Mem() && acc(&s.PathVar) && acc(s)
+ensures b.Mem() && acc(&s.PathVar) && acc(s)
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 //	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
 //	buf, err := b.PrependBytes(scnLen)
@@ -284,7 +310,12 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 // to the state defined by the passed-in bytes. Slices in the SCION layer reference the passed-in
 // data, so care should be taken to copy it first should later modification of data be required
 // before the SCION layer is discarded.
-// (lhalm) TODO
+requires acc(s)
+requires df.Mem()
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures acc(s)
+ensures df.Mem()
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 //	// Decode common header.
 //	if len(data) < CmnHdrLen {
@@ -372,6 +403,10 @@ func (w decodeScionWrapper) Decode(data []byte, p gopacket.PacketBuilder) error 
 	return decodeSCION(data, p)
 }
 
+requires pb.Mem()
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures pb.Mem()
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func decodeSCION(data []byte, pb gopacket.PacketBuilder) error {
 	// scn := &SCION{}
 	// err := scn.DecodeFromBytes(data, pb)
@@ -383,7 +418,6 @@ func decodeSCION(data []byte, pb gopacket.PacketBuilder) error {
 	// return pb.NextDecoder(scionNextLayerType(scn.NextHdr))
 }
 
-// (lhalm) TODO
 func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
 //	switch t {
 //	case common.L4UDP:

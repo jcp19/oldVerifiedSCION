@@ -255,15 +255,15 @@ const scmpRawInterfaceLen = 8
 // 	return pb.NextDecoder(s.NextLayerType())
 // }
 
-pred (s *SCMPParameterProblem) mem() { acc(s) }
+pred (s *SCMPParameterProblem) Mem() { acc(s) }
 (*SCMPParameterProblem) implements gopacket.SerializableLayer {
 
 	(s *SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
 		err = s.SerializeTo(b, opts)
 	}
 
-	(s *SCMPParameterProblem) GetLayerType() (lt gopacket.LayerType) {
-		lt = s.GetLayerType()
+	(s *SCMPParameterProblem) LayerType() (lt gopacket.LayerType) {
+		lt = s.LayerType()
 	}
 }
 
@@ -281,9 +281,7 @@ type SCMPParameterProblem struct {
 }
 
 // LayerType returns LayerTypeSCMPParameterProblem.
-// (lhalm) renamed to GetLayerType to match renamed interface
-//func (*SCMPParameterProblem) LayerType() gopacket.LayerType {
-func (*SCMPParameterProblem) GetLayerType() gopacket.LayerType {
+func (*SCMPParameterProblem) LayerType() gopacket.LayerType {
 	//return LayerTypeSCMPParameterProblem
 }
 

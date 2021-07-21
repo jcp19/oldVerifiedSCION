@@ -18,12 +18,18 @@ import (
 	// "encoding/binary"
 	// "fmt"
 
-	// "github.com/google/gopacket"
+	"dependencies/gopacket"
 	"dependencies/gopacket/layers"
 
 	// "github.com/scionproto/scion/go/lib/common"
 	// "github.com/scionproto/scion/go/lib/serrors"
 )
+
+pred (e UDP) Mem() {
+	true
+}
+(UDP) implements gopacket.DecodingLayer {
+}
 
 // UDP is the SCION/UDP header. It reuses layers.UDP as much as possible and only customizes
 // checksum calculation.

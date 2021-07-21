@@ -17,7 +17,7 @@ package slayers
 import (
 	// "fmt"
 
-	// "github.com/google/gopacket"
+	"dependencies/gopacket"
 	// "github.com/google/gopacket/layers"
 
 	// "github.com/scionproto/scion/go/lib/common"
@@ -207,7 +207,13 @@ import (
 // // HopByHopOption is a TLV option present in a SCION hop-by-hop extension.
 // type HopByHopOption tlvOption
 
-// // HopByHopExtn is the SCION hop-by-hop options extension.
+pred (e HopByHopExtn) Mem() {
+	true
+}
+(HopByHopExtn) implements gopacket.DecodingLayer {
+}
+
+// HopByHopExtn is the SCION hop-by-hop options extension.
 type HopByHopExtn struct {
 	// extnBase
 	// Options []*HopByHopOption
@@ -273,7 +279,13 @@ type HopByHopExtn struct {
 // // EndToEndOption is a TLV option present in a SCION end-to-end extension.
 // type EndToEndOption tlvOption
 
-// // EndToEndExtn is the SCION end-to-end options extension.
+pred (e EndToEndExtn) Mem() {
+	true
+}
+(EndToEndExtn) implements gopacket.DecodingLayer {
+}
+
+// EndToEndExtn is the SCION end-to-end options extension.
 type EndToEndExtn struct {
 // 	extnBase
 // 	Options []*EndToEndOption

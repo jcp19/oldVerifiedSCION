@@ -40,15 +40,20 @@ import (
 //  +-------------------------+
 const MaxSCMPPacketLen = 1232
 
-pred (s *SCMP) mem() { acc(s) }
+pred (s *SCMP) Mem() {
+	acc(s) &&
+	acc(&s.scn)
+}
 (*SCMP) implements gopacket.SerializableLayer {
 
-	(s *SCMP) GetLayerType() (lt gopacket.LayerType) {
-		lt = s.GetLayerType()
+	(s *SCMP) LayerType() (lt gopacket.LayerType) {
+		lt = s.LayerType()
 	} 
 
 	(s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		unfold s.Mem()
 		err = s.SerializeTo(b, opts)
+		fold s.Mem()
 	}
 }
 
@@ -77,8 +82,7 @@ type SCMP struct {
 }
 
 // LayerType returns LayerTypeSCMP.
-// (lhalm) Rename LayerType() to GetLayerType() to match the modified interface.
-func (s *SCMP) GetLayerType() gopacket.LayerType {
+func (s *SCMP) LayerType() gopacket.LayerType {
 // 	return LayerTypeSCMP
 }
 
@@ -109,7 +113,8 @@ func (s *SCMP) GetLayerType() gopacket.LayerType {
 
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-// (lhalm) TODO
+requires acc(&s.scn) && b.Mem()
+ensures acc(&s.scn) && b.Mem()
 func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 // 	bytes, err := b.PrependBytes(4)
 // 	if err != nil {
