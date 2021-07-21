@@ -17,6 +17,7 @@ package scion
 import (
 // 	"github.com/scionproto/scion/go/lib/serrors"
 	"gobra/lib/slayers/path"
+	"gobra/lib/slayers" // (lhalm) required for interface implementation proof
 )
 
 // const (
@@ -25,6 +26,42 @@ import (
 // 	// MaxHops is the maximum number of hop fields in a SCION path.
 // 	MaxHops = 64
 // )
+
+pred (d *Decoded) Mem() {
+	acc(d) &&
+	acc(&d.BaseEmbedded) &&
+	acc(&d.InfoFields) && 
+	acc(&d.HopFields) &&
+	//acc(&d.BaseEmbedded.PathMeta) && 
+	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i])) &&
+	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc(&(d.InfoFields)[i]))
+}
+(*Decoded) implements slayers.Path {
+
+	(d *Decoded) SerializeTo(b []byte) (err error) {
+		unfold d.Mem()
+		err = d.SerializeTo(b)
+		fold d.Mem()
+	}
+
+	(d *Decoded) DecodeFromBytes(b []byte) (err error) {
+		unfold d.Mem()
+		err = d.DecodeFromBytes(b)
+		fold d.Mem()
+	}
+	
+	(d *Decoded) Reverse() (err error) {
+		unfold d.Mem()
+		err = d.Reverse()
+		fold d.Mem()
+	}
+	
+	(d *Decoded) Len() (l int) {
+		unfold d.Mem()
+		l = d.Len()
+		fold d.Mem()
+	}
+}
 
 // Decoded implements the SCION (data-plane) path type. Decoded is intended to be used in
 // non-performance critical code paths, where the convenience of having a fully parsed path trumps
@@ -37,12 +74,20 @@ type Decoded struct {
 	HopFields []*path.HopField
 }
 
-// (lhalm) function added as a workaround because interface composition does not seem to be supported yet
+// (lhalm) function added as a workaround because interface composition does not seem to be supported ye
+requires acc(&s.BaseEmbedded)
+ensures acc(&s.BaseEmbedded)
 func (s *Decoded) Len() int {
 	return s.BaseEmbedded.Len()
 }
 
-// // DecodeFromBytes fully decodes the SCION path into the corresponding fields.
+// DecodeFromBytes fully decodes the SCION path into the corresponding fields.
+requires acc(&s.InfoFields)
+requires acc(&s.HopFields)
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures acc(&s.InfoFields)
+ensures acc(&s.HopFields)
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (s *Decoded) DecodeFromBytes(data []byte) error {
 // 	if err := s.Base.DecodeFromBytes(data); err != nil {
 // 		return err
@@ -73,8 +118,18 @@ func (s *Decoded) DecodeFromBytes(data []byte) error {
 // 	return nil
 }
 
-// // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
-// // otherwise an error is returned.
+// SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
+// otherwise an error is returned.
+requires acc(&s.BaseEmbedded.PathMeta)
+requires acc(&s.InfoFields) && acc(&s.HopFields)
+requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+requires forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
+requires forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i])
+ensures acc(&s.BaseEmbedded.PathMeta)
+ensures acc(&s.InfoFields) && acc(&s.HopFields)
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
+ensures forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i])
 func (s *Decoded) SerializeTo(b []byte) error {
 // 	if len(b) < s.Len() {
 // 		return serrors.New("buffer too small to serialize path.", "expected", s.Len(),
@@ -99,7 +154,18 @@ func (s *Decoded) SerializeTo(b []byte) error {
 // 	return nil
 }
 
-// // Reverse reverses a SCION path.
+// Reverse reverses a SCION path.
+requires acc(s)
+requires acc(&s.BaseEmbedded.PathMeta)
+requires acc(&s.InfoFields) && acc(&s.HopFields)
+requires forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
+requires forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i])
+// requires forall i int :: 0 <= i && i < len(s.BaseEmbedded.PathMeta.SegLen) ==> acc(&(s.BaseEmbedded.PathMeta.SegLen)[i])
+ensures acc(s)
+ensures acc(&s.BaseEmbedded.PathMeta)
+ensures acc(&s.InfoFields) && acc(&s.HopFields)
+ensures forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
+ensures forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i])
 func (s *Decoded) Reverse() error {
 // 	if s.NumINF == 0 {
 // 		// Empty path doesn't need reversal.

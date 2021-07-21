@@ -17,7 +17,40 @@ package scion
 import (
 	"gobra/lib/serrors"
 	"gobra/lib/slayers/path"
+	"gobra/lib/slayers" // (lhalm) required for interface implementation proof
 )
+
+pred (r *Raw) Mem() {
+	acc(&r.Raw) &&
+	acc(&r.BaseEmbedded) && 
+	forall i int :: 0 <= i && i < len(r.Raw) ==> acc(&(r.Raw)[i])
+}
+(*Raw) implements slayers.Path {
+
+	(r *Raw) SerializeTo(b []byte) (err error) {
+		unfold r.Mem()
+		err = r.SerializeTo(b)
+		fold r.Mem()
+	}
+
+	(r *Raw) DecodeFromBytes(b []byte) (err error) {
+		unfold r.Mem()
+		err = r.DecodeFromBytes(b)
+		fold r.Mem()
+	}
+	
+	(r *Raw) Reverse() (err error) {
+		unfold r.Mem()
+		err = r.Reverse()
+		fold r.Mem()
+	}
+	
+	(r *Raw) Len() (l int) {
+		unfold r.Mem()
+		l = r.Len()
+		fold r.Mem()
+	}
+}
 
 // Raw is a raw representation of the SCION (data-plane) path type. It is designed to parse as
 // little as possible and should be used if performance matters.
@@ -28,12 +61,22 @@ type Raw struct {
 }
 
 // (lhalm) function added as a workaround because interface composition does not seem to be supported yet
+requires acc(&s.BaseEmbedded)
+ensures acc(&s.BaseEmbedded)
 func (s *Raw) Len() int {
 	return s.BaseEmbedded.Len()
 }
 
 // DecodeFromBytes only decodes the PathMetaHeader. Otherwise the nothing is decoded and simply kept
 // as raw bytes.
+requires acc(&s.Raw)
+requires acc(&s.BaseEmbedded)
+requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures acc(&s.Raw)
+ensures acc(&s.BaseEmbedded)
+ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (s *Raw) DecodeFromBytes(data []byte) error {
 // 	if err := s.Base.DecodeFromBytes(data); err != nil {
 // 		return err
@@ -48,6 +91,10 @@ func (s *Raw) DecodeFromBytes(data []byte) error {
 
 // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
 // otherwise an error is returned.
+requires acc(&s.BaseEmbedded.PathMeta)
+requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures acc(&s.BaseEmbedded.PathMeta)
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func (s *Raw) SerializeTo(b []byte) error {
 // 	if s.Raw == nil {
 // 		return serrors.New("raw is nil")
@@ -65,6 +112,10 @@ func (s *Raw) SerializeTo(b []byte) error {
 }
 
 // Reverse reverses the path such that it can be used in the reverse direction.
+requires acc(&s.Raw)
+requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+ensures acc(&s.Raw)
+ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
 func (s *Raw) Reverse() error {
 // 	// XXX(shitz): The current implementation is not the most performant, since it parses the entire
 // 	// path first. If this becomes a performance bottleneck, the implementation should be changed to
@@ -84,6 +135,10 @@ func (s *Raw) Reverse() error {
 }
 
 // ToDecoded transforms a scion.Raw to a scion.Decoded.
+requires acc(&s.Raw)
+requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+ensures acc(&s.Raw)
+ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
 ensures acc(&decoded.InfoFields)
 ensures forall i int :: 0 <= i && i < len(decoded.InfoFields) ==> acc(&(decoded.InfoFields)[i])
 ensures acc(&decoded.HopFields)
