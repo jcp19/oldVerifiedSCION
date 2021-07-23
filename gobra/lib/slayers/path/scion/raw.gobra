@@ -139,13 +139,13 @@ requires acc(&s.Raw)
 requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
 ensures acc(&s.Raw)
 ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
-ensures acc(&decoded.InfoFields)
-ensures forall i int :: 0 <= i && i < len(decoded.InfoFields) ==> acc(&(decoded.InfoFields)[i])
-ensures acc(&decoded.HopFields)
-ensures forall i int :: 0 <= i && i < len(decoded.HopFields) ==> acc(&(decoded.HopFields)[i])
-ensures acc(&decoded.BaseEmbedded)
-ensures acc(&decoded.BaseEmbedded.PathMeta)
-func (s *Raw) ToDecoded() (decoded *Decoded, error) //{
+ensures err == nil ==> acc(&decoded.InfoFields)
+ensures err == nil ==> forall i int :: 0 <= i && i < len(decoded.InfoFields) ==> acc(&(decoded.InfoFields)[i])
+ensures err == nil ==> acc(&decoded.HopFields)
+ensures err == nil ==> forall i int :: 0 <= i && i < len(decoded.HopFields) ==> acc(&(decoded.HopFields)[i])
+ensures err == nil ==> acc(&decoded.BaseEmbedded)
+ensures err == nil ==> acc(&decoded.BaseEmbedded.PathMeta)
+func (s *Raw) ToDecoded() (decoded *Decoded, err error) //{
 // 	// Serialize PathMeta to ensure potential changes are reflected Raw.
 // 	if err := s.PathMeta.SerializeTo((s.Raw)[:MetaLen]); err != nil {
 // 		return nil, err
