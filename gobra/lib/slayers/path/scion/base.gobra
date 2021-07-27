@@ -47,7 +47,8 @@ pred BaseInvariant(b *Base) {
 requires p > 0
 requires acc(s)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-ensures acc(s)
+ensures res != nil ==> acc(s)
+ensures res == nil ==> BaseInvariant(s)
 ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
 func (s *Base) DecodeFromBytes(data []byte, ghost p perm) (res error) {
 	// PathMeta takes care of bounds check.
@@ -60,6 +61,7 @@ func (s *Base) DecodeFromBytes(data []byte, ghost p perm) (res error) {
 
 	invariant -1 <= i && i <= 2
 	invariant acc(s)
+	invariant s.NumHops >= 0 && s.NumINF >= 0 && s.NumINF <= 3
 	for i := 2; i >= 0; i-- {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 		if (s.PathMeta.SegLen)[i] == 0 && s.NumINF > 0 {
@@ -73,8 +75,11 @@ func (s *Base) DecodeFromBytes(data []byte, ghost p perm) (res error) {
 			s.NumINF = i + 1
 		}
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
+// (joao) the conversion below should always yield a non-negative value, but Gobra cannot prove it
+		assume int((s.PathMeta.SegLen)[i]) >= 0
 		s.NumHops += int((s.PathMeta.SegLen)[i])
 	}
+	fold BaseInvariant(s)
 	return nil
 }
 
@@ -145,9 +150,9 @@ func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
 }
 
 // Len returns the length of the path in bytes.
-requires acc(s, _)
+requires acc(BaseInvariant(s), _)
 pure func (s *Base) Len() int {
-	return MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
+	return unfolding acc(BaseInvariant(s), _) in MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
 }
 
 // MetaHdr is the PathMetaHdr of a SCION (data-plane) path type.
