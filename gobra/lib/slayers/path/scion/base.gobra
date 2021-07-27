@@ -39,33 +39,34 @@ type Base struct {
 }
 
 pred BaseInvariant(b *Base) {
-    acc(b) &&
-    b.NumINF >= 0 && b.NumINF <= 3 && // there are at most 3 InfoFields, one per segment
-    b.NumHops >= 0 
+	acc(b) &&
+	b.NumINF >= 0 && b.NumINF <= 3 && // there are at most 3 InfoFields, one per segment
+	b.NumHops >= 0 
 }
 
+requires p > 0
 requires acc(s)
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
 ensures acc(s)
-ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-func (s *Base) DecodeFromBytes(data []byte) error {
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
+func (s *Base) DecodeFromBytes(data []byte, ghost p perm) (res error) {
 	// PathMeta takes care of bounds check.
-	err := s.PathMeta.DecodeFromBytes(data)
+	err := s.PathMeta.DecodeFromBytes(data, p/2)
 	if err != nil {
 		return err
 	}
 	s.NumINF = 0
 	s.NumHops = 0
 
-    invariant -1 <= i && i <= 2
-    invariant acc(s)
+	invariant -1 <= i && i <= 2
+	invariant acc(s)
 	for i := 2; i >= 0; i-- {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 		if (s.PathMeta.SegLen)[i] == 0 && s.NumINF > 0 {
 // (joao) introduced dummy return error becase fmt is not supported
 //			return serrors.New(
 //				fmt.Sprintf("Meta.SegLen[%d] == 0, but Meta.SegLen[%d] > 0", i, s.NumINF-1))
-            return serrors.New("")
+			return serrors.New("")
 		}
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 		if (s.PathMeta.SegLen)[i] > 0 && s.NumINF == 0 {
@@ -109,8 +110,8 @@ requires acc(BaseInvariant(s), p)
 ensures acc(BaseInvariant(s), p)
 func (s *Base) IsXover(ghost p perm) bool {
 // (joao) tmp was introduced by me to simplify the unfoldings of BaseInvariant(s)
-    tmp := unfolding acc(BaseInvariant(s), p) in s.PathMeta.CurrINF
-    return tmp != s.infIndexForHF(tmp+1, p)
+	tmp := unfolding acc(BaseInvariant(s), p) in s.PathMeta.CurrINF
+	return tmp != s.infIndexForHF(tmp+1, p)
 }
 
 requires p > 0
@@ -121,15 +122,15 @@ func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
 
 	unfold acc(BaseInvariant(s), p)
 
-    invariant acc(s, p)
-    invariant s.NumINF >= 0 && s.NumINF <= 3
-    invariant s.NumHops >= 0 
-    invariant 0 <= i && i <= 3
+	invariant acc(s, p)
+	invariant s.NumINF >= 0 && s.NumINF <= 3
+	invariant s.NumHops >= 0 
+	invariant 0 <= i && i <= 3
 	for i := 0; i < s.NumINF; i++ {
 		if hf >= left {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 			if hf < left+(s.PathMeta.SegLen)[i] {
-                fold acc(BaseInvariant(s), p)
+				fold acc(BaseInvariant(s), p)
 				return uint8(i)
 			}
 		}
@@ -138,8 +139,8 @@ func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
 	}
 	// at the end we just return the last index.
 // (joao) the RHS of the following declaration used to be in the return statement
-    ret := uint8(s.NumINF - 1)
-    fold acc(BaseInvariant(s), p)
+	ret := uint8(s.NumINF - 1)
+	fold acc(BaseInvariant(s), p)
 	return ret
 }
 
@@ -158,11 +159,12 @@ type MetaHdr struct {
 
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
 // scion.MetaLen
+requires p > 0
 requires acc(m)
-requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i])
+requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
 ensures acc(m)
-ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i])
-func (m *MetaHdr) DecodeFromBytes(raw []byte) error {
+ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
+func (m *MetaHdr) DecodeFromBytes(raw []byte, ghost p perm) error {
 	if len(raw) < MetaLen {
 		return serrors.New("MetaHdr raw too short", "expected", MetaLen, "actual", len(raw))
 	}
