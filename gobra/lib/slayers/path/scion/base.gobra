@@ -151,9 +151,13 @@ func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
 
 // Len returns the length of the path in bytes.
 requires acc(BaseInvariant(s), _)
-pure func (s *Base) Len() int {
-	return unfolding acc(BaseInvariant(s), _) in MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
-}
+// (joao) Gobra cannot prove that int(s.NumINF) and int(s.NumHops) are positive, thus the body is omitted to ensure
+// this property
+ensures res >= MetaLen
+ensures res == unfolding acc(BaseInvariant(s), _) in MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
+pure func (s *Base) Len() (res int) // {
+//	return unfolding acc(BaseInvariant(s), _) in MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
+// }
 
 // MetaHdr is the PathMetaHdr of a SCION (data-plane) path type.
 type MetaHdr struct {
@@ -188,10 +192,12 @@ func (m *MetaHdr) DecodeFromBytes(raw []byte, ghost p perm) error {
 // scion.MetaLen
 requires p > 0
 requires acc(m, p)
-requires forall i int :: 0 <= i && i < MetaLen ==> acc(&b[i])
+requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures acc(m, p)
-ensures forall i int :: 0 <= i && i < MetaLen ==> acc(&b[i])
-func (m *MetaHdr) SerializeTo(b []byte, ghost p perm) error {
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures len(b) >= MetaLen ==> res == nil
+ensures len(b) < MetaLen ==> res != nil
+func (m *MetaHdr) SerializeTo(b []byte, ghost p perm) (res error) {
 	if len(b) < MetaLen {
 		return serrors.New("buffer for MetaHdr too short", "expected", MetaLen, "actual", len(b))
 	}

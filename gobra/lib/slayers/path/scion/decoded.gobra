@@ -28,6 +28,15 @@ const (
 	MaxHops = 64
 )
 
+pred DecodedInvariant(d* Decoded) {
+	acc(d) &&
+	BaseInvariant(&d.Base) &&
+	(unfolding BaseInvariant(&d.Base) in (d.NumINF <= MaxINFs && len(d.InfoFields) == d.NumINF)) &&
+	(unfolding BaseInvariant(&d.Base) in (d.NumHops <= MaxHops && len(d.HopFields) == d.NumHops)) &&
+	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc(&(d.InfoFields)[i])) &&
+	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i]))
+}
+
 // Decoded implements the SCION (data-plane) path type. Decoded is intended to be used in
 // non-performance critical code paths, where the convenience of having a fully parsed path trumps
 // the loss of performance.
@@ -40,8 +49,16 @@ type Decoded struct {
 }
 
 // DecodeFromBytes fully decodes the SCION path into the corresponding fields.
-//func (s *Decoded) DecodeFromBytes(data []byte) error {
-//	if err := s.Base.DecodeFromBytes(data); err != nil {
+//requires p > 0
+//requires DecodedInvariant(s)
+//requires unfolding DecodedInvariant(s) in unfolding BaseInvariant(&s.Base) in MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data) && 6 + path.MacLen <= len(data)
+//requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
+//// ensures DecodedInvariant(s)
+//ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
+//func (s *Decoded) DecodeFromBytes(data []byte, ghost p perm) error {
+//	unfold DecodedInvariant(s)
+//	unfold BaseInvariant(&s.Base)
+//	if err := s.Base.DecodeFromBytes(data, p/2); err != nil {
 //		return err
 //	}
 //	if minLen := s.Len(); len(data) < minLen {
@@ -50,29 +67,56 @@ type Decoded struct {
 //
 //	offset := MetaLen
 //	s.InfoFields = make([]*path.InfoField, s.NumINF)
+//
+//	invariant acc(s, 1/2)
+//	invariant len(s.InfoFields) == s.NumINF
+//	invariant 0 <= i && i <= int(s.NumINF)
+//	// invariant MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data)
+//	invariant MetaLen + int(s.NumINF) * path.InfoLen <= len(data)
+//	invariant offset == MetaLen + i * path.InfoLen
+//	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
+//	invariant forall j int :: 0 <= j && j < len(s.InfoFields) ==> acc(&(s.InfoFields)[j])
 //	for i := 0; i < int(s.NumINF); i++ {
 //		info := &path.InfoField{}
-//		if err := info.DecodeFromBytes(data[offset : offset+path.InfoLen]); err != nil {
+//		assert forall j int :: 0 <= j && j < path.InfoLen ==> &data[offset : offset+path.InfoLen][j] == &data[offset + j]
+//		if err := info.DecodeFromBytes(data[offset : offset+path.InfoLen], p/2); err != nil {
 //			return err
 //		}
-//		s.InfoFields[i] = info
+//		// (joao) add parentheses surrounding s.InfoFields
+//		(s.InfoFields)[i] = info
 //		offset += path.InfoLen
 //	}
 //	s.HopFields = make([]*path.HopField, s.NumHops)
+// (joao) current progress until here
+//	invariant acc(s, 1/2)
+//	invariant 0 <= i && i <= int(s.NumHops)
+//	invariant len(s.HopFields) == s.NumHops
+//	invariant 6 + path.MacLen <= len(data)
+//	invariant MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data)
+//	invariant offset == MetaLen + int(s.NumINF) * path.InfoLen + i * path.HopLen
+//	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
+//	invariant forall j int :: 0 <= j && j < len(s.HopFields) ==> acc(&(s.HopFields)[j])
 //	for i := 0; i < int(s.NumHops); i++ {
 //		hop := &path.HopField{}
-//		if err := hop.DecodeFromBytes(data[offset : offset+path.HopLen]); err != nil {
+//		assert forall j int :: 0 <= j && j < int(path.HopLen) ==> &(data[offset : offset+path.HopLen][j]) == &data[offset + j]
+//		if err := hop.DecodeFromBytes(data[offset : offset+path.HopLen], p/2); err != nil {
 //			return err
 //		}
-//		s.HopFields[i] = hop
+		// (joao) add parentheses surrounding s.HopFields
+//		(s.HopFields)[i] = hop
 //		offset += path.HopLen
 //	}
+//	fold BaseInvariant(&s.Base)
+//	fold DecodedInvariant(s)
 //	return nil
 //}
-//
-//// SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
-//// otherwise an error is returned.
+
+// SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
+// otherwise an error is returned.
+//requires acc(DecodedInvariant(s))
 //func (s *Decoded) SerializeTo(b []byte) error {
+//	unfold DecodedInvariant(s)
+//	unfold BaseInvariant(&s.Base)
 //	if len(b) < s.Len() {
 //		return serrors.New("buffer too small to serialize path.", "expected", s.Len(),
 //			"actual", len(b))
@@ -95,8 +139,8 @@ type Decoded struct {
 //	}
 //	return nil
 //}
-//
-//// Reverse reverses a SCION path.
+
+// Reverse reverses a SCION path.
 //func (s *Decoded) Reverse() error {
 //	if s.NumINF == 0 {
 //		// Empty path doesn't need reversal.
@@ -122,8 +166,8 @@ type Decoded struct {
 //
 //	return nil
 //}
-//
-//// ToRaw tranforms scion.Decoded into scion.Raw
+
+// ToRaw tranforms scion.Decoded into scion.Raw
 //func (s *Decoded) ToRaw() (*Raw, error) {
 //	b := make([]byte, s.Len())
 //	if err := s.SerializeTo(b); err != nil {
