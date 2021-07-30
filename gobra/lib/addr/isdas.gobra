@@ -88,10 +88,15 @@ func (isd ISD) String() string {
 // https://github.com/scionproto/scion/wiki/ISD-and-AS-numbering#as-numbers
 type AS uint64
 
+ghost
+pure func validAS(s string) bool
+
 // ASFromString parses an AS from a decimal (in the case of the 32bit BGP AS
 // number space) or ipv6-style hex (in the case of SCION-only AS numbers)
 // string.
-func ASFromString(s string) (AS, error) {
+ensures validAS(s) ==> err == nil
+ensures !validAS(s) ==> err != nil
+func ASFromString(s string) (as AS, err error) {
 	return asParse(s, ":")
 }
 
@@ -110,20 +115,25 @@ func ASFromFileFmt(s string, prefix bool) (AS, error) {
 	return asParse(s, "_")
 }
 
-func asParse(s string, sep string) (AS, error) {
+ensures validAS(s) ==> resErr == nil
+ensures !validAS(s) ==> resErr != nil
+func asParse(s string, sep string) (resAS AS, resErr error) {
 	if strings.Index(s, sep) == -1 {
 		// Must be a BGP AS, parse as 32-bit decimal number
 		as, err := strconv.ParseUint(s, 10, BGPASBits)
 		if err != nil {
+			assume !validAS(s)
 			// err.Error() will contain the original value
 			// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
-			// return 0, common.NewBasicError("Unable to parse AS", err)
+			// return 0, common.NewBasicError("Unable to parse AS", err) 
 			return 0, common.NewBasicError(common.ErrMsg("Unable to parse AS"), err)
 		}
+		assume validAS(s)
 		return AS(as), nil
 	}
 	parts := strings.Split(s, sep)
 	if len(parts) != asParts {
+		assume !validAS(s)
 		// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
 		// return 0, common.NewBasicError("unable to parse AS: wrong number of separators", nil,
 		return 0, common.NewBasicError(common.ErrMsg("unable to parse AS: wrong number of separators"), nil,
@@ -138,12 +148,14 @@ func asParse(s string, sep string) (AS, error) {
 //		as <<= asPartBits
 		v, err := strconv.ParseUint(parts[i], asPartBase, asPartBits)
 		if err != nil {
+			assume !validAS(s)
 			// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
 			// return 0, common.NewBasicError("Unable to parse AS part", err, "raw", s)
 			return 0, common.NewBasicError(common.ErrMsg("Unable to parse AS part"), err, "raw", s)
 		}
 //		as |= AS(v)
 	}
+	assume validAS(s)
 	return as, nil
 }
 
@@ -184,8 +196,8 @@ func (as AS) fmt(sep byte) string {
 		// (joao) Gobra is not able to prove this automatically yet
 		assume uint64(as>>shift)&asPartMask >= 0
 		s := strconv.FormatUint(uint64(as>>shift)&asPartMask, asPartBase)
-		// (joao) type error: only slices can be unpacked
-		// b = append(perm(1/2), b, s...)
+// (joao) type error: only slices can be unpacked
+//		b = append(perm(1/2), b, s...)
 	}
 	return string(b)
 }
@@ -207,6 +219,7 @@ requires acc(as)
 requires forall i int :: 0 <= i && i < len(text) ==> acc(&text[i])
 ensures acc(as)
 ensures forall i int :: 0 <= i && i < len(text) ==> acc(&text[i])
+ensures !validAS(string(text)) ==> *as == old(*as)
 func (as *AS) UnmarshalText(text []byte) error {
 	newAS, err := ASFromString(string(text))
 	if err != nil {

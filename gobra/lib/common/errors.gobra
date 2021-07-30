@@ -130,7 +130,8 @@ func (be BasicError) Unwrap() error {
 // NewBasicError creates a new BasicError, with e as the embedded error (can be nil), with logCtx
 // being a list of string/val pairs. These key/value pairs should contain all context-dependent
 // information: 'msg' argument itself should be a constant string.
-func NewBasicError(msg ErrMsg, e error, logCtx ...interface{}) error // {
+ensures res != nil
+func NewBasicError(msg ErrMsg, e error, logCtx ...interface{}) (res error) // {
 // (joao) not supported while variadic functionas are not merged in Gobra's master
 //	return BasicError{Msg: msg, logCtx: logCtx, Err: e}
 // }
