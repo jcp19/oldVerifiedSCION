@@ -8,16 +8,16 @@ name: test
 
 on:
   push: # run this workflow on every push
-  pull_request: # run this workflow on every pull_request
+  # pull_request: # run this workflow on every pull_request
 
 jobs:
   setup-and-test:
     runs-on: ubuntu-latest
     container: gobraverifier/gobra-base:v2
     env:
-      SILVER_REF: "v.21.01-release"
-      SILICON_REF: "v.21.01-release"
-      CARBON_REF: "v.21.01-release"
+      SILVER_REF: "v.21.07-release"
+      SILICON_REF: "v.21.07-release"
+      CARBON_REF: "v.21.07-release"
     steps:
       #- name: apt-get update
       #  run: |
