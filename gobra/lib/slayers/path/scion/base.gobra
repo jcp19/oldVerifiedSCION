@@ -40,7 +40,7 @@ requires acc(&s.PathMeta)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures acc(&s.PathMeta)
 ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-func (s *Base) DecodeFromBytes(data []byte) error {
+func (s *Base) DecodeFromBytes(data []byte) error //{
 	// PathMeta takes care of bounds check.
 	// err := s.PathMeta.DecodeFromBytes(data)
 	// if err != nil {
@@ -59,11 +59,17 @@ func (s *Base) DecodeFromBytes(data []byte) error {
 	// 	s.NumHops += int(s.PathMeta.SegLen[i])
 	// }
 	// return nil
-}
+//}
 
 // IncPath increases the currHF index and currINF index if appropriate.
-requires acc(&s.PathMeta)
-ensures acc(&s.PathMeta)
+requires acc(s)
+ensures acc(s)
+requires s.PathMeta.CurrINF >= 0 && s.PathMeta.CurrINF < s.NumINF
+requires s.PathMeta.CurrHF >= 0 && s.PathMeta.CurrHF < s.NumHops
+ensures s.PathMeta.CurrINF >= 0 && s.PathMeta.CurrINF < s.NumINF
+ensures s.PathMeta.CurrHF >= 0 && s.PathMeta.CurrHF < s.NumHops
+ensures s.NumINF == old(s.NumINF)
+ensures s.NumHops == old(s.NumHops)
 func (s *Base) IncPath() error {
 	// if s.NumINF == 0 {
 	// 	return serrors.New("empty path cannot be increased")
@@ -80,17 +86,17 @@ func (s *Base) IncPath() error {
 
 // IsXover returns whether we are at a crossover point.
 requires acc(s)
-requires acc(&s.PathMeta)
 ensures acc(s)
-ensures acc(&s.PathMeta) 
-func (s *Base) IsXover() bool {
+ensures s.PathMeta.CurrINF == old(s.PathMeta.CurrINF)
+ensures s.PathMeta.CurrHF == old(s.PathMeta.CurrHF)
+ensures s.NumINF == old(s.NumINF)
+ensures s.NumHops == old(s.NumHops)
+func (s *Base) IsXover() bool //{
 	// return s.PathMeta.CurrINF != s.infIndexForHF(s.PathMeta.CurrHF+1)
-}
+//}
 
 requires acc(s)
-requires acc(&s.PathMeta)
 ensures acc(s)
-ensures acc(&s.PathMeta) 
 func (s *Base) infIndexForHF(hf uint8) uint8 {
 	// left := uint8(0)
 	// for i := 0; i < s.NumINF; i++ {
@@ -108,6 +114,10 @@ func (s *Base) infIndexForHF(hf uint8) uint8 {
 // Len returns the length of the path in bytes.
 requires acc(s)
 ensures acc(s)
+ensures s.PathMeta.CurrINF == old(s.PathMeta.CurrINF)
+ensures s.PathMeta.CurrHF == old(s.PathMeta.CurrHF)
+ensures s.NumINF == old(s.NumINF)
+ensures s.NumHops == old(s.NumHops)
 func (s *Base) Len() int {
 	// return MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
 }

@@ -41,8 +41,7 @@ import (
 const MaxSCMPPacketLen = 1232
 
 pred (s *SCMP) Mem() {
-	acc(s) &&
-	acc(&s.scn)
+	acc(s)
 }
 (*SCMP) implements gopacket.SerializableLayer {
 

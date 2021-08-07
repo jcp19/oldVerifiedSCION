@@ -27,39 +27,43 @@ import (
 // 	MaxHops = 64
 // )
 
+pred decHopFieldsAcc(hfs []*path.HopField) {
+	(forall i int :: 0 <= i && i < len(hfs) ==> acc(&(hfs)[i]) && acc((hfs)[i]))
+}
+
+pred decInfoFieldsAcc(ifs []*path.InfoField) {
+	(forall i int :: 0 <= i && i < len(ifs) ==> acc(&(ifs)[i]) && acc((ifs)[i]))
+}
+
 pred (d *Decoded) Mem() {
 	acc(d) &&
-	acc(&d.BaseEmbedded) &&
-	acc(&d.InfoFields) && 
-	acc(&d.HopFields) &&
-	//acc(&d.BaseEmbedded.PathMeta) && 
-	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i])) &&
-	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc(&(d.InfoFields)[i]))
+	// acc(&d.InfoFields) && 
+	// acc(&d.HopFields) &&	
+	d.BaseEmbedded.NumINF == len(d.InfoFields) &&
+	d.BaseEmbedded.NumHops == len(d.HopFields) &&
+	0 <= d.BaseEmbedded.PathMeta.CurrHF && d.BaseEmbedded.PathMeta.CurrHF < len(d.HopFields) &&
+	0 <= d.BaseEmbedded.PathMeta.CurrINF && d.BaseEmbedded.PathMeta.CurrINF < len(d.InfoFields) &&
+	// (forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i]) && acc((d.HopFields)[i])) &&
+	// (forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc(&(d.InfoFields)[i]) && acc((d.InfoFields)[i]))
+	decHopFieldsAcc(d.HopFields) &&
+	decInfoFieldsAcc(d.InfoFields)
 }
 (*Decoded) implements slayers.Path {
 
 	(d *Decoded) SerializeTo(b []byte) (err error) {
-		unfold d.Mem()
 		err = d.SerializeTo(b)
-		fold d.Mem()
 	}
 
 	(d *Decoded) DecodeFromBytes(b []byte) (err error) {
-		unfold d.Mem()
 		err = d.DecodeFromBytes(b)
-		fold d.Mem()
 	}
 	
 	(d *Decoded) Reverse() (err error) {
-		unfold d.Mem()
 		err = d.Reverse()
-		fold d.Mem()
 	}
 	
 	(d *Decoded) Len() (l int) {
-		unfold d.Mem()
 		l = d.Len()
-		fold d.Mem()
 	}
 }
 
@@ -75,18 +79,21 @@ type Decoded struct {
 }
 
 // (lhalm) function added as a workaround because interface composition does not seem to be supported ye
-requires acc(&s.BaseEmbedded)
-ensures acc(&s.BaseEmbedded)
+requires s.Mem()
+ensures s.Mem()
 func (s *Decoded) Len() int {
-	return s.BaseEmbedded.Len()
+	// (lhalm) minor rewrite to allow folding of predicate
+	unfold s.Mem()
+	length := s.BaseEmbedded.Len()
+	fold s.Mem()
+	return length
+	// return s.BaseEmbedded.Len()
 }
 
 // DecodeFromBytes fully decodes the SCION path into the corresponding fields.
-requires acc(&s.InfoFields)
-requires acc(&s.HopFields)
+requires s.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-ensures acc(&s.InfoFields)
-ensures acc(&s.HopFields)
+ensures s.Mem()
 ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (s *Decoded) DecodeFromBytes(data []byte) error {
 // 	if err := s.Base.DecodeFromBytes(data); err != nil {
@@ -120,16 +127,10 @@ func (s *Decoded) DecodeFromBytes(data []byte) error {
 
 // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
 // otherwise an error is returned.
-requires acc(&s.BaseEmbedded.PathMeta)
-requires acc(&s.InfoFields) && acc(&s.HopFields)
+requires s.Mem()
 requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-requires forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
-requires forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i])
-ensures acc(&s.BaseEmbedded.PathMeta)
-ensures acc(&s.InfoFields) && acc(&s.HopFields)
+ensures s.Mem()
 ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
-ensures forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i])
 func (s *Decoded) SerializeTo(b []byte) error {
 // 	if len(b) < s.Len() {
 // 		return serrors.New("buffer too small to serialize path.", "expected", s.Len(),
@@ -155,18 +156,10 @@ func (s *Decoded) SerializeTo(b []byte) error {
 }
 
 // Reverse reverses a SCION path.
-requires acc(s)
-requires acc(&s.BaseEmbedded.PathMeta)
-requires acc(&s.InfoFields) && acc(&s.HopFields)
-requires forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
-requires forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i])
+requires s.Mem()
 // requires forall i int :: 0 <= i && i < len(s.BaseEmbedded.PathMeta.SegLen) ==> acc(&(s.BaseEmbedded.PathMeta.SegLen)[i])
-ensures acc(s)
-ensures acc(&s.BaseEmbedded.PathMeta)
-ensures acc(&s.InfoFields) && acc(&s.HopFields)
-ensures forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
-ensures forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i])
-func (s *Decoded) Reverse() error {
+ensures s.Mem()
+func (s *Decoded) Reverse() error //{
 // 	if s.NumINF == 0 {
 // 		// Empty path doesn't need reversal.
 // 		return nil
@@ -190,7 +183,7 @@ func (s *Decoded) Reverse() error {
 // 	s.PathMeta.CurrHF = uint8(s.NumHops) - s.PathMeta.CurrHF - 1
 
 // 	return nil
-}
+//}
 
 // // ToRaw tranforms scion.Decoded into scion.Raw
 // func (s *Decoded) ToRaw() (*Raw, error) {

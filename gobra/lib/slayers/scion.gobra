@@ -27,7 +27,8 @@ import (
 	"gobra/lib/serrors"
 	//"github.com/scionproto/scion/go/lib/slayers/path/empty"
 	//"github.com/scionproto/scion/go/lib/slayers/path/onehop"
-	//"github.com/scionproto/scion/go/lib/slayers/path/scion"
+	// (lhalm) causes cyclic imports
+	// "gobra/lib/slayers/path/scion"
 )
 
 const (
@@ -136,9 +137,7 @@ type Path interface {
 }
 
 pred (s *SCION) Mem() {
-	acc(&s.PathVar) && 
 	acc(s)
-
 }
 (*SCION) implements gopacket.SerializableLayer {
 
@@ -153,10 +152,6 @@ pred (s *SCION) Mem() {
 	}
 }
 
-pred (s *SCION) Mem() {
-	acc(s) &&
-	acc(&s.EmbeddedLayer)
-}
 (*SCION) implements gopacket.NetworkLayer {
 
 	(s *SCION) LayerType() (lt gopacket.LayerType) {
@@ -273,8 +268,8 @@ func (s *SCION) LayerPayload() []byte
 //	return gopacket.Flow{}
 //}
 
-requires b.Mem() && acc(&s.PathVar) && acc(s)
-ensures b.Mem() && acc(&s.PathVar) && acc(s)
+requires b.Mem() && acc(s)
+ensures b.Mem() && acc(s)
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 //	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
 //	buf, err := b.PrependBytes(scnLen)
@@ -306,17 +301,26 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 //	return s.Path.SerializeTo(buf[offset:])
 }
 
+pred bytesAcc(data []byte) {
+	forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+}
+
 // DecodeFromBytes decodes the SCION layer. DecodeFromBytes resets the internal state of this layer
 // to the state defined by the passed-in bytes. Slices in the SCION layer reference the passed-in
 // data, so care should be taken to copy it first should later modification of data be required
 // before the SCION layer is discarded.
 requires acc(s)
 requires df.Mem()
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+requires bytesAcc(data)
+requires InvariantSCION(*s)
 ensures acc(s)
 ensures df.Mem()
-ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
+ensures bytesAcc(data)
+ensures InvariantSCION(*s)
+// (lhalm) important for dataplane, but not possible due to cyclic imports
+// ensures typeOf(s.PathVar) == *scion.Raw
+// ensures acc((s.PathVar).(*scion.Raw))
+func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error //{
 //	// Decode common header.
 //	if len(data) < CmnHdrLen {
 //		df.SetTruncated()
@@ -393,12 +397,14 @@ func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 //	s.Payload = data[hdrBytes:]
 //
 //	return nil
-}
+// }
 
 const DecodeScionWrapper decodeScionWrapper = 0
 
 type decodeScionWrapper int
 
+requires p.Mem()
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (w decodeScionWrapper) Decode(data []byte, p gopacket.PacketBuilder) error {
 	return decodeSCION(data, p)
 }
@@ -449,17 +455,26 @@ func (s *SCION) DstAddr() (net.Addr, error) {
 // underlaying layer data. Changing the net.Addr object might lead to inconsistent layer information
 // and thus should be treated read-only. Instead, SetDstAddr should be used to update the source
 // address.
-requires acc(s)
-ensures acc(s)
-func (s *SCION) SrcAddr() (net.Addr, error) {
+requires 0 < p && p <= 1
+requires acc(s, p)
+// requires InvariantSCION(*s)
+ensures acc(s, p)
+// ensures InvariantSCION(*s)
+func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) {
 	return parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr)
 }
 
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
 // SetDstAddr takes ownership of dst and callers should not write to it after calling SetDstAddr.
 // Changes to dst might leave the layer in an inconsistent state.
-requires acc(s)
-ensures acc(s)
+requires acc(&s.DstAddrLen)
+requires acc(&s.DstAddrType)
+requires acc(&s.RawDstAddr)
+requires validAddrLen(s.DstAddrLen)
+ensures acc(&s.DstAddrLen)
+ensures acc(&s.DstAddrType)
+ensures acc(&s.RawDstAddr)
+ensures validAddrLen(s.DstAddrLen)
 func (s *SCION) SetDstAddr(dst net.Addr) error {
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
@@ -469,8 +484,14 @@ func (s *SCION) SetDstAddr(dst net.Addr) error {
 // SetSrcAddr sets the source address and updates the DstAddrLen/Type fields accordingly.
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
 // Changes to src might leave the layer in an inconsistent state.
-requires acc(s)
-ensures acc(s)
+requires acc(&s.SrcAddrLen)
+requires acc(&s.SrcAddrType)
+requires acc(&s.RawSrcAddr)
+requires validAddrLen(s.SrcAddrLen)
+ensures acc(&s.SrcAddrLen)
+ensures acc(&s.SrcAddrType)
+ensures acc(&s.RawSrcAddr)
+ensures validAddrLen(s.SrcAddrLen)
 func (s *SCION) SetSrcAddr(src net.Addr) error {
 	var err error
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)

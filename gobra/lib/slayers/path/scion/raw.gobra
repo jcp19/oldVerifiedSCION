@@ -23,7 +23,8 @@ import (
 pred (r *Raw) Mem() {
 	acc(&r.Raw) &&
 	acc(&r.BaseEmbedded) && 
-	forall i int :: 0 <= i && i < len(r.Raw) ==> acc(&(r.Raw)[i])
+	bytesAcc(r.Raw)
+	//forall i int :: 0 <= i && i < len(r.Raw) ==> acc(&(r.Raw)[i])
 }
 (*Raw) implements slayers.Path {
 
@@ -52,6 +53,10 @@ pred (r *Raw) Mem() {
 	}
 }
 
+pred bytesAcc(data []byte) {
+	forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+}
+
 // Raw is a raw representation of the SCION (data-plane) path type. It is designed to parse as
 // little as possible and should be used if performance matters.
 type Raw struct {
@@ -71,11 +76,11 @@ func (s *Raw) Len() int {
 // as raw bytes.
 requires acc(&s.Raw)
 requires acc(&s.BaseEmbedded)
-requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+requires bytesAcc(s.Raw)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures acc(&s.Raw)
 ensures acc(&s.BaseEmbedded)
-ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+ensures bytesAcc(s.Raw)
 ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (s *Raw) DecodeFromBytes(data []byte) error {
 // 	if err := s.Base.DecodeFromBytes(data); err != nil {
@@ -113,9 +118,9 @@ func (s *Raw) SerializeTo(b []byte) error {
 
 // Reverse reverses the path such that it can be used in the reverse direction.
 requires acc(&s.Raw)
-requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+requires bytesAcc(s.Raw)
 ensures acc(&s.Raw)
-ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+ensures bytesAcc(s.Raw)
 func (s *Raw) Reverse() error {
 // 	// XXX(shitz): The current implementation is not the most performant, since it parses the entire
 // 	// path first. If this becomes a performance bottleneck, the implementation should be changed to
@@ -136,15 +141,11 @@ func (s *Raw) Reverse() error {
 
 // ToDecoded transforms a scion.Raw to a scion.Decoded.
 requires acc(&s.Raw)
-requires forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+requires bytesAcc(s.Raw)
 ensures acc(&s.Raw)
-ensures forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
-ensures err == nil ==> acc(&decoded.InfoFields)
-ensures err == nil ==> forall i int :: 0 <= i && i < len(decoded.InfoFields) ==> acc(&(decoded.InfoFields)[i])
-ensures err == nil ==> acc(&decoded.HopFields)
-ensures err == nil ==> forall i int :: 0 <= i && i < len(decoded.HopFields) ==> acc(&(decoded.HopFields)[i])
-ensures err == nil ==> acc(&decoded.BaseEmbedded)
-ensures err == nil ==> acc(&decoded.BaseEmbedded.PathMeta)
+ensures bytesAcc(s.Raw)
+ensures err == nil ==> acc(decoded)
+ensures err == nil ==> decoded.Mem()
 func (s *Raw) ToDecoded() (decoded *Decoded, err error) //{
 // 	// Serialize PathMeta to ensure potential changes are reflected Raw.
 // 	if err := s.PathMeta.SerializeTo((s.Raw)[:MetaLen]); err != nil {
@@ -157,27 +158,29 @@ func (s *Raw) ToDecoded() (decoded *Decoded, err error) //{
 // 	return decoded, nil
 //}
 
-pred rawBytesAcc(slice []byte) {
-	forall i int :: 0 <= i && i < len(slice) ==> acc(&(slice)[i], 1/8)
-}
-
-pred infoFieldAcc(s *Raw, idx int) {
-	acc(s, 1/8) &&
+pred infoFieldAcc(b []byte, idx int, p perm) {
+	p > 0 && p <= 1 &&
+	//acc(s, p) &&
 	idx >= 0 &&
-	(MetaLen + idx*path.InfoLen)+path.InfoLen < len(s.Raw) &&
-	rawBytesAcc(s.Raw)
+	//(MetaLen + idx*path.InfoLen)+path.InfoLen < len(s.Raw) &&
+	(MetaLen + idx*path.InfoLen)+path.InfoLen < len(b) &&
+	forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
 }
 
 // GetInfoField returns the InfoField at a given index.
-requires infoFieldAcc(s, idx)
-ensures infoFieldAcc(s, idx)
+requires p > 0 && p <= 1
+requires acc(s, p)
+requires infoFieldAcc(s.Raw, idx, p)
+ensures acc(s, p)
+ensures infoFieldAcc(s.Raw, idx, p)
+ensures s.BaseEmbedded.PathMeta.CurrINF == old(s.BaseEmbedded.PathMeta.CurrINF)
 ensures err == nil ==> infoField != nil && acc(infoField)
-func (s *Raw) GetInfoField(idx int) (infoField *path.InfoField, err error) {
-	unfold infoFieldAcc(s, idx)
+func (s *Raw) GetInfoField(idx int, ghost p perm) (infoField *path.InfoField, err error) {
+	unfold infoFieldAcc(s.Raw, idx, p)
 	if idx >= s.BaseEmbedded.NumINF {
 		// (lhalm) create error first to allow folding of the predicate
 		err := serrors.New("InfoField index out of bounds", "max", s.BaseEmbedded.NumINF-1, "actual", idx)
-		fold infoFieldAcc(s, idx)
+		fold infoFieldAcc(s.Raw, idx, p)
 		return nil, err
 		//return nil, serrors.New("InfoField index out of bounds", "max", s.BaseEmbedded.NumINF-1, "actual", idx)
 	}
@@ -187,76 +190,76 @@ func (s *Raw) GetInfoField(idx int) (infoField *path.InfoField, err error) {
 	// if err := info.DecodeFromBytes((s.Raw)[infOffset : infOffset+path.InfoLen]); err != nil {
 	// 	return nil, err
 	// }
-	unfold rawBytesAcc(s.Raw)
 	subslice := (s.Raw)[infOffset : infOffset+path.InfoLen]
-	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], 1/8)
-	if err := info.DecodeFromBytes(subslice); err != nil {
-		fold rawBytesAcc(s.Raw)
-		fold infoFieldAcc(s, idx)
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], p)
+	if err := info.DecodeFromBytes(subslice, p); err != nil {
+		fold infoFieldAcc(s.Raw, idx, p)
 		return nil, err
 	}
-	fold rawBytesAcc(s.Raw)
-	fold infoFieldAcc(s, idx)
+	fold infoFieldAcc(s.Raw, idx, p)
 	return info, nil
 }
 
 // GetCurrentInfoField is a convenience method that returns the current hop field pointed to by the
 // CurrINF index in the path meta header.
-requires acc(s, 1/8)
-requires infoFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrINF))
-ensures acc(s, 1/8)
-ensures infoFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrINF))
+requires p > 0 && p <= 1
+requires acc(s, p)
+requires infoFieldAcc(s.Raw, int(s.BaseEmbedded.PathMeta.CurrINF), p)
+ensures acc(s, p)
+ensures infoFieldAcc(s.Raw, int(s.BaseEmbedded.PathMeta.CurrINF), p)
 ensures err == nil ==> infoField != nil && acc(infoField)
-func (s *Raw) GetCurrentInfoField() (infoField *path.InfoField, err error) {
-	return s.GetInfoField(int(s.BaseEmbedded.PathMeta.CurrINF))
+func (s *Raw) GetCurrentInfoField(ghost p perm) (infoField *path.InfoField, err error) {
+	return s.GetInfoField(int(s.BaseEmbedded.PathMeta.CurrINF), p)
 }
 
 // SetInfoField updates the InfoField at a given index.
-requires infoFieldAcc(s, idx)
-requires acc(info, 1/16)
-ensures infoFieldAcc(s, idx)
-ensures acc(info, 1/16)
-func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
-	unfold infoFieldAcc(s, idx)
+requires p > 0 && p <= 1
+requires acc(s, p)
+requires infoFieldAcc(s.Raw, idx, p)
+requires acc(info, p)
+ensures acc(s, p)
+ensures infoFieldAcc(s.Raw, idx, p)
+ensures acc(info, p)
+func (s *Raw) SetInfoField(info *path.InfoField, idx int, ghost p perm) error {
+	unfold infoFieldAcc(s.Raw, idx, p)
 	if idx >= s.BaseEmbedded.NumINF {
 		// (lhalm) create error first to allow folding of the predicate
 		err := serrors.New("InfoField index out of bounds", "max", s.BaseEmbedded.NumINF-1, "actual", idx)
-		fold infoFieldAcc(s, idx)
+		fold infoFieldAcc(s.Raw, idx, p)
 		return err
 	}
 	if info == nil {
-		fold infoFieldAcc(s, idx)
+		fold infoFieldAcc(s.Raw, idx, p)
 		return serrors.New("Infofield cannot be nil")
 	}
 	infOffset := MetaLen + idx*path.InfoLen
 	// (lhalm) need to explicitly create the subslice and assert access permission
-	unfold rawBytesAcc(s.Raw)
 	subslice := (s.Raw)[infOffset : infOffset+path.InfoLen]
-	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], 1/8)
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + infOffset] == &subslice[i] && acc(&subslice[i], p)
 	// (lhalm) create error first to allow folding of the predicate
-	err := info.SerializeTo(subslice)
-	fold rawBytesAcc(s.Raw)
-	fold infoFieldAcc(s, idx)
+	err := info.SerializeTo(subslice, p)
+	fold infoFieldAcc(s.Raw, idx, p)
 	return err
 }
 
-pred hopFieldAcc(s *Raw, idx int) {
-	acc(s, 1/8) &&
+pred hopFieldAcc(s *Raw, idx int, p perm) {
+	p > 0 && p <= 1 &&
+	acc(s, p) &&
 	(MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) >= 0 &&
 	(MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen) + path.HopLen < len(s.Raw) &&
-	rawBytesAcc(s.Raw)
+	forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i], p)
 }
 
 // GetHopField returns the HopField at a given index.
-requires hopFieldAcc(s, idx)
-ensures hopFieldAcc(s, idx)
+requires hopFieldAcc(s, idx, p)
+ensures hopFieldAcc(s, idx, p)
 ensures err == nil ==> hf != nil && acc(hf)
-func (s *Raw) GetHopField(idx int) (hf *path.HopField, err error) {
-	unfold hopFieldAcc(s, idx)
+func (s *Raw) GetHopField(idx int, ghost p perm) (hf *path.HopField, err error) {
+	unfold hopFieldAcc(s, idx, p)
 	if idx >= s.BaseEmbedded.NumHops {
 		// (lhalm) create error first to allow folding of the predicate
 		err := serrors.New("HopField index out of bounds", "max", s.BaseEmbedded.NumHops-1, "actual", idx)
-		fold hopFieldAcc(s, idx)
+		fold hopFieldAcc(s, idx, p)
 		return nil, err
 		//return nil, serrors.New("HopField index out of bounds", "max", s.BaseEmbedded.NumHops-1, "actual", idx)
 	}
@@ -266,55 +269,52 @@ func (s *Raw) GetHopField(idx int) (hf *path.HopField, err error) {
 	// if err := hop.DecodeFromBytes((s.Raw)[hopOffset : hopOffset+path.HopLen]); err != nil {
 	// 	return nil, err
 	// }
-	unfold rawBytesAcc(s.Raw)
 	subslice := (s.Raw)[hopOffset : hopOffset+path.HopLen]
-	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], 1/8)
-	if err := hop.DecodeFromBytes(subslice); err != nil {
-		fold rawBytesAcc(s.Raw)
-		fold hopFieldAcc(s, idx)
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], p)
+	if err := hop.DecodeFromBytes(subslice, p); err != nil {
+		fold hopFieldAcc(s, idx, p)
 		return nil, err
 	}
-	fold rawBytesAcc(s.Raw)
-	fold hopFieldAcc(s, idx)
+	fold hopFieldAcc(s, idx, p)
 	return hop, nil
 }
 
 // GetCurrentHopField is a convenience method that returns the current hop field pointed to by the
 // CurrHF index in the path meta header.
-requires acc(s, 1/8)
-requires hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF))
-ensures acc(s, 1/8)
-ensures hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF))
+requires p > 0 && p <= 1
+requires acc(s, p)
+requires hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF), p)
+ensures acc(s, p)
+ensures hopFieldAcc(s, int(s.BaseEmbedded.PathMeta.CurrHF), p)
 ensures err == nil ==> hf != nil && acc(hf)
-func (s *Raw) GetCurrentHopField() (hf *path.HopField, err error) {
-	return s.GetHopField(int(s.BaseEmbedded.PathMeta.CurrHF))
+func (s *Raw) GetCurrentHopField(ghost p perm) (hf *path.HopField, err error) {
+	return s.GetHopField(int(s.BaseEmbedded.PathMeta.CurrHF), p)
 }
 
 // SetHopField updates the HopField at a given index.
-requires hopFieldAcc(s, idx)
-requires acc(hop, 1/16)
-ensures hopFieldAcc(s, idx)
-ensures acc(hop, 1/16)
-func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
-	unfold hopFieldAcc(s, idx)
+requires 0 < p && p <= 1
+requires hopFieldAcc(s, idx, p)
+requires acc(hop, p)
+ensures hopFieldAcc(s, idx, p)
+ensures acc(hop, p)
+func (s *Raw) SetHopField(hop *path.HopField, idx int, ghost p perm) error {
+	unfold hopFieldAcc(s, idx, p)
 	if idx >= s.BaseEmbedded.NumHops {
 		// (lhalm) create error first to allow folding of the predicate
 		err := serrors.New("HopField index out of bounds", "max", s.BaseEmbedded.NumHops-1, "actual", idx)
-		fold hopFieldAcc(s, idx)
+		fold hopFieldAcc(s, idx, p)
 		return err
 	}
 	if hop == nil {
-		fold hopFieldAcc(s, idx)
+		fold hopFieldAcc(s, idx, p)
 		return serrors.New("Hopfield cannot be nil")
 	}
 	hopOffset := MetaLen + s.BaseEmbedded.NumINF*path.InfoLen + idx*path.HopLen
 	// (lhalm) need to explicitly create the subslice and assert access permission
-	unfold rawBytesAcc(s.Raw)
 	subslice := (s.Raw)[hopOffset : hopOffset+path.HopLen]
-	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], 1/8)
+	assert forall i int :: 0 <= i && i <= len(subslice) ==> &(s.Raw)[i + hopOffset] == &subslice[i] && acc(&subslice[i], p)
 	// (lhalm) create error first to allow folding of the predicate
-	err := hop.SerializeTo(subslice)
-	fold rawBytesAcc(s.Raw)
-	fold hopFieldAcc(s, idx)
+	err := hop.SerializeTo(subslice, p)
+	fold hopFieldAcc(s, idx, p)
 	return err
 }

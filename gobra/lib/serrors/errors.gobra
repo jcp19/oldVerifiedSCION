@@ -124,7 +124,8 @@ func WithCtx(err error, logCtx ...interface{}) error // {
 // Wrap wraps the cause with the msg error and adds context to the resulting
 // error. The returned error implements Is and Is(msg) and Is(cause) returns
 // true.
-func Wrap(msg, cause error, logCtx ...interface{}) error // {
+ensures err != nil
+func Wrap(msg, cause error, logCtx ...interface{}) (err error) // {
 	// (joao) error, logCtx not assignable to a slice
 //	return basicError{
 //		msg:    errOrMsg{err: msg},

@@ -20,8 +20,8 @@ type DecodingLayerParser struct {
 	// Truncated bool
 }
 
-requires forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i]) && decoders[i].Mem()
-ensures forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i]) && decoders[i].Mem()
+requires forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i])
+ensures forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i])
 ensures acc(d)
 func NewDecodingLayerParser(first LayerType, decoders ...DecodingLayer) (d *DecodingLayerParser)
 
