@@ -4,15 +4,27 @@ import (
 	// "dependencies/gopacket"
 )
 
+pred bytesAcc(data []byte, p perm) {
+	0 < p && p <= 1 &&
+	forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
+}
+
 type BaseLayer struct {
 	Contents []byte
 	Payload []byte
 }
 
-requires acc(&b.Contents)
-ensures acc(&b.Contents)
-func (b *BaseLayer) LayerContents() []byte
+requires 0 < p && p <= 1
+requires acc(&b.Contents, 1/2)
+requires bytesAcc(b.Contents, 1/1)
+ensures acc(&b.Contents, 1/2)
+ensures bytesAcc(b.Contents, 1-p)
+ensures bytesAcc(data, p)
+func (b *BaseLayer) LayerContents(ghost p perm) (data []byte)
 
-requires acc(&b.Payload)
-ensures acc(&b.Payload)
-func (b *BaseLayer) LayerPayload() []byte
+requires 0 < p && p <= 1
+requires acc(&b.Payload, p)
+requires bytesAcc(b.Payload, p)
+ensures acc(&b.Payload, 1-p)
+ensures bytesAcc(data, p)
+func (b *BaseLayer) LayerPayload(ghost p perm) (data []byte)

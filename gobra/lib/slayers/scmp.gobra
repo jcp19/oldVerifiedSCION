@@ -40,7 +40,7 @@ import (
 //  +-------------------------+
 const MaxSCMPPacketLen = 1232
 
-pred (s *SCMP) Mem() {
+pred (s *SCMP) Mem(p perm) {
 	acc(s)
 }
 (*SCMP) implements gopacket.SerializableLayer {
@@ -50,9 +50,9 @@ pred (s *SCMP) Mem() {
 	} 
 
 	(s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
-		unfold s.Mem()
+		unfold s.Mem(1/1)
 		err = s.SerializeTo(b, opts)
-		fold s.Mem()
+		fold s.Mem(1/1)
 	}
 }
 

@@ -20,15 +20,23 @@ type DecodingLayerParser struct {
 	// Truncated bool
 }
 
+pred bytesAcc(data []byte) {
+	forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+}
+
+pred decodedAcc(data []LayerType) {
+	forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+}
+
 requires forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i])
 ensures forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i])
 ensures acc(d)
 func NewDecodingLayerParser(first LayerType, decoders ...DecodingLayer) (d *DecodingLayerParser)
 
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-requires acc(decoded) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
-ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-ensures acc(decoded) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
+requires bytesAcc(data)
+requires acc(decoded) && decodedAcc(*decoded)
+ensures bytesAcc(data)
+ensures acc(decoded) && decodedAcc(*decoded)
 func (l *DecodingLayerParser) DecodeLayers(data []byte, decoded *[]LayerType) (err error)
 
 type UnsupportedLayerType LayerType

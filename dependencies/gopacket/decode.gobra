@@ -24,8 +24,8 @@ type PacketBuilder interface {
 
 	// SetLinkLayer(LinkLayer)
 
-	requires Mem() && l.Mem()
-	ensures Mem() && l.Mem()
+	requires Mem() && l.Mem(1/1)
+	ensures Mem() && l.Mem(1/1)
 	SetNetworkLayer(l NetworkLayer)
 
 	// SetTransportLayer(TransportLayer)

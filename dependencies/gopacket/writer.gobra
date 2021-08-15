@@ -1,14 +1,14 @@
 package gopacket
 
 type SerializableLayer interface {
-	pred Mem()
+	pred Mem(p perm)
 
-	requires Mem() && b.Mem()
-	ensures Mem() && b.Mem()
+	requires Mem(1/1) && b.Mem()
+	ensures Mem(1/1) && b.Mem()
 	SerializeTo(b SerializeBuffer, opts SerializeOptions) error
 
-	requires Mem()
-	ensures Mem()
+	requires Mem(1/1)
+	ensures Mem(1/1)
 	LayerType() LayerType
 }
 
@@ -22,15 +22,18 @@ type SerializeBuffer interface {
 
 	requires Mem()
 	ensures Mem()
-	Bytes() []byte
+	ensures bytesAcc(data)
+	Bytes() (data []byte)
 
 	requires Mem()
 	ensures Mem()
-	PrependBytes(num int) ([]byte, error)
+	ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+	PrependBytes(num int) (data []byte, error)
 
 	requires Mem()
 	ensures Mem()
-	AppendBytes(num int) ([]byte, error)
+	ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+	AppendBytes(num int) (data []byte, error)
 
 	requires Mem()
 	ensures Mem()
@@ -45,8 +48,8 @@ type SerializeBuffer interface {
 	PushLayer(LayerType)
 }
 
-requires forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
+requires forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem(1/1)
 requires w.Mem()
-ensures forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
+ensures forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem(1/1)
 ensures w.Mem()
 func SerializeLayers(w SerializeBuffer, opts SerializeOptions, layers ...SerializableLayer) error 

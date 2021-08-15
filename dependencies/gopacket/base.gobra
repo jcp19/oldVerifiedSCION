@@ -17,19 +17,19 @@ type Layer interface {
 }
 
 type NetworkLayer interface {
-	pred Mem()
+	pred Mem(p perm)
 	// (lhalm) composition not supported, add methods manually
 	// Layer	
-	requires Mem()
-	ensures Mem()
+	requires Mem(1/1)
+	ensures Mem(1/1)
 	LayerType() LayerType
 
-	requires Mem()
-	ensures Mem()
+	requires Mem(1/1)
+	ensures Mem(1/2)
 	LayerContents() []byte
 
-	requires Mem()
-	ensures Mem()
+	requires Mem(1/1)
+	ensures Mem(1/2)
 	LayerPayload() []byte
 	// (lhalm) end of parent methods
 	// NetworkFlow() Flow

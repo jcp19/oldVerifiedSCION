@@ -136,8 +136,9 @@ type Path interface {
 	Len() int
 }
 
-pred (s *SCION) Mem() {
-	acc(s)
+pred (s *SCION) Mem(p perm) {
+	acc(s) && InvariantSCION(s) &&
+	layers.bytesAcc(s.EmbeddedLayer.Contents, p)
 }
 (*SCION) implements gopacket.SerializableLayer {
 
@@ -146,9 +147,9 @@ pred (s *SCION) Mem() {
 	} 
 
 	(s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
-		unfold s.Mem()
+		unfold s.Mem(1/1)
 		err = s.SerializeTo(b, opts)
-		fold s.Mem()
+		fold s.Mem(1/1)
 	}
 }
 
@@ -159,15 +160,15 @@ pred (s *SCION) Mem() {
 	} 
 
 	(s *SCION) LayerContents() (data []byte) {
-		unfold s.Mem()
+		unfold s.Mem(1/1)
 		data = s.LayerContents()
-		fold s.Mem()
+		fold s.Mem(1/2)
 	}
 
 	(s *SCION) LayerPayload() (data []byte) {
-		unfold s.Mem()
+		unfold s.Mem(1/1)
 		data = s.LayerPayload()
-		fold s.Mem()
+		fold s.Mem(1/2)
 	}
 }
 
@@ -231,14 +232,24 @@ type SCION struct {
 	// Path Path
 }
 
-pred InvariantSCION(s SCION) {
+pred InvariantSCION(s *SCION) {
+	acc(s, 1/2) &&
 	validAddrLen(s.DstAddrLen) && validAddrLen(s.SrcAddrLen)
 }
 // (lhalm) include from composite layer because composition is not supported
-requires acc(&s.EmbeddedLayer.Contents)
-ensures acc(&s.EmbeddedLayer.Contents)
-func (s *SCION) LayerContents() []byte {
-	return s.EmbeddedLayer.LayerContents()
+requires acc(s, 1/2)
+requires InvariantSCION(s)
+requires layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
+ensures acc(s, 1/2)
+ensures InvariantSCION(s)
+ensures layers.bytesAcc(data, 1/2)
+ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/2)
+func (s *SCION) LayerContents() (data []byte) {
+	unfold InvariantSCION(s)
+	// return s.EmbeddedLayer.LayerContents(1/2)
+	d := s.EmbeddedLayer.LayerContents(1/2)
+	fold InvariantSCION(s)
+	return d
 }
 
 func (s *SCION) LayerType() gopacket.LayerType {
@@ -256,7 +267,9 @@ func (s *SCION) LayerType() gopacket.LayerType {
 // (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`
 // (joao) `layers.BaseLayer` is implemented in a third party package
 requires acc(s, 1/2)
+requires layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
 ensures acc(s, 1/2)
+ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/2)
 func (s *SCION) LayerPayload() []byte
 //{
 //	return s.Payload
@@ -268,8 +281,12 @@ func (s *SCION) LayerPayload() []byte
 //	return gopacket.Flow{}
 //}
 
-requires b.Mem() && acc(s)
-ensures b.Mem() && acc(s)
+requires b.Mem() && acc(s, 1/2)
+requires InvariantSCION(s)
+requires layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
+ensures b.Mem() && acc(s, 1/2)
+ensures InvariantSCION(s)
+ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 //	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
 //	buf, err := b.PrependBytes(scnLen)
@@ -301,25 +318,21 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 //	return s.Path.SerializeTo(buf[offset:])
 }
 
-pred bytesAcc(data []byte) {
-	forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-}
-
 // DecodeFromBytes decodes the SCION layer. DecodeFromBytes resets the internal state of this layer
 // to the state defined by the passed-in bytes. Slices in the SCION layer reference the passed-in
 // data, so care should be taken to copy it first should later modification of data be required
 // before the SCION layer is discarded.
 requires acc(s)
 requires df.Mem()
-requires bytesAcc(data)
-requires InvariantSCION(*s)
+requires gopacket.bytesAcc(data)
 ensures acc(s)
 ensures df.Mem()
-ensures bytesAcc(data)
-ensures InvariantSCION(*s)
+ensures gopacket.bytesAcc(data)
+ensures InvariantSCION(s)
 // (lhalm) important for dataplane, but not possible due to cyclic imports
 // ensures typeOf(s.PathVar) == *scion.Raw
 // ensures acc((s.PathVar).(*scion.Raw))
+// ensures scion.bytesAcc((s.scionL.PathVar).(*scion.Raw).Raw)
 func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error //{
 //	// Decode common header.
 //	if len(data) < CmnHdrLen {
@@ -474,8 +487,8 @@ requires validAddrLen(s.DstAddrLen)
 ensures acc(&s.DstAddrLen)
 ensures acc(&s.DstAddrType)
 ensures acc(&s.RawDstAddr)
-ensures validAddrLen(s.DstAddrLen)
-func (s *SCION) SetDstAddr(dst net.Addr) error {
+ensures e == nil ==> validAddrLen(s.DstAddrLen)
+func (s *SCION) SetDstAddr(dst net.Addr) (e error) {
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
 	return err
@@ -491,8 +504,8 @@ requires validAddrLen(s.SrcAddrLen)
 ensures acc(&s.SrcAddrLen)
 ensures acc(&s.SrcAddrType)
 ensures acc(&s.RawSrcAddr)
-ensures validAddrLen(s.SrcAddrLen)
-func (s *SCION) SetSrcAddr(src net.Addr) error {
+ensures e == nil ==> validAddrLen(s.SrcAddrLen)
+func (s *SCION) SetSrcAddr(src net.Addr) (e error) {
 	var err error
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)
 	return err
@@ -518,7 +531,8 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (net.Addr, error)
 		"type", addrType, "len", addrLen)
 }
 
-func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) {
+ensures err == nil ==> length == AddrLen4 || length == AddrLen16
+func packAddr(hostAddr net.Addr) (length AddrLen, AddrType, []byte, err error) {
 // (joao) no support for type switch
 //	switch a := hostAddr.(type) {
 //	case *net.IPAddr:
@@ -536,25 +550,25 @@ func packAddr(hostAddr net.Addr) (AddrLen, AddrType, []byte, error) {
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
 requires acc(s, _)
-requires InvariantSCION(*s)
+requires InvariantSCION(s)
 // ensures unfolding InvariantSCION(*s) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 // ensures res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 pure func (s *SCION) AddrHdrLen() (res int) {
-	return unfolding InvariantSCION(*s) in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+	return unfolding InvariantSCION(s) in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 }
 
 // SerializeAddrHdr serializes destination and source ISD-AS-Host address triples into the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
 // (joao) no support for the copy function
-requires acc(s) && InvariantSCION(*s)
-ensures acc(s) // && InvariantSCION(*s)
+requires acc(s) && InvariantSCION(s)
+ensures acc(s) // && InvariantSCION(s)
 func (s *SCION) SerializeAddrHdr(buf []byte) error {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(buf))
 	}
-	unfold InvariantSCION(*s)
+	unfold InvariantSCION(s)
 	dstAddrBytes := addrBytes(s.DstAddrLen)
 	srcAddrBytes := addrBytes(s.SrcAddrLen)
 	offset := 0
@@ -565,7 +579,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte) error {
 //	copy(buf[offset:offset+dstAddrBytes], s.RawDstAddr)
 //	offset += dstAddrBytes
 //	copy(buf[offset:offset+srcAddrBytes], s.RawSrcAddr)
-	//fold InvariantSCION(*s)
+	//fold InvariantSCION(s)
 	return nil
 }
 
@@ -573,17 +587,17 @@ func (s *SCION) SerializeAddrHdr(buf []byte) error {
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
 // (joao) this is causing the verifier to diverge
-requires acc(s) && InvariantSCION(*s)
+requires acc(s) && InvariantSCION(s)
 requires p > 0
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-ensures acc(s) // && InvariantSCION(*s)
+ensures acc(s) // && InvariantSCION(s)
 ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
 func (s *SCION) DecodeAddrHdr(data []byte, ghost p perm) error // {
 //	if len(data) < s.AddrHdrLen() {
 //		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 //			"actual", len(data))
 //	}
-//	unfold InvariantSCION(*s)
+//	unfold InvariantSCION(s)
 //	offset := 0
 //	s.DstIA = addr.IAFromRaw(data[offset:])
 //	offset += addr.IABytes
@@ -595,7 +609,7 @@ func (s *SCION) DecodeAddrHdr(data []byte, ghost p perm) error // {
 //	offset += dstAddrBytes
 //	// s.RawSrcAddr = data[offset : offset+srcAddrBytes]
 //
-//	// fold InvariantSCION(*s)
+//	// fold InvariantSCION(s)
 //	return nil
 //}
 
