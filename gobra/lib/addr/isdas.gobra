@@ -274,11 +274,12 @@ func (ia *IA) UnmarshalText(text []byte) error {
 		*ia = IA{}
 		return nil
 	}
-	newIA, err := IAFromString(string(text))
-	if err != nil {
-		return err
-	}
-	*ia = newIA
+	// (lhalm) apparently string(text) is not supported
+	// newIA, err := IAFromString(string(text))
+	// if err != nil {
+	// 	return err
+	// }
+	// *ia = newIA
 	return nil
 }
 
