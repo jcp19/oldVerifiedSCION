@@ -39,6 +39,13 @@ ensures bytesAcc(data)
 ensures acc(decoded) && decodedAcc(*decoded)
 func (l *DecodingLayerParser) DecodeLayers(data []byte, decoded *[]LayerType) (err error)
 
+(UnsupportedLayerType) implements error {
+
+	(s UnsupportedLayerType) Error() (err string) {
+		err = s.Error()
+	}
+}
+
 type UnsupportedLayerType LayerType
 
 func (e UnsupportedLayerType) Error() string

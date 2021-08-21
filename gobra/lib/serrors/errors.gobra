@@ -137,7 +137,8 @@ func Wrap(msg, cause error, logCtx ...interface{}) (err error) // {
 // WrapStr wraps the cause with an error that has msg in the error message and
 // adds the additional context. The returned error implements Is and Is(cause)
 // returns true.
-func WrapStr(msg string, cause error, logCtx ...interface{}) error // {
+ensures err != nil
+func WrapStr(msg string, cause error, logCtx ...interface{}) (err error) // {
 //	return basicError{
 //		msg:    errOrMsg{str: msg},
 //		cause:  cause,

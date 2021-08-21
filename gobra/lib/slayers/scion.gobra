@@ -137,7 +137,7 @@ type Path interface {
 }
 
 pred (s *SCION) Mem(p perm) {
-	acc(s) && InvariantSCION(s) &&
+	acc(s) && InvariantSCION(*s) &&
 	layers.bytesAcc(s.EmbeddedLayer.Contents, p)
 }
 (*SCION) implements gopacket.SerializableLayer {
@@ -232,23 +232,19 @@ type SCION struct {
 	// Path Path
 }
 
-pred InvariantSCION(s *SCION) {
-	acc(s, 1/2) &&
+pred InvariantSCION(s SCION) {
 	validAddrLen(s.DstAddrLen) && validAddrLen(s.SrcAddrLen)
 }
 // (lhalm) include from composite layer because composition is not supported
-requires acc(s, 1/2)
-requires InvariantSCION(s)
+requires acc(s)
+requires InvariantSCION(*s)
 requires layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
-ensures acc(s, 1/2)
-ensures InvariantSCION(s)
+ensures acc(s)
+ensures InvariantSCION(*s)
 ensures layers.bytesAcc(data, 1/2)
 ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/2)
 func (s *SCION) LayerContents() (data []byte) {
-	unfold InvariantSCION(s)
-	// return s.EmbeddedLayer.LayerContents(1/2)
 	d := s.EmbeddedLayer.LayerContents(1/2)
-	fold InvariantSCION(s)
 	return d
 }
 
@@ -282,10 +278,10 @@ func (s *SCION) LayerPayload() []byte
 //}
 
 requires b.Mem() && acc(s, 1/2)
-requires InvariantSCION(s)
+requires InvariantSCION(*s)
 requires layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
 ensures b.Mem() && acc(s, 1/2)
-ensures InvariantSCION(s)
+ensures InvariantSCION(*s)
 ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 //	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
@@ -328,7 +324,8 @@ requires gopacket.bytesAcc(data)
 ensures acc(s)
 ensures df.Mem()
 ensures gopacket.bytesAcc(data)
-ensures InvariantSCION(s)
+ensures InvariantSCION(*s)
+ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
 // (lhalm) important for dataplane, but not possible due to cyclic imports
 // ensures typeOf(s.PathVar) == *scion.Raw
 // ensures acc((s.PathVar).(*scion.Raw))
@@ -550,25 +547,25 @@ func packAddr(hostAddr net.Addr) (length AddrLen, AddrType, []byte, err error) {
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
 requires acc(s, _)
-requires InvariantSCION(s)
+requires InvariantSCION(*s)
 // ensures unfolding InvariantSCION(*s) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 // ensures res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 pure func (s *SCION) AddrHdrLen() (res int) {
-	return unfolding InvariantSCION(s) in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+	return unfolding InvariantSCION(*s) in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 }
 
 // SerializeAddrHdr serializes destination and source ISD-AS-Host address triples into the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
 // (joao) no support for the copy function
-requires acc(s) && InvariantSCION(s)
+requires acc(s) && InvariantSCION(*s)
 ensures acc(s) // && InvariantSCION(s)
 func (s *SCION) SerializeAddrHdr(buf []byte) error {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(buf))
 	}
-	unfold InvariantSCION(s)
+	unfold InvariantSCION(*s)
 	dstAddrBytes := addrBytes(s.DstAddrLen)
 	srcAddrBytes := addrBytes(s.SrcAddrLen)
 	offset := 0
@@ -587,7 +584,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte) error {
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
 // (joao) this is causing the verifier to diverge
-requires acc(s) && InvariantSCION(s)
+requires acc(s) && InvariantSCION(*s)
 requires p > 0
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
 ensures acc(s) // && InvariantSCION(s)

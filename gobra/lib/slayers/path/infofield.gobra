@@ -66,7 +66,6 @@ func (inf *InfoField) DecodeFromBytes(raw []byte, ghost p perm) error {
 	inf.Peer = raw[0]&0x2 == 0x2
 	// inf.SegID = binary.BigEndian.Uint16(raw[2:4])
 	// inf.Timestamp = binary.BigEndian.Uint32(raw[4:8])
-	assert false
 	return nil
 }
 
@@ -74,9 +73,9 @@ func (inf *InfoField) DecodeFromBytes(raw []byte, ghost p perm) error {
 // path.InfoLen
 requires p > 0 && p <= 1
 requires acc(inf, p)
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
+requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures acc(inf, p)
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func (inf *InfoField) SerializeTo(b []byte, ghost p perm) error {
 	if len(b) < InfoLen {
 		return serrors.New("buffer for InfoField too short", "expected", InfoLen,
