@@ -319,6 +319,8 @@ type scionPacketProcessor struct {
 
 requires acc(p)
 requires acc(p.pathVar)
+requires acc(p.infoField)
+requires acc(p.hopField)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires acc((p.scionLayer.PathVar).(*scion.Raw))
 requires scion.bytesAcc(((p.scionLayer.PathVar).(*scion.Raw)).Raw)
@@ -355,19 +357,19 @@ func (p *scionPacketProcessor) process() (pr processResult, err error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
 	}
-	// if r, err := p.validatePktLen(); err != nil {
-	// 	return r, err
-	// }
-//	/* (joao) skip for now
-//	if err := p.updateNonConsDirIngressSegID(); err != nil {
-//		return processResult{}, err
-//	}
-//	*/
-//	/* (joao) skip for now
-//	if r, err := p.verifyCurrentMAC(); err != nil {
-//		return r, err
-//	}
-//	*/
+	if r, err := p.validatePktLen(); err != nil {
+		return r, err
+	}
+	/* (joao) skip for now
+	if err := p.updateNonConsDirIngressSegID(); err != nil {
+		return processResult{}, err
+	}
+	*/
+	/* (joao) skip for now
+	if r, err := p.verifyCurrentMAC(); err != nil {
+		return r, err
+	}
+	*/
 //	/* (joao) skip by now
 //	if r, err := p.handleIngressRouterAlert(); err != nil {
 //		return r, err
@@ -438,6 +440,8 @@ func (p *scionPacketProcessor) process() (pr processResult, err error) {
 }
 
 requires acc(p)
+requires acc(p.infoField)
+requires acc(p.hopField)
 requires acc(p.pathVar)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires acc((p.scionLayer.PathVar).(*scion.Raw))
@@ -455,6 +459,8 @@ requires (scion.MetaLen + (p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.NumIN
 requires int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrINF) >= 0
 requires (scion.MetaLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
 ensures acc(p)
+ensures err == nil ==> acc(p.infoField)
+ensures err == nil ==> acc(p.hopField)
 ensures acc(p.pathVar)
 ensures gopacket.bytesAcc(p.origPacket)
 ensures acc(&p.d.external)
@@ -494,7 +500,7 @@ func (p *scionPacketProcessor) parsePath() (pr processResult, err error) {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
-	if r, err := p.validateHopExpiry(); err != nil {	
+	if r, err := p.validateHopExpiry(); err != nil {
 		return r, err
 	}
 	if r, err := p.validateIngressID(); err != nil {
@@ -667,6 +673,10 @@ requires layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires p.scionLayer.PathVar == p.pathVar
 requires scion.bytesAcc(((p.scionLayer.PathVar).(*scion.Raw)).Raw)
+requires int(p.pathVar.BaseEmbedded.PathMeta.CurrINF) >= 0
+requires (scion.MetaLen + int(p.pathVar.BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
+requires (scion.MetaLen + p.pathVar.BaseEmbedded.NumINF*path.InfoLen + int(p.pathVar.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
+requires (scion.MetaLen + p.pathVar.BaseEmbedded.NumINF*path.InfoLen + int(p.pathVar.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
 ensures acc(p)
 ensures acc(p.pathVar)
 ensures acc(p.infoField)
@@ -676,10 +686,16 @@ ensures acc(&p.d.external)
 ensures acc(&p.d.internalIP)
 ensures acc(&p.d.localIA)
 ensures acc(p.d.external)
-requires int(p.pathVar.BaseEmbedded.PathMeta.CurrINF) >= 0
-requires (scion.MetaLen + int(p.pathVar.BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
-requires (scion.MetaLen + p.pathVar.BaseEmbedded.NumINF*path.InfoLen + int(p.pathVar.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
-requires (scion.MetaLen + p.pathVar.BaseEmbedded.NumINF*path.InfoLen + int(p.pathVar.BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
+ensures p.buffer.Mem()
+ensures err == nil ==> typeOf(p.scionLayer.PathVar) == *scion.Raw
+ensures err == nil ==> p.scionLayer.PathVar == p.pathVar
+ensures err == nil ==> scion.bytesAcc(((p.scionLayer.PathVar).(*scion.Raw)).Raw)
+ensures err == nil ==> slayers.InvariantSCION(p.scionLayer)
+ensures err == nil ==> layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
+ensures err == nil ==> (scion.MetaLen + (p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.NumINF*path.InfoLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
+ensures err == nil ==> (scion.MetaLen + (p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.NumINF*path.InfoLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
+ensures err == nil ==> int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrINF) >= 0
+ensures err == nil ==> (scion.MetaLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
 func (p *scionPacketProcessor) validatePktLen() (pr processResult, err error) {
 	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.EmbeddedLayer.Payload) {
 		return processResult{}, nil
