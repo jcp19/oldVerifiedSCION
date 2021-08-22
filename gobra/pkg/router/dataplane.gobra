@@ -330,6 +330,7 @@ requires acc(&p.d.internalIP)
 requires acc(&p.d.localIA)
 requires acc(p.d.external)
 requires p.buffer.Mem()
+requires scion.bytesAcc(p.rawPkt)
 requires slayers.InvariantSCION(p.scionLayer)
 requires layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
 requires (scion.MetaLen + (p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.NumINF*path.InfoLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
@@ -344,6 +345,7 @@ ensures acc(&p.d.internalIP)
 ensures acc(&p.d.localIA)
 ensures acc(p.d.external)
 ensures p.buffer.Mem()
+ensures scion.bytesAcc(p.rawPkt)
 ensures err == nil ==> typeOf(p.scionLayer.PathVar) == *scion.Raw
 ensures err == nil ==> (p.scionLayer.PathVar).(*scion.Raw) == p.pathVar
 ensures err == nil ==> scion.bytesAcc(((p.scionLayer.PathVar).(*scion.Raw)).Raw)
@@ -360,11 +362,9 @@ func (p *scionPacketProcessor) process() (pr processResult, err error) {
 	if r, err := p.validatePktLen(); err != nil {
 		return r, err
 	}
-	/* (joao) skip for now
 	if err := p.updateNonConsDirIngressSegID(); err != nil {
 		return processResult{}, err
 	}
-	*/
 	/* (joao) skip for now
 	if r, err := p.verifyCurrentMAC(); err != nil {
 		return r, err
@@ -452,6 +452,7 @@ requires acc(&p.d.internalIP)
 requires acc(&p.d.localIA)
 requires acc(p.d.external)
 requires p.buffer.Mem()
+requires scion.bytesAcc(p.rawPkt)
 requires slayers.InvariantSCION(p.scionLayer)
 requires layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
 requires (scion.MetaLen + (p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.NumINF*path.InfoLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
@@ -468,6 +469,7 @@ ensures acc(&p.d.internalIP)
 ensures acc(&p.d.localIA)
 ensures acc(p.d.external)
 ensures p.buffer.Mem()
+ensures scion.bytesAcc(p.rawPkt)
 ensures err == nil ==> typeOf(p.scionLayer.PathVar) == *scion.Raw
 ensures err == nil ==> (p.scionLayer.PathVar).(*scion.Raw) == p.pathVar
 ensures err == nil ==> scion.bytesAcc(((p.scionLayer.PathVar).(*scion.Raw)).Raw)
@@ -488,22 +490,30 @@ func (p *scionPacketProcessor) parsePath() (pr processResult, err error) {
 	// var err error (lhalm) defined it as return value
 	// (lhalm) path was renamed to pathVar to avoid error
 	// p.hopField, err = p.path.GetCurrentHopField()
+	assert scion.bytesAcc(p.rawPkt)
 	p.hopField, err = p.pathVar.GetCurrentHopField(1/2)
 	if err != nil {
+		assert scion.bytesAcc(p.rawPkt)
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
 	// (lhalm) path was renamed to pathVar to avoid error
 	// p.infoField, err = p.path.GetCurrentInfoField()
+	assert scion.bytesAcc(p.rawPkt)
 	p.infoField, err = p.pathVar.GetCurrentInfoField(1/2)
 	if err != nil {
+		assert scion.bytesAcc(p.rawPkt)
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
+	assert scion.bytesAcc(p.rawPkt)
 	if r, err := p.validateHopExpiry(); err != nil {
+		// assert scion.bytesAcc(p.rawPkt)
 		return r, err
 	}
+	assert scion.bytesAcc(p.rawPkt)
 	if r, err := p.validateIngressID(); err != nil {
+		assert scion.bytesAcc(p.rawPkt)
 		return r, err
 	}
 	return processResult{}, nil
@@ -519,6 +529,7 @@ requires acc(&p.d.internalIP)
 requires acc(&p.d.localIA)
 requires acc(p.d.external)
 requires p.buffer.Mem()
+requires scion.bytesAcc(p.rawPkt)
 requires slayers.InvariantSCION(p.scionLayer)
 requires layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
@@ -538,6 +549,7 @@ ensures acc(&p.d.internalIP)
 ensures acc(&p.d.localIA)
 ensures acc(p.d.external)
 ensures p.buffer.Mem()
+ensures scion.bytesAcc(p.rawPkt)
 ensures err == nil ==> slayers.InvariantSCION(p.scionLayer)
 ensures err == nil ==> typeOf(p.scionLayer.PathVar) == *scion.Raw
 ensures err == nil ==> p.scionLayer.PathVar == p.pathVar
@@ -593,6 +605,7 @@ requires acc(&p.d.internalIP)
 requires acc(&p.d.localIA)
 requires acc(p.d.external)
 requires p.buffer.Mem()
+requires scion.bytesAcc(p.rawPkt)
 requires slayers.InvariantSCION(p.scionLayer)
 requires layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
@@ -612,6 +625,7 @@ ensures acc(&p.d.internalIP)
 ensures acc(&p.d.localIA)
 ensures acc(p.d.external)
 ensures p.buffer.Mem()
+ensures scion.bytesAcc(p.rawPkt)
 ensures err == nil ==> slayers.InvariantSCION(p.scionLayer)
 ensures err == nil ==> typeOf(p.scionLayer.PathVar) == *scion.Raw
 ensures err == nil ==> p.scionLayer.PathVar == p.pathVar
@@ -668,6 +682,7 @@ requires acc(&p.d.internalIP)
 requires acc(&p.d.localIA)
 requires acc(p.d.external)
 requires p.buffer.Mem()
+requires scion.bytesAcc(p.rawPkt)
 requires slayers.InvariantSCION(p.scionLayer)
 requires layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
@@ -687,6 +702,7 @@ ensures acc(&p.d.internalIP)
 ensures acc(&p.d.localIA)
 ensures acc(p.d.external)
 ensures p.buffer.Mem()
+ensures scion.bytesAcc(p.rawPkt)
 ensures err == nil ==> typeOf(p.scionLayer.PathVar) == *scion.Raw
 ensures err == nil ==> p.scionLayer.PathVar == p.pathVar
 ensures err == nil ==> scion.bytesAcc(((p.scionLayer.PathVar).(*scion.Raw)).Raw)
@@ -722,6 +738,46 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, err error) {
 	)
 }
 
+preserves acc(&p.infoField) && acc(p.infoField)
+preserves acc(&p.hopField) && acc(p.hopField)
+preserves acc(&p.rawPkt)
+preserves acc(&p.ingressID)
+preserves acc(&p.buffer)
+preserves acc(&p.pathVar) && acc(&p.pathVar.BaseEmbedded) && acc(&p.pathVar.Raw)
+preserves int(p.pathVar.BaseEmbedded.PathMeta.CurrINF) >= 0
+preserves (scion.MetaLen + int(p.pathVar.BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len(p.pathVar.Raw)
+preserves scion.bytesAcc(p.pathVar.Raw)
+preserves scion.bytesAcc(p.rawPkt)
+preserves p.buffer.Mem()
+preserves acc(&p.scionLayer)
+preserves slayers.InvariantSCION(p.scionLayer)
+preserves layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
+preserves typeOf(p.scionLayer.PathVar) == *scion.Raw
+preserves (p.scionLayer.PathVar).(*scion.Raw) == p.pathVar
+preserves (scion.MetaLen + (p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.NumINF*path.InfoLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
+preserves (scion.MetaLen + (p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.NumINF*path.InfoLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
+preserves int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrINF) >= 0
+preserves (scion.MetaLen + int((p.scionLayer.PathVar).(*scion.Raw).BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
+func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error {
+	// against construction dir the ingress router updates the SegID, ifID == 0
+	// means this comes from this AS itself, so nothing has to be done.
+	// TODO(lukedirtwalker): For packets destined to peer links this shouldn't
+	// be updated.
+	if !p.infoField.ConsDir && p.ingressID != 0 {
+		p.infoField.UpdateSegID(p.hopField.Mac)
+		// (lhalm) rename to pathVar and add explicit baseEmbedded
+		// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+		if err := p.pathVar.SetInfoField(p.infoField, int(p.pathVar.BaseEmbedded.PathMeta.CurrINF), 1/2); err != nil {
+			return serrors.WrapStr("update info field", err)
+		}
+		// (lhalm) take address to adhere with changed method signature
+		if err := updateSCIONLayer(p.rawPkt, &p.scionLayer, p.buffer); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 requires acc(p)
 requires acc(p.pathVar)
 requires acc(p.infoField)
@@ -732,13 +788,13 @@ requires acc(&p.d.internalIP)
 requires acc(&p.d.localIA)
 requires acc(p.d.external)
 requires p.buffer.Mem()
+requires scion.bytesAcc(p.rawPkt)
 requires acc(scmpH)
 requires scmpP.Mem(1/1)
 requires slayers.InvariantSCION(p.scionLayer)
 requires layers.bytesAcc(p.scionLayer.EmbeddedLayer.Contents, 1/1)
 requires typeOf(p.scionLayer.PathVar) == *scion.Raw
 requires p.scionLayer.PathVar == p.pathVar
-// requires acc((p.scionLayer.PathVar).(*scion.Raw), 1/2)
 requires scion.bytesAcc(((p.scionLayer.PathVar).(*scion.Raw)).Raw)
 requires int(p.pathVar.BaseEmbedded.PathMeta.CurrINF) >= 0
 requires (scion.MetaLen + int(p.pathVar.BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len((p.scionLayer.PathVar).(*scion.Raw).Raw)
@@ -754,6 +810,7 @@ ensures acc(&p.d.internalIP)
 ensures acc(&p.d.localIA)
 ensures acc(p.d.external)
 ensures p.buffer.Mem()
+ensures scion.bytesAcc(p.rawPkt)
 ensures err != nil
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (pr processResult, err error) {
 	// (lhalm) the following block is moved to the packSCMPHelper1 function
@@ -1302,6 +1359,29 @@ func (s scmpPacker) prepareSCMPHelper4(cause error, scmpH *slayers.SCMP, scmpP g
 		cannotRoute := serrors.New("cannot route, dropping pkt")
 		return serrors.Wrap(cannotRoute, err, "details", "serializing SCMP message")
 	}
+}
+
+preserves buffer.Mem()
+// preserves forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+preserves scion.bytesAcc(rawPkt)
+preserves acc(s, 1/2)
+preserves slayers.InvariantSCION(*s)
+preserves layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
+// (lhalm) make s pointer type such that Gobra realises that Serialize to is a valid method.
+func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) error {
+	if err := buffer.Clear(); err != nil {
+		return err
+	}
+	if err := s.SerializeTo(buffer, gopacket.SerializeOptions{}); err != nil {
+		return err
+	}
+	// TODO(lukedirtwalker): We should add a method to the scion layers
+	// which can write into the existing buffer, see also the discussion in
+	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
+	rawContents := buffer.Bytes()
+	// (lhalm) don't exactly know why this does not work
+	// copy(rawPkt[:len(rawContents)], rawContents)
+	return nil
 }
 
 /*func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
