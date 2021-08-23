@@ -31,6 +31,8 @@ type Raw struct {
 pred RawInvariant(r *Raw) {
 	BaseInvariant(&r.Base) &&
 	acc(&r.Raw) && 
+	// assumption clarified in https://github.com/scionproto/scion/issues/4094
+	len(r.Raw) >= r.Len() &&
 	forall i int :: 0 <= i && i < len(r.Raw) ==> acc(&(r.Raw)[i])
 }
 
@@ -62,12 +64,8 @@ func (s *Raw) DecodeFromBytes(data []byte) (res error) {
 // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
 // otherwise an error is returned.
 requires 0 < p && p <= 1
-requires RawInvariant(s)
-// (joao) the following pre-condition seems to be an undocumented assumption. It may be promoted
-//        to a condition in the RawInvariant predicate
-// requires unfolding acc(RawInvariant(s), p) in len(s.Raw) >= MetaLen
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures RawInvariant(s)
+preserves RawInvariant(s)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func (s *Raw) SerializeTo(b []byte, ghost p perm) error {
 	unfold RawInvariant(s)
 	if s.Raw == nil {
@@ -82,8 +80,7 @@ func (s *Raw) SerializeTo(b []byte, ghost p perm) error {
 	// directly.
 	unfold BaseInvariant(&s.Base)
 	// (joao) added parentheses surrounding (s.Raw)
-	// (joao) testing without slicing operation, like suggested in my issue in the scion repository
-	if err := s.PathMeta.SerializeTo((s.Raw)/*[:MetaLen]*/, p); err != nil {
+	if err := s.PathMeta.SerializeTo((s.Raw)[:MetaLen], p); err != nil {
 		fold BaseInvariant(&s.Base)
 		fold RawInvariant(s)
 		return err
@@ -127,71 +124,162 @@ func (s *Raw) SerializeTo(b []byte, ghost p perm) error {
 //}
 
 // GetInfoField returns the InfoField at a given index.
-//requires p > 0
-//requires acc(RawInvariant(s), p)
-//ensures  acc(RawInvariant(s), p)
-//func (s *Raw) GetInfoField(idx int, ghost p perm) (*path.InfoField, error) {
-//	unfold acc(RawInvariant(s), p)
-//	unfold acc(BaseInvariant(&s.Base), p)
-//	if idx >= s.NumINF {
+requires p > 0
+requires 0 <= idx
+preserves  acc(RawInvariant(s), p)
+ensures retErr != nil ==> retInfo == nil
+ensures retErr == nil ==> acc(retInfo)
+func (s *Raw) GetInfoField(idx int, ghost p perm) (retInfo *path.InfoField, retErr error) {
+	unfold acc(RawInvariant(s), p)
+	unfold acc(BaseInvariant(&s.Base), p)
+	if idx >= s.NumINF {
 // (joao) introduces `tmp` to be able to fold predicate before returning
-//		tmp := serrors.New("InfoField index out of bounds", "max", s.NumINF-1, "actual", idx)
-//		fold acc(RawInvariant(s), p)
-//		return nil, tmp
-//	}
-//	infOffset := MetaLen + idx*path.InfoLen
-//	info := &path.InfoField{}
-//	if err := info.DecodeFromBytes(s.Raw[infOffset : infOffset+path.InfoLen]); err != nil {
-//		return nil, err
-//	}
-//	return info, nil
-//}
+		tmp := serrors.New("InfoField index out of bounds", "max", s.NumINF-1, "actual", idx)
+		fold acc(BaseInvariant(&s.Base), p)
+		fold acc(RawInvariant(s), p)
+		return nil, tmp
+	}
+	infOffset := MetaLen + idx*path.InfoLen
+	info := &path.InfoField{}
+// (joao) add parentheses surrounding s.Raw
+	assert forall i int :: 0 <= i && i < path.InfoLen ==> &((s.Raw)[infOffset : infOffset+path.InfoLen])[i] == &(s.Raw)[infOffset + i]
+	if err := info.DecodeFromBytes((s.Raw)[infOffset : infOffset+path.InfoLen], p/2); err != nil {
+		fold acc(BaseInvariant(&s.Base), p)
+		fold acc(RawInvariant(s), p)
+		return nil, err
+	}
+	fold acc(BaseInvariant(&s.Base), p)
+	fold acc(RawInvariant(s), p)
+	return info, nil
+}
 
 // GetCurrentInfoField is a convenience method that returns the current hop field pointed to by the
 // CurrINF index in the path meta header.
-// func (s *Raw) GetCurrentInfoField() (*path.InfoField, error) {
-//	return s.GetInfoField(int(s.PathMeta.CurrINF))
-// }
+requires p > 0
+preserves acc(RawInvariant(s), p)
+ensures retErr != nil ==> retInfo == nil
+ensures retErr == nil ==> acc(retInfo)
+func (s *Raw) GetCurrentInfoField(ghost p perm) (retInfo *path.InfoField, retErr error) {
+	// (joao) introduced idx to store an intermediate value
+	unfold acc(RawInvariant(s), p)
+	unfold acc(BaseInvariant(&s.Base), p) 
+	// (joao) s.PathMeta.CurrINF must be positive but currently, Gobra fails to prove that
+	assume int(s.PathMeta.CurrINF) >= 0
+	idx := int(s.PathMeta.CurrINF)
+	fold acc(BaseInvariant(&s.Base), p) 
+	fold acc(RawInvariant(s), p)
+	return s.GetInfoField(idx, p)
+}
 
-//// SetInfoField updates the InfoField at a given index.
-//func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
-//	if idx >= s.NumINF {
-//		return serrors.New("InfoField index out of bounds", "max", s.NumINF-1, "actual", idx)
-//	}
-//	if info == nil {
-//		return serrors.New("Infofield cannot be nil")
-//	}
-//	infOffset := MetaLen + idx*path.InfoLen
-//	return info.SerializeTo(s.Raw[infOffset : infOffset+path.InfoLen])
-//}
+// SetInfoField updates the InfoField at a given index.
+requires p > 0
+requires idx >= 0
+preserves RawInvariant(s) && acc(info, p)
+func (s *Raw) SetInfoField(info *path.InfoField, idx int, ghost p perm) error {
+	unfold RawInvariant(s)
+	unfold BaseInvariant(&s.Base)
+	if idx >= s.NumINF {
+		// (joao) introduced `tmp`, defer would be useful here
+		tmp := serrors.New("InfoField index out of bounds", "max", s.NumINF-1, "actual", idx)
+		fold BaseInvariant(&s.Base)
+		fold RawInvariant(s)
+		return tmp
+	}
+	if info == nil {
+		fold BaseInvariant(&s.Base)
+		fold RawInvariant(s)
+		return serrors.New("Infofield cannot be nil")
+	}
+	infOffset := MetaLen + idx*path.InfoLen
+	// (joao) introduce `ret` variable
+	// (joao) add parentheses surrounding s.Raw
+	assert forall i int :: 0 <= i && i < path.InfoLen ==> &((s.Raw)[infOffset : infOffset+path.InfoLen])[i] == &(s.Raw)[infOffset + i]
+	ret := info.SerializeTo((s.Raw)[infOffset : infOffset+path.InfoLen], p/2)
+	fold BaseInvariant(&s.Base)
+	fold RawInvariant(s)
+	return ret
+}
 
-//// GetHopField returns the HopField at a given index.
-//func (s *Raw) GetHopField(idx int) (*path.HopField, error) {
-//	if idx >= s.NumHops {
-//		return nil, serrors.New("HopField index out of bounds", "max", s.NumHops-1, "actual", idx)
-//	}
-//	hopOffset := MetaLen + s.NumINF*path.InfoLen + idx*path.HopLen
-//	hop := &path.HopField{}
-//	if err := hop.DecodeFromBytes(s.Raw[hopOffset : hopOffset+path.HopLen]); err != nil {
-//		return nil, err
-//	}
-//	return hop, nil
-//}
+// GetHopField returns the HopField at a given index.
+requires p > 0
+requires 0 <= idx
+preserves acc(RawInvariant(s), p)
+ensures retErr != nil ==> retHop == nil
+ensures retErr == nil ==> acc(retHop)
+func (s *Raw) GetHopField(idx int, ghost p perm) (retHop *path.HopField, retErr error) {
+	unfold acc(RawInvariant(s), p)
+	unfold acc(BaseInvariant(&s.Base), p)
+	if idx >= s.NumHops {
+		// (joao) introduced the `err` variable
+		err := serrors.New("HopField index out of bounds", "max", s.NumHops-1, "actual", idx)
+		fold acc(BaseInvariant(&s.Base), p)
+		fold acc(RawInvariant(s), p)
+		return nil, err
+	}
+	hopOffset := MetaLen + s.NumINF*path.InfoLen + idx*path.HopLen
+	hop := &path.HopField{}
+	assert forall i int :: 0 <= i && i < path.HopLen ==> &((s.Raw)[hopOffset : hopOffset+path.HopLen])[i] == &(s.Raw)[hopOffset + i]
+	// (joao) add parentheses surrounding s.Raw
+	if err := hop.DecodeFromBytes((s.Raw)[hopOffset : hopOffset+path.HopLen], p/2); err != nil {
+		fold acc(BaseInvariant(&s.Base), p)
+		fold acc(RawInvariant(s), p)
+		return nil, err
+	}
+	fold acc(BaseInvariant(&s.Base), p)
+	fold acc(RawInvariant(s), p)
+	return hop, nil
+}
 
-//// GetCurrentHopField is a convenience method that returns the current hop field pointed to by the
-//// CurrHF index in the path meta header.
-//func (s *Raw) GetCurrentHopField() (*path.HopField, error) {
-//	return s.GetHopField(int(s.PathMeta.CurrHF))
-//}
+// GetCurrentHopField is a convenience method that returns the current hop field pointed to by the
+// CurrHF index in the path meta header.
+requires p > 0
+preserves acc(RawInvariant(s), p)
+ensures retErr != nil ==> retHop == nil
+ensures retErr == nil ==> acc(retHop)
+func (s *Raw) GetCurrentHopField(ghost p perm) (retHop *path.HopField, retErr error) {
+	// (joao) introduced idx to store an intermediate value
+	unfold acc(RawInvariant(s), p)
+	unfold acc(BaseInvariant(&s.Base), p) 
+	// (joao) s.PathMeta.CurrHF must be positive but currently, Gobra fails to prove that
+	assume int(s.PathMeta.CurrHF) >= 0
+	idx := int(s.PathMeta.CurrHF)
+	fold acc(BaseInvariant(&s.Base), p) 
+	fold acc(RawInvariant(s), p)
+	return s.GetHopField(idx, p)
+}
 
-//// SetHopField updates the HopField at a given index.
-//func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
-//	if idx >= s.NumHops {
-//		return serrors.New("HopField index out of bounds", "max", s.NumHops-1, "actual", idx)
-//	}
-//	if hop == nil {
-//		return serrors.New("Hopfield cannot be nil")
-//	}
-//	hopOffset := MetaLen + s.NumINF*path.InfoLen + idx*path.HopLen
-//	return hop.SerializeTo(s.Raw[hopOffset : hopOffset+path.HopLen])
-//}
+// SetHopField updates the HopField at a given index.
+requires p > 0
+requires idx >= 0
+preserves RawInvariant(s) 
+preserves hop != nil ==> acc(hop, p)
+preserves hop != nil && forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i], p)
+// (joao) verified but commented for performance reasons
+func (s *Raw) SetHopField(hop *path.HopField, idx int, ghost p perm) error /* {
+	unfold RawInvariant(s)
+	unfold acc(BaseInvariant(&s.Base), p) 
+	if idx >= s.NumHops {
+		// (joao) introduced `ret` var
+		ret := serrors.New("HopField index out of bounds", "max", s.NumHops-1, "actual", idx)
+		fold acc(BaseInvariant(&s.Base), p) 
+		fold RawInvariant(s)
+		return ret
+	}
+	if hop == nil {
+		// (joao) introduced `ret` var
+		ret := serrors.New("Hopfield cannot be nil")
+		fold acc(BaseInvariant(&s.Base), p) 
+		fold RawInvariant(s)
+		return ret
+	}
+	hopOffset := MetaLen + s.NumINF*path.InfoLen + idx*path.HopLen
+	assert forall i int :: 0 <= i && i < path.HopLen ==> &((s.Raw)[hopOffset : hopOffset+path.HopLen])[i] == &(s.Raw)[hopOffset + i]
+	assert len((s.Raw)[hopOffset : hopOffset+path.HopLen]) >= 12
+	// (joao) add parentheses surrounding (s.Raw)
+	// (joao) introduced `ret` var
+	ret := hop.SerializeTo((s.Raw)[hopOffset : hopOffset+path.HopLen], p)
+	fold acc(BaseInvariant(&s.Base), p) 
+	fold RawInvariant(s)
+	return ret
+}
+*/
