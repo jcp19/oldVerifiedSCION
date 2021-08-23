@@ -1,10 +1,10 @@
 package layers
 
 type UDP struct {
-	// BaseLayer
+	BaseLayer
 	// SrcPort, DstPort UDPPort
-	// Length           uint16
-	// Checksum         uint16
-	// sPort, dPort     []byte
+	Length           uint16
+	Checksum         uint16
+	sPort, dPort     []byte
 	// tcpipchecksum
 }

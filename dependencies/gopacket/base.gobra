@@ -1,37 +1,53 @@
 package gopacket
 
 type Layer interface {
-	pred Mem()
+	pred ContentsMem()
+	pred PayloadMem()
 
-	requires Mem()
-	ensures Mem()
-	LayerType() LayerType
+	// (lhalm) returns a global constant, no need for memory permissions
+	pure LayerType() LayerType
 
-	requires Mem()
-	ensures Mem()
-	LayerContents() []byte
+	requires 0 < p && p <= 1
+	requires acc(ContentsMem(), p)
+	ensures acc(ContentsMem(), p/2)
+	ensures acc(bytesAcc(data), p/2)
+	LayerContents(ghost p perm) (data []byte)
 
-	requires Mem()
-	ensures Mem()
-	LayerPayload() []byte
+	requires 0 < p && p <= 1
+	requires acc(PayloadMem(), p)
+	ensures acc(PayloadMem(), p/2)
+	ensures acc(bytesAcc(data), p/2)
+	LayerPayload(ghost p perm) (data []byte)
 }
 
 type NetworkLayer interface {
-	pred Mem(p perm)
-	// (lhalm) composition not supported, add methods manually
+	pred Mem()
+	pred ContentsMem()
+	pred PayloadMem()
+
+	// (lhalm) interface composition not supported, add methods manually
 	// Layer	
-	requires Mem(1/1)
-	ensures Mem(1/1)
-	LayerType() LayerType
+	
+	// (lhalm) returns a global constant, no need for memory permissions
+	pure LayerType() LayerType
 
-	requires Mem(1/1)
-	ensures Mem(1/2)
-	LayerContents() []byte
+	requires 0 < p && p <= 1
+	requires acc(Mem(), p)
+	requires acc(ContentsMem(), p)
+	ensures acc(Mem(), p)
+	ensures acc(ContentsMem(), p/2)
+	ensures acc(bytesAcc(data), p/2)
+	LayerContents(ghost p perm) (data []byte)
 
-	requires Mem(1/1)
-	ensures Mem(1/2)
-	LayerPayload() []byte
-	// (lhalm) end of parent methods
+	requires 0 < p && p <= 1
+	requires acc(Mem(), p)
+	requires acc(PayloadMem(), p)
+	ensures acc(Mem(), p)
+	ensures acc(PayloadMem(), p/2)
+	ensures acc(bytesAcc(data), p/2)
+	LayerPayload(ghost p perm) (data []byte)
+
+	// (lhalm) end of Layer methods
 	// NetworkFlow() Flow
 }
 
@@ -47,19 +63,19 @@ type NetworkLayer interface {
 // 	}
 // }
 
-type Payload []byte
+// type Payload []byte
 
-func (p Payload) LayerType() LayerType
+// func (p Payload) LayerType() LayerType
 
-func (p Payload) LayerContents() []byte
+// func (p Payload) LayerContents() []byte
 
-func (p Payload) LayerPayload() []byte
+// func (p Payload) LayerPayload() []byte
 
-func (p Payload) Payload() []byte { return []byte(p) }
+// func (p Payload) Payload() []byte { return []byte(p) }
 
-func (p Payload) String() string
+// func (p Payload) String() string
 
-func (p Payload) GoString() string
+// func (p Payload) GoString() string
 
 // func (p Payload) CanDecode() LayerClass { return LayerTypePayload }
 
@@ -70,4 +86,4 @@ func (p Payload) GoString() string
 // 	return nil
 // }
 
-func (p Payload) SerializeTo(b SerializeBuffer, opts SerializeOptions) error
+// func (p Payload) SerializeTo(b SerializeBuffer, opts SerializeOptions) error

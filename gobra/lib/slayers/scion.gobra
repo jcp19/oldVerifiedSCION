@@ -136,39 +136,50 @@ type Path interface {
 	Len() int
 }
 
-pred (s *SCION) Mem(p perm) {
-	acc(s) && InvariantSCION(*s) &&
-	layers.bytesAcc(s.EmbeddedLayer.Contents, p)
+pred (s *SCION) Mem() {
+	acc(s) && InvariantSCION(*s)
+}
+pred (s *SCION) ContentsMem() {
+	acc(&s.EmbeddedLayer) &&
+	gopacket.bytesAcc(s.EmbeddedLayer.Contents)
+}
+pred (s *SCION) PayloadMem() {
+	acc(&s.EmbeddedLayer) && 
+	gopacket.bytesAcc(s.EmbeddedLayer.Payload)
 }
 (*SCION) implements gopacket.SerializableLayer {
 
-	(s *SCION) LayerType() (lt gopacket.LayerType) {
-		lt = s.LayerType()
+	pure (s *SCION) LayerType() gopacket.LayerType {
+		return s.LayerType()
 	} 
 
 	(s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
-		unfold s.Mem(1/1)
+		unfold s.Mem()
 		err = s.SerializeTo(b, opts)
-		fold s.Mem(1/1)
+		fold s.Mem()
 	}
 }
 
 (*SCION) implements gopacket.NetworkLayer {
 
-	(s *SCION) LayerType() (lt gopacket.LayerType) {
-		lt = s.LayerType()
+	pure (s *SCION) LayerType() gopacket.LayerType {
+		return s.LayerType()
 	} 
 
-	(s *SCION) LayerContents() (data []byte) {
-		unfold s.Mem(1/1)
-		data = s.LayerContents()
-		fold s.Mem(1/2)
+	(s *SCION) LayerContents(ghost p perm) (data []byte) {
+		unfold acc(s.Mem(), p)
+		unfold acc(s.ContentsMem(), p)
+		data = s.LayerContents(p)
+		fold acc(s.Mem(), p)
+		fold acc(s.ContentsMem(), p/2)
 	}
 
-	(s *SCION) LayerPayload() (data []byte) {
-		unfold s.Mem(1/1)
-		data = s.LayerPayload()
-		fold s.Mem(1/2)
+	(s *SCION) LayerPayload(ghost p perm) (data []byte) {
+		unfold acc(s.Mem(), p)
+		unfold acc(s.PayloadMem(), p)
+		data = s.LayerPayload(p)
+		fold acc(s.Mem(), p)
+		fold acc(s.PayloadMem(), p/2)
 	}
 }
 
@@ -236,21 +247,24 @@ pred InvariantSCION(s SCION) {
 	validAddrLen(s.DstAddrLen) && validAddrLen(s.SrcAddrLen)
 }
 // (lhalm) include from composite layer because composition is not supported
-requires acc(s)
-requires InvariantSCION(*s)
-requires layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
-ensures acc(s)
-ensures InvariantSCION(*s)
-ensures layers.bytesAcc(data, 1/2)
-ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/2)
-func (s *SCION) LayerContents() (data []byte) {
-	d := s.EmbeddedLayer.LayerContents(1/2)
+requires 0 < p && p <= 1
+requires acc(s, p)
+requires acc(InvariantSCION(*s), p)
+requires acc(gopacket.bytesAcc(s.EmbeddedLayer.Contents), p)
+ensures acc(s, p)
+ensures acc(InvariantSCION(*s), p)
+ensures acc(gopacket.bytesAcc(data), p/2)
+ensures acc(gopacket.bytesAcc(s.EmbeddedLayer.Contents), p/2)
+func (s *SCION) LayerContents(ghost p perm) (data []byte) {
+	unfold acc(InvariantSCION(*s), p)
+	d := s.EmbeddedLayer.LayerContents(p)
+	fold acc(InvariantSCION(*s), p)
 	return d
 }
 
-func (s *SCION) LayerType() gopacket.LayerType {
+pure func (s *SCION) LayerType() gopacket.LayerType //{
 	// return LayerTypeSCION
-}
+//}
 
 //func (s *SCION) CanDecode() gopacket.LayerClass {
 //	return LayerTypeSCION
@@ -262,14 +276,20 @@ func (s *SCION) LayerType() gopacket.LayerType {
 
 // (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`
 // (joao) `layers.BaseLayer` is implemented in a third party package
-requires acc(s, 1/2)
-requires layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
-ensures acc(s, 1/2)
-ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/2)
-func (s *SCION) LayerPayload() []byte
-//{
-//	return s.Payload
-//}
+requires 0 < p && p <= 1
+requires acc(s, p)
+requires acc(InvariantSCION(*s), p)
+requires acc(gopacket.bytesAcc(s.EmbeddedLayer.Payload), p)
+ensures acc(s, p)
+ensures acc(InvariantSCION(*s), p)
+ensures acc(gopacket.bytesAcc(data), p/2)
+ensures acc(gopacket.bytesAcc(s.EmbeddedLayer.Payload), p/2)
+func (s *SCION) LayerPayload(ghost p perm) (data []byte) {
+	unfold acc(InvariantSCION(*s), p)
+	d := s.EmbeddedLayer.LayerPayload(p)
+	fold acc(InvariantSCION(*s), p)
+	return d
+}
 
 // (joao) gopacket not supported for now
 //func (s *SCION) NetworkFlow() gopacket.Flow {
@@ -279,10 +299,8 @@ func (s *SCION) LayerPayload() []byte
 
 requires b.Mem() && acc(s, 1/2)
 requires InvariantSCION(*s)
-requires layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
 ensures b.Mem() && acc(s, 1/2)
 ensures InvariantSCION(*s)
-ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
 //	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
 //	buf, err := b.PrependBytes(scnLen)
@@ -325,7 +343,7 @@ ensures acc(s)
 ensures df.Mem()
 ensures gopacket.bytesAcc(data)
 ensures InvariantSCION(*s)
-ensures layers.bytesAcc(s.EmbeddedLayer.Contents, 1/1)
+ensures gopacket.bytesAcc(s.EmbeddedLayer.Contents)
 // (lhalm) important for dataplane, but not possible due to cyclic imports
 // ensures typeOf(s.PathVar) == *scion.Raw
 // ensures acc((s.PathVar).(*scion.Raw))

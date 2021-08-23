@@ -7,8 +7,12 @@ type LayerTypeMetadata struct {
 	Decoder Decoder
 }
 
+requires meta.Decoder.Mem()
 func RegisterLayerType(num int, meta LayerTypeMetadata) LayerType
 
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i]) && c.Mem()
-ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i]) && c.Mem()
-func (t LayerType) Decode(data []byte, c PacketBuilder) error
+requires 0 < p && p <= 1
+requires acc(bytesAcc(data), p)
+requires c.Mem()
+ensures acc(bytesAcc(data), p/2)
+ensures c.Mem()
+func (t LayerType) Decode(data []byte, c PacketBuilder, ghost p perm) error

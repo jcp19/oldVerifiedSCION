@@ -40,19 +40,19 @@ import (
 //  +-------------------------+
 const MaxSCMPPacketLen = 1232
 
-pred (s *SCMP) Mem(p perm) {
+pred (s *SCMP) Mem() {
 	acc(s)
 }
 (*SCMP) implements gopacket.SerializableLayer {
 
-	(s *SCMP) LayerType() (lt gopacket.LayerType) {
-		lt = s.LayerType()
+	pure (s *SCMP) LayerType() gopacket.LayerType {
+		return s.LayerType()
 	} 
 
 	(s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
-		unfold s.Mem(1/1)
+		unfold s.Mem()
 		err = s.SerializeTo(b, opts)
-		fold s.Mem(1/1)
+		fold s.Mem()
 	}
 }
 
@@ -81,9 +81,9 @@ type SCMP struct {
 }
 
 // LayerType returns LayerTypeSCMP.
-func (s *SCMP) LayerType() gopacket.LayerType {
+pure func (s *SCMP) LayerType() gopacket.LayerType //{
 // 	return LayerTypeSCMP
-}
+//}
 
 // CanDecode returns the set of layer types that this DecodingLayer can decode.
 // func (s *SCMP) CanDecode() gopacket.LayerClass {
