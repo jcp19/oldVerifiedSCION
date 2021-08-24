@@ -34,8 +34,12 @@ pred DecodedInvariant(d* Decoded) {
 	(unfolding BaseInvariant(&d.Base) in (d.NumINF <= MaxINFs && len(d.InfoFields) == d.NumINF)) &&
 	(unfolding BaseInvariant(&d.Base) in (d.NumHops <= MaxHops && len(d.HopFields) == d.NumHops)) &&
 	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc(&(d.InfoFields)[i])) &&
-	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i]))
+	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc((d.InfoFields)[i])) &&
+	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i])) &&
+	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc((d.HopFields)[i]))
 }
+
+// (joao) TODO: Check satisfiability of DecodedInvariant
 
 // Decoded implements the SCION (data-plane) path type. Decoded is intended to be used in
 // non-performance critical code paths, where the convenience of having a fully parsed path trumps
@@ -113,32 +117,71 @@ type Decoded struct {
 
 // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
 // otherwise an error is returned.
-//requires acc(DecodedInvariant(s))
-//func (s *Decoded) SerializeTo(b []byte) error {
-//	unfold DecodedInvariant(s)
-//	unfold BaseInvariant(&s.Base)
-//	if len(b) < s.Len() {
-//		return serrors.New("buffer too small to serialize path.", "expected", s.Len(),
-//			"actual", len(b))
-//	}
-//	if err := s.PathMeta.SerializeTo(b[:MetaLen]); err != nil {
-//		return err
-//	}
-//	offset := MetaLen
+requires p > 0
+preserves acc(DecodedInvariant(s), p)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func (s *Decoded) SerializeTo(b []byte, ghost p perm) error {
+	unfold acc(DecodedInvariant(s), p)
+	if len(b) < s.Len() {
+		ret := serrors.New("buffer too small to serialize path.", "expected", s.Len(),
+			"actual", len(b))
+		fold acc(DecodedInvariant(s), p)
+		return ret
+	}
+	unfold acc(BaseInvariant(&s.Base), p)
+	if err := s.PathMeta.SerializeTo(b[:MetaLen], p/2); err != nil {
+		fold acc(BaseInvariant(&s.Base), p)
+		fold acc(DecodedInvariant(s), p)
+		return err
+	}
+	fold acc(BaseInvariant(&s.Base), p)
+//	fold acc(DecodedInvariant(s), p)
+	offset := MetaLen
+// (joao) range still not supported
 //	for _, info := range s.InfoFields {
 //		if err := info.SerializeTo(b[offset : offset+path.InfoLen]); err != nil {
 //			return err
 //		}
 //		offset += path.InfoLen
 //	}
+// (joao) rewrote the range above as follows:
+	invariant p > 0
+	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	invariant acc(s, p)
+	// invariant acc(&s.InfoFields, p) && acc(&s.HopFields, p)
+	invariant 0 <= i && i <= len(s.InfoFields)
+	invariant offset == MetaLen + i * path.InfoLen
+	// Body of DecodedInvariant, to be able to fold inside the loop
+	// invariant acc(s, p)
+	invariant acc(BaseInvariant(&s.Base), p)
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i], p)
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i], p)
+	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i], p)
+	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc((s.HopFields)[i], p)
+	// End of body of DecodedInvariant, to be able to fold inside the loop
+	invariant len(b) >= MetaLen + len(s.InfoFields) * path.InfoLen
+	for i := 0; i < len(s.InfoFields); i++ {
+		info := (s.InfoFields)[i]
+		assert acc(info, p)
+		assert forall i int :: 0 <= i && i < path.InfoLen ==>
+			&b[offset : offset+path.InfoLen][i] == &b[offset + i]
+		if err := info.SerializeTo(b[offset : offset+path.InfoLen], p); err != nil {
+			fold acc(DecodedInvariant(s), p)
+			return err
+		}
+		offset += path.InfoLen
+	}
+
 //	for _, hop := range s.HopFields {
 //		if err := hop.SerializeTo(b[offset : offset+path.HopLen]); err != nil {
 //			return err
 //		}
 //		offset += path.HopLen
 //	}
-//	return nil
-//}
+	fold acc(BaseInvariant(&s.Base), p)
+	fold acc(DecodedInvariant(s), p)
+	return nil
+}
 
 // Reverse reverses a SCION path.
 //func (s *Decoded) Reverse() error {
