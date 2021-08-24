@@ -1241,32 +1241,32 @@ ensures decPath.BaseEmbedded.NumINF == old(decPath.BaseEmbedded.NumINF)
 ensures decPath.BaseEmbedded.NumHops == old(decPath.BaseEmbedded.NumHops)
 ensures len(decPath.InfoFields) == old(len(decPath.InfoFields))
 ensures len(decPath.HopFields) == old(len(decPath.HopFields))
-func (s scmpPacker) prepareSCMPHelper5(decPath *scion.Decoded) error //{
-// 	unfold scion.decInfoFieldsAcc(decPath.InfoFields)
-// 	// (lhalm) read PathMeta from embedded since composition is not supported
-// 	// infoField := (decPath.InfoFields)[decPath.PathMeta.CurrINF]
-// 	infoField := (decPath.InfoFields)[decPath.BaseEmbedded.PathMeta.CurrINF]
-// 	// (lhalm) following block moved to prepareSCMPHelper5 function
-// 	// if infoField.ConsDir {			
-// 		// unfold scion.decHopFieldsAcc(decPath.HopFields)
-// 		// // (lhalm) read PathMeta from embedded since composition is not supported
-// 		// // hopField := decPath.HopFields[decPath.PathMeta.CurrHF]
-// 		// hopField := (decPath.HopFields)[decPath.BaseEmbedded.PathMeta.CurrHF]
-// 		// infoField.UpdateSegID(hopField.Mac)
-// 	// 	fold scion.decHopFieldsAcc(decPath.HopFields)
-// 	// }
-// 	s.prepareSCMPHelper6(infoField, decPath)
-// 	fold scion.decInfoFieldsAcc(decPath.InfoFields)
-// 	// (lhalm) call IncPath on embedded since composition is not supported
-// 	// if err := decPath.IncPath(); err != nil {
-// 	if err := decPath.BaseEmbedded.IncPath(); err != nil {
-// 		// (lhalm) create local var since global is not supported
-// 		cannotRoute := serrors.New("cannot route, dropping pkt")
-// 		//return nil, serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
-// 		return serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
-// 	}
-// 	return nil
-// }
+func (s scmpPacker) prepareSCMPHelper5(decPath *scion.Decoded) error {
+	unfold scion.decInfoFieldsAcc(decPath.InfoFields)
+	// (lhalm) read PathMeta from embedded since composition is not supported
+	// infoField := (decPath.InfoFields)[decPath.PathMeta.CurrINF]
+	infoField := (decPath.InfoFields)[decPath.BaseEmbedded.PathMeta.CurrINF]
+	// (lhalm) following block moved to prepareSCMPHelper5 function
+	// if infoField.ConsDir {			
+		// unfold scion.decHopFieldsAcc(decPath.HopFields)
+		// // (lhalm) read PathMeta from embedded since composition is not supported
+		// // hopField := decPath.HopFields[decPath.PathMeta.CurrHF]
+		// hopField := (decPath.HopFields)[decPath.BaseEmbedded.PathMeta.CurrHF]
+		// infoField.UpdateSegID(hopField.Mac)
+	// 	fold scion.decHopFieldsAcc(decPath.HopFields)
+	// }
+	s.prepareSCMPHelper6(infoField, decPath)
+	fold scion.decInfoFieldsAcc(decPath.InfoFields)
+	// (lhalm) call IncPath on embedded since composition is not supported
+	// if err := decPath.IncPath(); err != nil {
+	if err := decPath.BaseEmbedded.IncPath(); err != nil {
+		// (lhalm) create local var since global is not supported
+		cannotRoute := serrors.New("cannot route, dropping pkt")
+		//return nil, serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
+		return serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
+	}
+	return nil
+}
 
 preserves acc(infoField)
 preserves acc(decPath, 1/2)
