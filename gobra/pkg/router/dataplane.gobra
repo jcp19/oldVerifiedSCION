@@ -891,9 +891,10 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 	srcUDPAddr, ok := src.(*net.UDPAddr)
 	if !ok {
 		fold DataPlaneMutexInvariant(d)
+		// (joao) No support for fmt
 		// return serrors.New("type assertion failure", "from", fmt.Sprintf("%v(%T)", src, src),
 		//	"expected", "*net.IPAddr")
-		return serrors.New("error") // TODO: remove after adding support for fmt
+		return serrors.New("error") // (joao) TODO: remove after adding support for fmt
 	}
 //
 //	for k, v := range d.internalNextHops {
@@ -1312,7 +1313,7 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error)
 	return p.handleSCMPTraceRouteRequest(p.ingressID)
 }
 
-// TODO: clean-up, minimize permissions, write postconditions
+// (joao) TODO: clean-up, minimize permissions, write postconditions
 requires acc(&p.infoField) && acc(&p.infoField.ConsDir)
 requires acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert)
 requires acc(&p.hopField.ConsIngress) && acc(&p.hopField.ConsEgress)
