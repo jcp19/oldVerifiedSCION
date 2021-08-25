@@ -651,7 +651,6 @@ func (p *scionPacketProcessor) validateIngressID() (pr processResult, err error)
 			serrors.New("bad packet size",
 				"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.EmbeddedLayer.Payload)),
 		)
-		assert err != nil
 		return pr, err
 	}
 	return processResult{}, nil
@@ -824,7 +823,6 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	// 	return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
 	// }
 	p.packSCMPHelper1()
-	assert slayers.InvariantSCION(p.scionLayer)
 
 	// (lhalm): Add BaseEmbedded due to missing composition
 	// the quoted packet is the packet in its current state
@@ -834,7 +832,6 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	if err := p.path.SetInfoField(p.infoField, int(p.path.BaseEmbedded.PathMeta.CurrINF), 1/2); err != nil {
 		return processResult{}, serrors.WrapStr("update info field", err)
 	}
-	assert slayers.InvariantSCION(p.scionLayer)
 	// (lhalm): Add BaseEmbedded due to missing composition
 	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
 	// 	return processResult{}, serrors.WrapStr("update hop field", err)
@@ -848,14 +845,13 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
 		return processResult{}, err
 	}
-	assert slayers.InvariantSCION(p.scionLayer)
 	// quoteLen is used to limit the size of the quote buffer, the final quote
 	// length is calculated inside the scmpPacker.
 	quoteLen := len(p.origPacket)
 	if quoteLen > slayers.MaxSCMPPacketLen {
 		quoteLen = slayers.MaxSCMPPacketLen
 	}
-	// (lhalm) Very slow
+	// (lhalm) causes #nontermination# within 2 hours
 	// quote := make([]byte, quoteLen)
 	var quote []byte
 	// inhale forall i int :: 0 <= i && i < (quoteLen) ==> acc(&quote[i])
@@ -892,24 +888,23 @@ ensures acc(&p.origPacket)
 ensures gopacket.bytesAcc(p.origPacket)
 func (p *scionPacketProcessor) packSCMPHelper1() (error) {	
 	var (
-		// (lhalm) following line takes forever
+		// (lhalm) following line takes forever #nontermination#
 		// scionLayer@ slayers.SCION
 		udpLayer@   slayers.UDP
 		hbhExtn@    slayers.HopByHopExtn
 		e2eExtn@    slayers.EndToEndExtn
 		scmpLayer@  slayers.SCMP
 	)
-	// (lhalm) This also takes forever
+	// (lhalm) This also takes forever #nontermination#
 	// scionLayer@ := emptySCION()
 	
 	parser := gopacket.NewDecodingLayerParser(
 		0 /* slayers.LayerTypeSCION *//* , &scionLayer */, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
 	)
-	// (lhalm) takes forever to verify
+	// (lhalm) takes forever to verify #nontermination#
 	// decoded := make([]gopacket.LayerType, 5)
 	var decoded@ []gopacket.LayerType
 	inhale gopacket.decodedAcc(decoded)
-	// assert forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
 	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
 		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
 			return serrors.WrapStr("decoding packet", err)
@@ -1227,7 +1222,7 @@ func (s scmpPacker) prepareSCMPHelper3(decPath *scion.Decoded, incPath bool) (er
 }
 
 // (lhalm) Funny, if both the body of this function and the call are uncommented, it takes forever to verify.
-// uncommenting one of those things decreases verification time to about 2 minutes.
+// uncommenting one of those things decreases verification time to about 2 minutes. #nontermination#
 preserves acc(decPath)
 preserves scion.decInfoFieldsAcc(decPath.InfoFields)
 preserves scion.decHopFieldsAcc(decPath.HopFields)
@@ -1241,32 +1236,32 @@ ensures decPath.BaseEmbedded.NumINF == old(decPath.BaseEmbedded.NumINF)
 ensures decPath.BaseEmbedded.NumHops == old(decPath.BaseEmbedded.NumHops)
 ensures len(decPath.InfoFields) == old(len(decPath.InfoFields))
 ensures len(decPath.HopFields) == old(len(decPath.HopFields))
-func (s scmpPacker) prepareSCMPHelper5(decPath *scion.Decoded) error {
-	unfold scion.decInfoFieldsAcc(decPath.InfoFields)
-	// (lhalm) read PathMeta from embedded since composition is not supported
-	// infoField := (decPath.InfoFields)[decPath.PathMeta.CurrINF]
-	infoField := (decPath.InfoFields)[decPath.BaseEmbedded.PathMeta.CurrINF]
-	// (lhalm) following block moved to prepareSCMPHelper5 function
-	// if infoField.ConsDir {			
-		// unfold scion.decHopFieldsAcc(decPath.HopFields)
-		// // (lhalm) read PathMeta from embedded since composition is not supported
-		// // hopField := decPath.HopFields[decPath.PathMeta.CurrHF]
-		// hopField := (decPath.HopFields)[decPath.BaseEmbedded.PathMeta.CurrHF]
-		// infoField.UpdateSegID(hopField.Mac)
-	// 	fold scion.decHopFieldsAcc(decPath.HopFields)
+func (s scmpPacker) prepareSCMPHelper5(decPath *scion.Decoded) error //{
+	// unfold scion.decInfoFieldsAcc(decPath.InfoFields)
+	// // (lhalm) read PathMeta from embedded since composition is not supported
+	// // infoField := (decPath.InfoFields)[decPath.PathMeta.CurrINF]
+	// infoField := (decPath.InfoFields)[decPath.BaseEmbedded.PathMeta.CurrINF]
+	// // (lhalm) following block moved to prepareSCMPHelper5 function
+	// // if infoField.ConsDir {			
+	// 	// unfold scion.decHopFieldsAcc(decPath.HopFields)
+	// 	// // (lhalm) read PathMeta from embedded since composition is not supported
+	// 	// // hopField := decPath.HopFields[decPath.PathMeta.CurrHF]
+	// 	// hopField := (decPath.HopFields)[decPath.BaseEmbedded.PathMeta.CurrHF]
+	// 	// infoField.UpdateSegID(hopField.Mac)
+	// // 	fold scion.decHopFieldsAcc(decPath.HopFields)
+	// // }
+	// s.prepareSCMPHelper6(infoField, decPath)
+	// fold scion.decInfoFieldsAcc(decPath.InfoFields)
+	// // (lhalm) call IncPath on embedded since composition is not supported
+	// // if err := decPath.IncPath(); err != nil {
+	// if err := decPath.BaseEmbedded.IncPath(); err != nil {
+	// 	// (lhalm) create local var since global is not supported
+	// 	cannotRoute := serrors.New("cannot route, dropping pkt")
+	// 	//return nil, serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
+	// 	return serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
 	// }
-	s.prepareSCMPHelper6(infoField, decPath)
-	fold scion.decInfoFieldsAcc(decPath.InfoFields)
-	// (lhalm) call IncPath on embedded since composition is not supported
-	// if err := decPath.IncPath(); err != nil {
-	if err := decPath.BaseEmbedded.IncPath(); err != nil {
-		// (lhalm) create local var since global is not supported
-		cannotRoute := serrors.New("cannot route, dropping pkt")
-		//return nil, serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
-		return serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
-	}
-	return nil
-}
+	// return nil
+//}
 
 preserves acc(infoField)
 preserves acc(decPath, 1/2)
