@@ -29,7 +29,9 @@ const (
 )
 
 pred DecodedInvariant(d* Decoded) {
-	acc(d) &&
+	// acc(d) &&
+	acc(&d.InfoFields) &&
+	acc(&d.HopFields) &&
 	BaseInvariant(&d.Base) &&
 	(unfolding BaseInvariant(&d.Base) in (d.NumINF <= MaxINFs && len(d.InfoFields) == d.NumINF)) &&
 	(unfolding BaseInvariant(&d.Base) in (d.NumHops <= MaxHops && len(d.HopFields) == d.NumHops)) &&
@@ -51,6 +53,25 @@ type Decoded struct {
 	// HopFields contains all the HopFields of the path.
 	HopFields []*path.HopField
 }
+
+// // Succeeds, as expected
+// // ghost
+// ensures DecodedInvariant(ret)
+// func soundDecoded1() (ret *Decoded) {
+// 	d := &Decoded{}
+// 	fold BaseInvariant(&d.Base)
+// 	fold DecodedInvariant(d)
+// 	return d
+// }
+
+// // Fails, as expected
+// ghost
+// requires DecodedInvariant(d)
+// func SoundDecoded2(d *Decoded) {
+// 	unfold DecodedInvariant(d)
+// 	unfold BaseInvariant(&d.Base)
+// 	assert false // multiple access do &d.Base
+// }
 
 // DecodeFromBytes fully decodes the SCION path into the corresponding fields.
 //requires p > 0
@@ -117,6 +138,8 @@ type Decoded struct {
 
 // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
 // otherwise an error is returned.
+/*
+// (joao) This is causing verification to diverge
 requires p > 0
 preserves acc(DecodedInvariant(s), p)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
@@ -135,7 +158,7 @@ func (s *Decoded) SerializeTo(b []byte, ghost p perm) error {
 		return err
 	}
 	fold acc(BaseInvariant(&s.Base), p)
-//	fold acc(DecodedInvariant(s), p)
+	fold acc(DecodedInvariant(s), p)
 	offset := MetaLen
 // (joao) range still not supported
 //	for _, info := range s.InfoFields {
@@ -147,20 +170,12 @@ func (s *Decoded) SerializeTo(b []byte, ghost p perm) error {
 // (joao) rewrote the range above as follows:
 	invariant p > 0
 	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-	invariant acc(s, p)
-	// invariant acc(&s.InfoFields, p) && acc(&s.HopFields, p)
-	invariant 0 <= i && i <= len(s.InfoFields)
+	invariant acc(DecodedInvariant(s), p)
+	invariant unfolding acc(DecodedInvariant(s), p) in 0 <= i && i <= len(s.InfoFields)
 	invariant offset == MetaLen + i * path.InfoLen
-	// Body of DecodedInvariant, to be able to fold inside the loop
-	// invariant acc(s, p)
-	invariant acc(BaseInvariant(&s.Base), p)
-	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i], p)
-	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i], p)
-	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i], p)
-	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc((s.HopFields)[i], p)
-	// End of body of DecodedInvariant, to be able to fold inside the loop
-	invariant len(b) >= MetaLen + len(s.InfoFields) * path.InfoLen
+	invariant unfolding acc(DecodedInvariant(s), p) in len(b) >= MetaLen + len(s.InfoFields) * path.InfoLen
 	for i := 0; i < len(s.InfoFields); i++ {
+		unfold acc(DecodedInvariant(s), p)
 		info := (s.InfoFields)[i]
 		assert acc(info, p)
 		assert forall i int :: 0 <= i && i < path.InfoLen ==>
@@ -169,19 +184,23 @@ func (s *Decoded) SerializeTo(b []byte, ghost p perm) error {
 			fold acc(DecodedInvariant(s), p)
 			return err
 		}
+		fold acc(DecodedInvariant(s), p)
 		offset += path.InfoLen
 	}
 
+// TODO: this loop
 //	for _, hop := range s.HopFields {
 //		if err := hop.SerializeTo(b[offset : offset+path.HopLen]); err != nil {
 //			return err
 //		}
 //		offset += path.HopLen
 //	}
-	fold acc(BaseInvariant(&s.Base), p)
-	fold acc(DecodedInvariant(s), p)
+
+//	fold acc(BaseInvariant(&s.Base), p)
+//	fold acc(DecodedInvariant(s), p)
 	return nil
 }
+*/
 
 // Reverse reverses a SCION path.
 //func (s *Decoded) Reverse() error {
