@@ -99,12 +99,7 @@ func (s *Base) IncPath() error {
 	}
 	s.PathMeta.CurrHF++
 	// Update CurrINF
-	// (joao) introduce tmp1 and tmp2 be able to fold required predicates
-	tmp1 := s.PathMeta.CurrHF
-	fold BaseInvariant(s)
-	tmp2 := s.infIndexForHF(tmp1, 1/2)
-	unfold BaseInvariant(s)
-	s.PathMeta.CurrINF = tmp2
+	s.PathMeta.CurrINF = s.infIndexForHF(s.PathMeta.CurrHF, 1/2)
 	fold BaseInvariant(s)
 	return nil
 }
@@ -115,27 +110,43 @@ requires acc(BaseInvariant(s), p)
 ensures acc(BaseInvariant(s), p)
 func (s *Base) IsXover(ghost p perm) bool {
 // (joao) tmp was introduced by me to simplify the unfoldings of BaseInvariant(s)
-	tmp := unfolding acc(BaseInvariant(s), p) in s.PathMeta.CurrINF
-	return tmp != s.infIndexForHF(tmp+1, p)
+	unfold acc(BaseInvariant(s), p)
+	tmp := s.PathMeta.CurrINF != s.infIndexForHF(s.PathMeta.CurrINF+1, p)
+	fold acc(BaseInvariant(s), p)
+	return tmp
+}
+
+requires acc(BaseInvariant(s), _)
+ensures res >= 0 && res <= 3
+pure func getNumINF(s *Base) (res int) {
+	return unfolding acc(BaseInvariant(s), _) in s.NumINF
+}
+
+requires acc(BaseInvariant(s), _)
+ensures res >= 0
+pure func getNumHops(s *Base) (res int) {
+	return unfolding acc(BaseInvariant(s), _) in s.NumHops
+}
+
+requires acc(BaseInvariant(s), _)
+pure func getCurrHF(s *Base) (res uint8) {
+	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
 }
 
 requires p > 0
-requires acc(BaseInvariant(s), p)
-ensures acc(BaseInvariant(s), p)
+// (joao) spec in terms of implementation details not problematic because it is not exported
+// requires acc(BaseInvariant(s), p)
+// ensures acc(BaseInvariant(s), p)
+preserves acc(s, p) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
 func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
 	left := uint8(0)
 
-	unfold acc(BaseInvariant(s), p)
-
-	invariant acc(s, p)
-	invariant s.NumINF >= 0 && s.NumINF <= 3
-	invariant s.NumHops >= 0 
+	invariant acc(s, p) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
 	invariant 0 <= i && i <= 3
 	for i := 0; i < s.NumINF; i++ {
 		if hf >= left {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 			if hf < left+(s.PathMeta.SegLen)[i] {
-				fold acc(BaseInvariant(s), p)
 				return uint8(i)
 			}
 		}
@@ -144,9 +155,7 @@ func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
 	}
 	// at the end we just return the last index.
 // (joao) the RHS of the following declaration used to be in the return statement
-	ret := uint8(s.NumINF - 1)
-	fold acc(BaseInvariant(s), p)
-	return ret
+	return uint8(s.NumINF - 1)
 }
 
 // Len returns the length of the path in bytes.
