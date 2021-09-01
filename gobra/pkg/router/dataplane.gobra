@@ -1231,7 +1231,9 @@ func (s scmpPacker) prepareSCMPHelper3(decPath *scion.Decoded, incPath bool) (er
 	// 		//return nil, serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
 	// 		return serrors.Wrap(cannotRoute, err, "details", "incrementing path for SCMP")
 	// }
+		fold DecodedIndexInvariants(*decPath)
 		s.prepareSCMPHelper5(decPath)
+		unfold DecodedIndexInvariants(*decPath)
 	}
 	fold decPath.Mem()
 	return nil
