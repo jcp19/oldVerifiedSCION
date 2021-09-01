@@ -28,7 +28,7 @@ import (
 	//"github.com/scionproto/scion/go/lib/slayers/path/empty"
 	//"github.com/scionproto/scion/go/lib/slayers/path/onehop"
 	// (lhalm) causes cyclic imports
-	// "gobra/lib/slayers/path/scion"
+	"gobra/lib/slayers/path/scion"
 )
 
 const (

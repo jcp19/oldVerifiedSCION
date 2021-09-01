@@ -156,7 +156,10 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 
 // SetNetworkLayerForChecksum tells this layer which network layer is wrapping it.
 // This is needed for computing the checksum when serializing,
-// (lhalm) TODO
+requires s.Mem()
+requires acc(l.Mem(), 1/2)
+ensures s.Mem()
+ensures acc(l.Mem(), 1/2)
 func (s *SCMP) SetNetworkLayerForChecksum(l gopacket.NetworkLayer) error {
 // 	if l == nil {
 // 		return serrors.New("cannot use nil layer type for scmp checksum network layer")

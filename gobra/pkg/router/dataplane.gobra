@@ -253,18 +253,30 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 	// }
 // }
 
-// requires typeOf(s.PathVar) == (*scion.Raw)
-// requires rawMem((s.PathVar).(*scion.Raw))
-// requires acc(d)
-// requires acc(d.external)
-// requires acc(&((s.PathVar).(*scion.Raw)).BaseEmbedded.PathMeta)
-// ensures typeOf(s.PathVar) == (*scion.Raw)
-// ensures rawMem((s.PathVar).(*scion.Raw))
-// ensures acc(d)
-// ensures acc(d.external)
-// ensures acc(&((s.PathVar).(*scion.Raw)).BaseEmbedded.PathMeta)
+requires typeOf(s.Path) == *scion.Raw
+requires acc((s.Path).(*scion.Raw))
+requires scion.bytesAcc(((s.Path).(*scion.Raw)).Raw)
+requires gopacket.bytesAcc(origPacket)
+requires acc(&d.external)
+requires acc(&d.internalIP)
+requires acc(&d.localIA)
+requires acc(d.external)
+requires buffer.Mem()
+requires scion.bytesAcc(rawPkt)
+requires slayers.InvariantSCION(s)
+requires gopacket.bytesAcc(s.EmbeddedLayer.Contents)
+requires (scion.MetaLen + (s.Path).(*scion.Raw).BaseEmbedded.NumINF*path.InfoLen + int((s.Path).(*scion.Raw).BaseEmbedded.PathMeta.CurrHF)*path.HopLen) >= 0
+requires (scion.MetaLen + (s.Path).(*scion.Raw).BaseEmbedded.NumINF*path.InfoLen + int((s.Path).(*scion.Raw).BaseEmbedded.PathMeta.CurrHF)*path.HopLen) + path.HopLen < len((s.Path).(*scion.Raw).Raw)
+requires int((s.Path).(*scion.Raw).BaseEmbedded.PathMeta.CurrINF) >= 0
+requires (scion.MetaLen + int((s.Path).(*scion.Raw).BaseEmbedded.PathMeta.CurrINF)*path.InfoLen)+path.InfoLen < len((s.Path).(*scion.Raw).Raw)
+// ensures acc(&d.external)
+// ensures acc(&d.internalIP)
+// ensures acc(&d.localIA)
+// ensures err == nil ==> typeOf(s.Path) == *scion.Raw
+// ensures err == nil ==> acc((s.Path).(*scion.Raw))
+// ensures err == nil ==> scion.bytesAcc(((s.Path).(*scion.Raw)).Raw)
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
-	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
+	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, err error) {
 
 	p@ := scionPacketProcessor{
 		d:          d,
@@ -272,14 +284,9 @@ func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCIO
 		rawPkt:     rawPkt,
 		scionLayer: s,
 		origPacket: origPacket,
-		//buffer:     buffer,
+		buffer:     buffer,
 	}
-	// fold parsePathContract(&p)
-	//result, err := p.process();
-	// unfold parsePathContract(&p)
-	//return result, err
-	// (lhalm) define return values to allow folding of predicate
-	//return p.process()
+	return p.process()
 }
 
 // Establishes the restrictions on the scion packet processors
@@ -317,9 +324,6 @@ type scionPacketProcessor struct {
 }
 
 requires acc(p)
-requires acc(p.path)
-requires acc(p.infoField)
-requires acc(p.hopField)
 requires typeOf(p.scionLayer.Path) == *scion.Raw
 requires acc((p.scionLayer.Path).(*scion.Raw))
 requires scion.bytesAcc(((p.scionLayer.Path).(*scion.Raw)).Raw)
@@ -439,9 +443,6 @@ func (p *scionPacketProcessor) process() (pr processResult, err error) {
 }
 
 requires acc(p)
-requires acc(p.infoField)
-requires acc(p.hopField)
-requires acc(p.path)
 requires typeOf(p.scionLayer.Path) == *scion.Raw
 requires acc((p.scionLayer.Path).(*scion.Raw))
 requires scion.bytesAcc(((p.scionLayer.Path).(*scion.Raw)).Raw)
@@ -570,6 +571,7 @@ func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error)
 	}
 	scmpP := &slayers.SCMPParameterProblem{Pointer: 0}
 	fold scmpP.Mem()
+	fold scmpH.Mem()
 	return p.packSCMP(
 		scmpH,
 		scmpP,
@@ -643,6 +645,7 @@ func (p *scionPacketProcessor) validateIngressID() (pr processResult, err error)
 		}
 		scmpP := &slayers.SCMPParameterProblem{Pointer: 0}
 		fold scmpP.Mem()
+		fold scmpH.Mem()
 		// return p.packSCMP(scmpH, scmpP, 
 		// 	serrors.New("bad packet size",
 		// 		"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.EmbeddedLayer.Payload)),
@@ -716,6 +719,7 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, err error) {
 	}
 	scmpP := &slayers.SCMPParameterProblem{Pointer: 0}
 	fold scmpP.Mem()
+	fold scmpH.Mem()
 	return p.packSCMP(scmpH, scmpP, 
 		serrors.New("bad packet size",
 			"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.EmbeddedLayer.Payload)),
@@ -773,8 +777,8 @@ requires acc(&p.d.localIA)
 requires acc(p.d.external)
 requires p.buffer.Mem()
 requires scion.bytesAcc(p.rawPkt)
-requires acc(scmpH)
 requires scmpP.Mem()
+requires scmpH.Mem()
 requires slayers.InvariantSCION(p.scionLayer)
 requires gopacket.bytesAcc(p.scionLayer.EmbeddedLayer.Contents)
 requires typeOf(p.scionLayer.Path) == *scion.Raw
@@ -945,8 +949,8 @@ type scmpPacker struct {
 // renaming to path causes a "Logic Error: ghost type on unsafe node" exception
 requires acc(pathVar)
 requires acc(s.scionL)
-requires acc(scmpH)
 requires scmpP.Mem()
+requires scmpH.Mem()
 requires slayers.InvariantSCION(*s.scionL)
 requires gopacket.bytesAcc(s.scionL.EmbeddedLayer.Contents)
 requires typeOf(s.scionL.Path) == *scion.Raw
@@ -955,8 +959,8 @@ requires s.buffer.Mem()
 requires scion.bytesAcc((s.scionL.Path).(*scion.Raw).Raw)
 requires gopacket.bytesAcc(s.origPacket)
 ensures acc(s.scionL)
-ensures acc(scmpH)
 ensures scmpP.Mem()
+ensures scmpH.Mem()
 ensures s.buffer.Mem()
 ensures gopacket.bytesAcc(s.origPacket)
 ensures acc(pathVar)
@@ -1071,7 +1075,9 @@ func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.Serializable
 	}
 	s.scionL.NextHdr = common.L4SCMP
 	fold slayers.InvariantSCION(*s.scionL)
+	fold acc(s.scionL.Mem(), 1/2)
 	scmpH.SetNetworkLayerForChecksum(s.scionL)
+	unfold acc(s.scionL.Mem(), 1/2)
 
 	if err := s.buffer.Clear(); err != nil {
 		return nil, err
@@ -1117,7 +1123,14 @@ func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.Serializable
 	if err != nil {
 		return nil, err
 	}
-	return s.buffer.Bytes(), scmpError{TypeCode: scmpH.TypeCode, Cause: cause}
+	unfold scmpH.Mem()
+	assert acc(scmpH)
+	assert acc(&scmpH.TypeCode)
+	// (lhalm) create error to allow predicate folding
+	err = scmpError{TypeCode: scmpH.TypeCode, Cause: cause}
+	fold scmpH.Mem()
+	return s.buffer.Bytes(), err
+	// return s.buffer.Bytes(), scmpError{TypeCode: scmpH.TypeCode, Cause: cause}
 }
 
 preserves acc(s.scionL)
@@ -1286,7 +1299,7 @@ func (s scmpPacker) prepareSCMPHelper6(infoField *path.InfoField, decPath *scion
 preserves acc(s.scionL)
 preserves slayers.InvariantSCION(*s.scionL)
 preserves s.scionL.Path.Mem()
-preserves acc(scmpH)
+preserves scmpH.Mem()
 preserves scmpP.Mem()
 preserves gopacket.bytesAcc(s.scionL.EmbeddedLayer.Contents)
 preserves typeOf(s.scionL.Path) == *scion.Decoded
@@ -1296,6 +1309,7 @@ func (s scmpPacker) prepareSCMPHelper4(cause error, scmpH *slayers.SCMP, scmpP g
 		ComputeChecksums: true,
 		FixLengths:       true,
 	}
+	unfold scmpH.Mem()
 	scmpLayers := []gopacket.SerializableLayer{s.scionL ,scmpH, scmpP}
 	if cause != nil {
 		// add quote for errors.
@@ -1326,7 +1340,6 @@ func (s scmpPacker) prepareSCMPHelper4(cause error, scmpH *slayers.SCMP, scmpP g
 	// (lhalm) throws "might not be injective" error
 	//err := gopacket.SerializeLayers(s.buffer, sopts, scmpLayers...)
 	unfold s.scionL.Mem()
-	unfold scmpH.Mem()
 	var err error
 	if err != nil {
 		// (lhalm) create local var since global is not supported
