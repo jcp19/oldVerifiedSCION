@@ -85,13 +85,7 @@ func (s *Base) IncPath() error {
 }
 
 // IsXover returns whether we are at a crossover point.
-requires acc(s)
-ensures acc(s)
-ensures s.PathMeta.CurrINF == old(s.PathMeta.CurrINF)
-ensures s.PathMeta.CurrHF == old(s.PathMeta.CurrHF)
-ensures s.NumINF == old(s.NumINF)
-ensures s.NumHops == old(s.NumHops)
-func (s *Base) IsXover() bool //{
+pure func (s *Base) IsXover() bool //{
 	// return s.PathMeta.CurrINF != s.infIndexForHF(s.PathMeta.CurrHF+1)
 //}
 

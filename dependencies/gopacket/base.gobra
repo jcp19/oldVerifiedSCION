@@ -51,11 +51,11 @@ type NetworkLayer interface {
 	// NetworkFlow() Flow
 }
 
-// pred (s Payload) mem() { true }
+// pred (p Payload) Mem() { true }
 // (Payload) implements SerializableLayer {
 
-// 	(p Payload) GetLayerType() (lt LayerType) {
-// 		lt = p.GetLayerType()
+// 	pure (p Payload) LayerType() (lt LayerType) {
+// 		return p.LayerType()
 // 	} 
 
 // 	(p Payload) SerializeTo(b SerializeBuffer, opts SerializeOptions) (err error) {
@@ -65,7 +65,7 @@ type NetworkLayer interface {
 
 // type Payload []byte
 
-// func (p Payload) LayerType() LayerType
+// pure func (p Payload) LayerType() LayerType
 
 // func (p Payload) LayerContents() []byte
 
