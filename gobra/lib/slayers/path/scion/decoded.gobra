@@ -120,6 +120,7 @@ type Decoded struct {
 requires p > 0
 preserves acc(DecodedInvariant(s), p)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+decreases
 func (s *Decoded) SerializeTo(b []byte, ghost p perm) error {
 	unfold acc(DecodedInvariant(s), p)
 	if len(b) < s.Len() {
@@ -160,6 +161,7 @@ func (s *Decoded) SerializeTo(b []byte, ghost p perm) error {
 	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc((s.HopFields)[i], p)
 	// End of body of DecodedInvariant, to be able to fold inside the loop
 	invariant len(b) >= MetaLen + len(s.InfoFields) * path.InfoLen
+    decreases len(s.InfoFields) - i
 	for i := 0; i < len(s.InfoFields); i++ {
 		info := (s.InfoFields)[i]
 		assert acc(info, p)

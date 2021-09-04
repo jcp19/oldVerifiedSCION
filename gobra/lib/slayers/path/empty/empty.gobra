@@ -23,18 +23,22 @@ type Path struct{}
 
 // (joao) `_` cannot be used as an argument identifier
 // func (o Path) DecodeFromBytes(_ []byte) error {
+decreases _
 func (o Path) DecodeFromBytes(b []byte) error {
 	return nil
 }
 
+decreases _
 func (o Path) SerializeTo(b []byte) error {
 	return nil
 }
 
+decreases _
 func (o Path) Reverse() error {
 	return nil
 }
 
+decreases _
 func (o Path) Len() int {
 	return PathLen
 }

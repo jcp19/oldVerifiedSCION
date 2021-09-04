@@ -146,6 +146,7 @@ func WrapStr(msg string, cause error, logCtx ...interface{}) error {
 
 // New creates a new error with the given message and context.
 ensures res != nil
+decreases _
 func New(msg string, logCtx ...interface{}) (res error) {
 	if len(logCtx) == 0 {
 		// (joao) not supported yet
