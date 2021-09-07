@@ -70,15 +70,12 @@ type HopField struct {
 
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
 // path.HopLen
-requires p > 0
-requires acc(h)
+preserves acc(h)
 requires len(raw) >= 6 + MacLen
-requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
-ensures acc(h)
+preserves forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/1000)
 ensures len(h.Mac) == MacLen
 ensures forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i])
-ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
-func (h *HopField) DecodeFromBytes(raw []byte, ghost p perm) error {
+func (h *HopField) DecodeFromBytes(raw []byte) error {
 	if len(raw) < HopLen {
 		return serrors.New("HopField raw too short", "expected", HopLen, "actual", len(raw))
 	}
@@ -99,23 +96,35 @@ func (h *HopField) DecodeFromBytes(raw []byte, ghost p perm) error {
 	assert &raw[6:6+MacLen][3] == &raw[9]
 	assert &raw[6:6+MacLen][4] == &raw[10]
 	assert &raw[6:6+MacLen][5] == &raw[11]
-
-	tmp := append(p, []byte(nil), raw[6:6+MacLen]...)
+	// (joao) outlining this call to append does not have obvious performance implications
+	// tmp := outlineAppend(raw[6:6+MacLen])
+	tmp := append(perm(1/2000), []byte(nil), raw[6:6+MacLen]...)
 	assert len(tmp) == MacLen
 	assert forall i int :: 0 <= i && i < len(tmp) ==> acc(&tmp[i])
 	h.Mac = tmp
 	return nil
 }
 
+// (joao) outlining call to append above (outline keyword crashes gobra)
+// requires len(s) == MacLen
+// preserves forall i int :: 0 <= i && i < len(s) ==> acc(&s[i], 1/2000)
+// ensures len(res) == MacLen
+// ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
+// ensures forall i int :: 0 <= i && i < len(res) ==> res[i] == s[i]
+// func outlineAppend(s []byte) (res []byte) {
+// 	tmpSlice := []byte(nil)
+// 	assert len(tmpSlice) == 0
+// 	assert forall i int :: 0 <= i && i < len(tmpSlice) ==> acc(&tmpSlice[i])
+// 	tmp := append(perm(1/2000), tmpSlice, s.../*raw[6:6+MacLen]...*/)
+// 	return tmp
+// }
+
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // path.HopLen
-requires p > 0
-requires acc(h, p) && forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i], p)
+preserves acc(h, 1/1000) && forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i], 1/1000)
 requires len(b) >= 12
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures acc(h, p) && forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i], p)
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (h *HopField) SerializeTo(b []byte, ghost p perm) error {
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func (h *HopField) SerializeTo(b []byte) error {
 	if len(b) < HopLen {
 		return serrors.New("buffer for HopField too short", "expected", MacLen, "actual", len(b))
 	}
@@ -136,9 +145,17 @@ func (h *HopField) SerializeTo(b []byte, ghost p perm) error {
 	assert &b[6:12][0] == &b[6] && &b[6:12][1] == &b[7]
 	assert &b[6:12][2] == &b[8] && &b[6:12][3] == &b[9]
 	assert &b[6:12][4] == &b[10] && &b[6:12][5] == &b[11]
-	copy(b[6:12], h.Mac, p/2)
+// (joao) outlining this call to copy reduces the verification time from ~8 min to ~3 min
+//  	copy(b[6:12], h.Mac, perm(1/2000))
+	outlineCopy(b[6:12], h.Mac)
 
 	return nil
+}
+
+preserves forall i int :: (0 <= i && i < len(dst)) ==> acc(&dst[i])
+preserves forall i int :: (0 <= i && i < len(src)) ==> acc(&src[i], 1/2000)
+func outlineCopy(dst, src []byte) {
+	copy(dst, src, perm(1/2000))
 }
 
 // ExpTimeToDuration calculates the relative expiration time in seconds.
