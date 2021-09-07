@@ -68,14 +68,28 @@ type HopField struct {
 	Mac []byte
 }
 
+pred HopFieldInv(h *HopField) {
+	acc(h) &&
+	len(h.Mac) == MacLen &&
+	forall i int :: 0 <= i &&
+	i < len(h.Mac) ==> acc(&(h.Mac)[i])
+}
+
+// (joao) verifies, as expected
+// func soundHopFieldInv() {
+// 	hop := &HopField{}
+// 	hop.Mac = make([]byte, 6)
+// 	fold HopFieldInv(hop)
+// }
+
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
 // path.HopLen
-preserves acc(h)
-requires len(raw) >= 6 + MacLen
+requires acc(h)
 preserves forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/1000)
-ensures len(h.Mac) == MacLen
-ensures forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i])
-func (h *HopField) DecodeFromBytes(raw []byte) error {
+ensures res == nil ==> HopFieldInv(h)
+ensures res != nil ==> acc(h)
+ensures len(raw) >= HopLen ==> res == nil
+func (h *HopField) DecodeFromBytes(raw []byte) (res error) {
 	if len(raw) < HopLen {
 		return serrors.New("HopField raw too short", "expected", HopLen, "actual", len(raw))
 	}
@@ -102,6 +116,7 @@ func (h *HopField) DecodeFromBytes(raw []byte) error {
 	assert len(tmp) == MacLen
 	assert forall i int :: 0 <= i && i < len(tmp) ==> acc(&tmp[i])
 	h.Mac = tmp
+	fold HopFieldInv(h)
 	return nil
 }
 
@@ -121,13 +136,14 @@ func (h *HopField) DecodeFromBytes(raw []byte) error {
 
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // path.HopLen
-preserves acc(h, 1/1000) && forall i int :: 0 <= i && i < len(h.Mac) ==> acc(&(h.Mac)[i], 1/1000)
-requires len(b) >= 12
+preserves acc(HopFieldInv(h), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (h *HopField) SerializeTo(b []byte) error {
+ensures len(b) >= HopLen ==> err == nil
+func (h *HopField) SerializeTo(b []byte) (err error) {
 	if len(b) < HopLen {
 		return serrors.New("buffer for HopField too short", "expected", MacLen, "actual", len(b))
 	}
+	unfold acc(HopFieldInv(h), 1/1000)
 	b[0] = 0
 	if h.EgressRouterAlert {
 		b[0] |= 0x1
@@ -148,6 +164,7 @@ func (h *HopField) SerializeTo(b []byte) error {
 // (joao) outlining this call to copy reduces the verification time from ~8 min to ~3 min
 //  	copy(b[6:12], h.Mac, perm(1/2000))
 	outlineCopy(b[6:12], h.Mac)
+	fold acc(HopFieldInv(h), 1/1000)
 
 	return nil
 }

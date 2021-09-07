@@ -23,6 +23,9 @@ import (
 	"gobra/verifyutils"
 )
 
+// (joao) TODO(functional properties):
+//   - verify if serializing a packet and deserializing it produces an equal packet
+
 // Raw is a raw representation of the SCION (data-plane) path type. It is designed to parse as
 // little as possible and should be used if performance matters.
 type Raw struct {
@@ -208,7 +211,7 @@ func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
 requires 0 <= idx
 preserves acc(RawInvariant(s), 1/100)
 ensures retErr != nil ==> retHop == nil
-ensures retErr == nil ==> acc(retHop)
+ensures retErr == nil ==> path.HopFieldInv(retHop)
 func (s *Raw) GetHopField(idx int) (retHop *path.HopField, retErr error) {
 	unfold acc(RawInvariant(s), 1/100)
 	unfold acc(BaseInvariant(&s.Base), 1/100)
@@ -237,7 +240,7 @@ func (s *Raw) GetHopField(idx int) (retHop *path.HopField, retErr error) {
 // CurrHF index in the path meta header.
 preserves acc(RawInvariant(s), 1/100)
 ensures retErr != nil ==> retHop == nil
-ensures retErr == nil ==> acc(retHop)
+ensures retErr == nil ==> path.HopFieldInv(retHop)
 func (s *Raw) GetCurrentHopField() (retHop *path.HopField, retErr error) {
 	// (joao) introduced idx to store an intermediate value
 	unfold acc(RawInvariant(s), 1/100)
@@ -253,8 +256,8 @@ func (s *Raw) GetCurrentHopField() (retHop *path.HopField, retErr error) {
 // SetHopField updates the HopField at a given index.
 requires idx >= 0
 preserves RawInvariant(s) 
-preserves hop != nil ==> acc(hop, 1/100)
-preserves hop != nil && forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i], 1/100)
+preserves hop != nil ==> acc(path.HopFieldInv(hop), 1/100)
+// preserves hop != nil && forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i], 1/100)
 // (joao) verified but commented for performance reasons
 func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
 	unfold RawInvariant(s)
@@ -283,4 +286,3 @@ func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
 	fold RawInvariant(s)
 	return ret
 }
-*/
