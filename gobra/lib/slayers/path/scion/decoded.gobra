@@ -92,7 +92,6 @@ pure func getLenHopFields(s *Decoded) int {
 // }
 
 // DecodeFromBytes fully decodes the SCION path into the corresponding fields.
-/*
 requires acc(s)
 preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
 ensures res == nil ==> DecodedInvariant(s) 
@@ -103,10 +102,29 @@ func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
 	if minLen := s.Len(); len(data) < minLen {
 		return serrors.New("DecodedPath raw too short", "expected", minLen, "actual", len(data))
 	}
+
+	assert getNumINF(&s.Base) >= 0
+	assert getNumHops(&s.Base) >= 0
+	assert len(data) >= MetaLen + getNumINF(&s.Base) * path.InfoLen + getNumHops(&s.Base) * path.HopLen
 	offset := MetaLen
-	s.InfoFields = make([]*path.InfoField, s.NumINF)
-	for i := 0; i < int(s.NumINF); i++ {
+	// (joao) use getNumINF to avoid unfoldings
+	// s.InfoFields = make([]*path.InfoField, s.NumINF)
+	s.InfoFields = make([]*path.InfoField, getNumINF(&s.Base))
+
+	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/1000)
+	invariant acc(BaseInvariant(&s.Base), 1/2)
+	invariant 0 <= i && i <= getNumINF(&s.Base)
+	invariant acc(&s.InfoFields, 1/2)
+	invariant forall j int :: 0 <= j && j < getNumINF(&s.Base) ==> acc(&(s.InfoFields)[j])
+	invariant forall j int :: 0 <= j && j < i ==> acc((s.InfoFields)[j])
+	invariant len(data) >= MetaLen + getNumINF(&s.Base) * path.InfoLen + getNumHops(&s.Base) * path.HopLen
+	invariant offset == MetaLen + i * path.InfoLen
+	// (joao) changed to getNumINF() to avoid unfoldings
+	// for i := 0; i < int(s.NumINF); i++ {
+	for i := 0; i < getNumINF(&s.Base); i++ {
 		info := &path.InfoField{}
+		assert 0 <= offset && offset < len(data)
+		assert 0 <= offset+path.InfoLen && offset+path.InfoLen <= len(data)
 		assert forall j int :: 0 <= j && j < path.InfoLen ==> &data[offset : offset+path.InfoLen][j] == &data[offset + j]
 		if err := info.DecodeFromBytes(data[offset : offset+path.InfoLen]); err != nil {
 			return err
@@ -115,10 +133,32 @@ func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
 		(s.InfoFields)[i] = info
 		offset += path.InfoLen
 	}
-	s.HopFields = make([]*path.HopField, s.NumHops)
-	for i := 0; i < int(s.NumHops); i++ {
+
+	// (joao) use getNumHops to avoid unfoldings
+	// s.HopFields = make([]*path.HopField, s.NumHops)
+	s.HopFields = make([]*path.HopField, getNumHops(&s.Base))
+
+	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/1000)
+	invariant acc(BaseInvariant(&s.Base), 1/2)
+	invariant 0 <= i && i <= getNumHops(&s.Base)
+	invariant acc(&s.HopFields, 1/2)
+	invariant forall j int :: 0 <= j && j < getNumHops(&s.Base) ==> acc(&(s.HopFields)[j])
+	invariant forall j int, l int :: 0 <= j && j < i && 0 <= l && l < i && j != l ==> (s.HopFields)[j] != (s.HopFields)[l]
+	invariant forall j int :: 0 <= j && j < i ==> path.HopFieldInv((s.HopFields)[j])
+	invariant len(data) >= MetaLen + getNumINF(&s.Base) * path.InfoLen + getNumHops(&s.Base) * path.HopLen
+	invariant offset == MetaLen + getNumINF(&s.Base) * path.InfoLen + i * path.HopLen
+	// (joao) changed to getNumHops() to avoid unfoldings
+	// for i := 0; i < int(s.NumHops); i++ {
+	for i := 0; i < getNumHops(&s.Base); i++ {
+		assert forall j int :: 0 <= j && j < i ==> (s.HopFields)[j] != nil ==> path.HopFieldInv((s.HopFields)[j])
 		hop := &path.HopField{}
+
+		// (joao) ASSUMPTION: required to avoid error "Receiver path.HopFieldInv((s.HopFields)[j]) might not be injective"
+		assume forall j int :: 0 <= j && j < i ==> (s.HopFields)[j] != hop
+		assert 0 <= offset && offset < len(data)
+		assert 0 <= offset+path.InfoLen && offset+path.HopLen <= len(data)
 		assert forall j int :: 0 <= j && j < int(path.HopLen) ==> &(data[offset : offset+path.HopLen][j]) == &data[offset + j]
+
 		if err := hop.DecodeFromBytes(data[offset : offset+path.HopLen]); err != nil {
 			return err
 		}
@@ -126,9 +166,9 @@ func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
 		(s.HopFields)[i] = hop
 		offset += path.HopLen
 	}
+	fold DecodedInvariant(s)
 	return nil
 }
-*/
 
 // (joao) not present in the original code. Extract unfolding to a pure function
 //        as sugested in Sascha's thesis
@@ -326,14 +366,19 @@ func (s *Decoded) Reverse() error {
 }
 
 // ToRaw tranforms scion.Decoded into scion.Raw
-//func (s *Decoded) ToRaw() (*Raw, error) {
-//	b := make([]byte, s.Len())
-//	if err := s.SerializeTo(b); err != nil {
-//		return nil, err
-//	}
-//	raw := &Raw{}
-//	if err := raw.DecodeFromBytes(b); err != nil {
-//		return nil, err
-//	}
-//	return raw, nil
-//}
+requires acc(DecodedInvariant(s), 1/10)
+ensures acc(DecodedInvariant(s), 1/10)
+ensures err == nil ==> RawInvariant(raw)
+func (s *Decoded) ToRaw() (raw *Raw, err error) {
+	unfold acc(DecodedInvariant(s), 1/100)
+	b := make([]byte, s.Len())
+	fold acc(DecodedInvariant(s), 1/100)
+	if err := s.SerializeTo(b); err != nil {
+		return nil, err
+	}
+	raw := &Raw{}
+	if err := raw.DecodeFromBytes(b); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}

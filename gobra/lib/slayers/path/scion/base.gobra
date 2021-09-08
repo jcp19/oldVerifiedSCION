@@ -173,6 +173,8 @@ pure func (s *Base) Len() (res int) // {
 
 // MetaHdr is the PathMetaHdr of a SCION (data-plane) path type.
 type MetaHdr struct {
+	// (joao) Currently, there are no restrictions on the value CurrINF and CurrHF may hold.
+	// In particular, they do not need to be valid indexes
 	CurrINF uint8
 	CurrHF  uint8
 	SegLen  [3]uint8

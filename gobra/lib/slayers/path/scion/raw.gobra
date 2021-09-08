@@ -102,36 +102,49 @@ func (s *Raw) SerializeTo(b []byte) error {
 }
 
 // Reverse reverses the path such that it can be used in the reverse direction.
-//func (s *Raw) Reverse() error {
-//	// XXX(shitz): The current implementation is not the most performant, since it parses the entire
-//	// path first. If this becomes a performance bottleneck, the implementation should be changed to
-//	// work directly on the raw representation.
-//
-//	decoded, err := s.ToDecoded()
-//	if err != nil {
-//		return err
-//	}
-//	if err := decoded.Reverse(); err != nil {
-//		return err
-//	}
-//	if err := decoded.SerializeTo(s.Raw); err != nil {
-//		return err
-//	}
-//	return s.DecodeFromBytes(s.Raw)
-//}
+requires RawInvariant(s)
+ensures res == nil ==> RawInvariant(s)
+func (s *Raw) Reverse() (res error) {
+	// XXX(shitz): The current implementation is not the most performant, since it parses the entire
+	// path first. If this becomes a performance bottleneck, the implementation should be changed to
+	// work directly on the raw representation.
+	decoded, err := s.ToDecoded()
+	if err != nil {
+		return err
+	}
+	if err := decoded.Reverse(); err != nil {
+		return err
+	}
+	unfold RawInvariant(s)
+	if err := decoded.SerializeTo(s.Raw); err != nil {
+		fold RawInvariant(s)
+		return err
+	}
+	unfold BaseInvariant(&s.Base)
+	return s.DecodeFromBytes(s.Raw)
+}
 
-//// ToDecoded transforms a scion.Raw to a scion.Decoded.
-//func (s *Raw) ToDecoded() (*Decoded, error) {
-//	// Serialize PathMeta to ensure potential changes are reflected Raw.
-//	if err := s.PathMeta.SerializeTo(s.Raw[:MetaLen]); err != nil {
-//		return nil, err
-//	}
-//	decoded := &Decoded{}
-//	if err := decoded.DecodeFromBytes(s.Raw); err != nil {
-//		return nil, err
-//	}
-//	return decoded, nil
-//}
+// ToDecoded transforms a scion.Raw to a scion.Decoded.
+preserves RawInvariant(s)
+ensures resErr == nil ==> DecodedInvariant(resDecoded)
+func (s *Raw) ToDecoded() (resDecoded *Decoded, resErr error) {
+	unfold RawInvariant(s)
+	assert forall i int :: 0 <= i && i < MetaLen ==> &(s.Raw)[:MetaLen][i] == &(s.Raw)[i]
+	// Serialize PathMeta to ensure potential changes are reflected Raw.
+	// (joao) Added parentheses, replaced call to `SerializeTo` by call to `SerializePathMetaTo`
+	// if err := s.PathMeta.SerializeTo((s.Raw)[:MetaLen]); err != nil {
+	if err := (&s.Base).SerializePathMetaTo((s.Raw)[:MetaLen]); err != nil {
+		fold RawInvariant(s)
+		return nil, err
+	}
+	decoded := &Decoded{}
+	if err := decoded.DecodeFromBytes(s.Raw); err != nil {
+		fold RawInvariant(s)
+		return nil, err
+	}
+	fold RawInvariant(s)
+	return decoded, nil
+}
 
 // GetInfoField returns the InfoField at a given index.
 requires 0 <= idx
@@ -142,7 +155,7 @@ func (s *Raw) GetInfoField(idx int) (retInfo *path.InfoField, retErr error) {
 	unfold acc(RawInvariant(s), 1/100)
 	unfold acc(BaseInvariant(&s.Base), 1/100)
 	if idx >= s.NumINF {
-// (joao) introduces `tmp` to be able to fold predicate before returning
+		// (joao) introduces `tmp` to be able to fold predicate before returning
 		tmp := serrors.New("InfoField index out of bounds", "max", s.NumINF-1, "actual", idx)
 		fold acc(BaseInvariant(&s.Base), 1/100)
 		fold acc(RawInvariant(s), 1/100)
@@ -150,7 +163,7 @@ func (s *Raw) GetInfoField(idx int) (retInfo *path.InfoField, retErr error) {
 	}
 	infOffset := MetaLen + idx*path.InfoLen
 	info := &path.InfoField{}
-// (joao) add parentheses surrounding s.Raw
+	// (joao) add parentheses surrounding s.Raw
 	assert forall i int :: 0 <= i && i < path.InfoLen ==> &((s.Raw)[infOffset : infOffset+path.InfoLen])[i] == &(s.Raw)[infOffset + i]
 	if err := info.DecodeFromBytes((s.Raw)[infOffset : infOffset+path.InfoLen]); err != nil {
 		fold acc(BaseInvariant(&s.Base), 1/100)
