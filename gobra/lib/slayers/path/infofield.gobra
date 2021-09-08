@@ -53,27 +53,27 @@ type InfoField struct {
 
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
 // path.InfoLen
-requires acc(inf)
-requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
-ensures acc(inf)
-ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
+preserves acc(inf)
+preserves forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/1000)
 func (inf *InfoField) DecodeFromBytes(raw []byte) error {
 	if len(raw) < InfoLen {
 		return serrors.New("InfoField raw too short", "expected", InfoLen, "actual", len(raw))
 	}
 	inf.ConsDir = raw[0]&0x1 == 0x1
 	inf.Peer = raw[0]&0x2 == 0x2
-	// inf.SegID = binary.BigEndian.Uint16(raw[2:4])
-	// inf.Timestamp = binary.BigEndian.Uint32(raw[4:8])
+	assert &raw[2:4][0] == &raw[2] && &raw[2:4][1] == &raw[3]
+	inf.SegID = binary.BigEndian.Uint16(raw[2:4])
+	assert &raw[4:8][0] == &raw[4] && &raw[4:8][1] == &raw[5]
+	assert &raw[4:8][2] == &raw[6] && &raw[4:8][3] == &raw[7]
+	inf.Timestamp = binary.BigEndian.Uint32(raw[4:8])
 	return nil
 }
 
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // path.InfoLen
-requires acc(inf, 1/2)
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures acc(inf, 1/2)
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+// requires len(b) >= 8
+preserves acc(inf, 1/1000)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func (inf *InfoField) SerializeTo(b []byte) error {
 	if len(b) < InfoLen {
 		return serrors.New("buffer for InfoField too short", "expected", InfoLen,
@@ -87,11 +87,11 @@ func (inf *InfoField) SerializeTo(b []byte) error {
 		b[0] |= 0x2
 	}
 	b[1] = 0 // reserved
-	// (joao) leads to type error because binary.BigEndian is implemented as a type and not as
-	// a global variable as it should be in the std lib
-	// binary.BigEndian.PutUint16(b[2:4], inf.SegID)
-	// binary.BigEndian.PutUint32(b[4:8], inf.Timestamp)
-
+	assert &b[2:4][0] == &b[2] && &b[2:4][1] == &b[3]
+	binary.BigEndian.PutUint16(b[2:4], inf.SegID)
+	assert &b[4:8][0] == &b[4] && &b[4:8][1] == &b[5]
+	assert &b[4:8][2] == &b[6] && &b[4:8][3] == &b[7]
+	binary.BigEndian.PutUint32(b[4:8], inf.Timestamp)
 	return nil
 }
 
@@ -99,15 +99,17 @@ func (inf *InfoField) SerializeTo(b []byte) error {
 // first bytes of the MAC. It is the beta calculation according to
 // https://scion.docs.anapaya.net/en/latest/protocols/scion-header.html#hop-field-mac-computation
 requires acc(inf)
+requires len(hfMac) >= 2
+requires acc(&hfMac[0]) && acc(&hfMac[1]) 
 ensures acc(inf)
+ensures acc(&hfMac[0]) && acc(&hfMac[1]) 
 func (inf *InfoField) UpdateSegID(hfMac []byte) {
-	// (joao) once again, not implemented due to lack of support for "encoding"
-	// inf.SegID = inf.SegID ^ binary.BigEndian.Uint16(hfMac[:2])
+	inf.SegID = inf.SegID ^ binary.BigEndian.Uint16(hfMac[:2])
 }
 
-func (inf *InfoField) String() string {
-	/* (joao) no support for strings at the moment
-	return fmt.Sprintf("{Peer: %t, ConsDir: %t, SegID: %d, Timestamp: %s}",
-		inf.Peer, inf.ConsDir, inf.SegID, util.SecsToCompact(inf.Timestamp))
-	*/
-}
+requires acc(inf, _)
+pure func (inf *InfoField) String() string // {
+// (joao) no support for strings at the moment
+//	return fmt.Sprintf("{Peer: %t, ConsDir: %t, SegID: %d, Timestamp: %s}",
+//		inf.Peer, inf.ConsDir, inf.SegID, util.SecsToCompact(inf.Timestamp))
+// }
