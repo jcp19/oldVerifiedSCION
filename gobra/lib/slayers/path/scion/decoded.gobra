@@ -33,10 +33,10 @@ pred DecodedInvariant(d* Decoded) {
 	acc(&d.InfoFields) &&
 	acc(&d.HopFields) &&
 	BaseInvariant(&d.Base) &&
-	// (unfolding BaseInvariant(&d.Base) in (d.NumINF <= MaxINFs && len(d.InfoFields) == d.NumINF)) &&
-	// (unfolding BaseInvariant(&d.Base) in (d.NumHops <= MaxHops && len(d.HopFields) == d.NumHops)) &&
 	getNumINF(&d.Base) <= MaxINFs && len(d.InfoFields) == getNumINF(&d.Base) &&
-	getNumHops(&d.Base) <= MaxHops && len(d.HopFields) == getNumHops(&d.Base) &&
+	// (joao) MaxHops is pretty much ignored in this package, no checks are made to
+	//        ensure that the number of hops in a path is less than this number.
+	/* getNumHops(&d.Base) <= MaxHops  && */ len(d.HopFields) == getNumHops(&d.Base) &&
 	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc(&(d.InfoFields)[i]) && acc((d.InfoFields)[i])) &&
 	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i]) && path.HopFieldInv((d.HopFields)[i]))
 }
@@ -92,69 +92,46 @@ pure func getLenHopFields(s *Decoded) int {
 // }
 
 // DecodeFromBytes fully decodes the SCION path into the corresponding fields.
-//requires p > 0
-//requires DecodedInvariant(s)
-//requires unfolding DecodedInvariant(s) in unfolding BaseInvariant(&s.Base) in MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data) && 6 + path.MacLen <= len(data)
-//requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-//// ensures DecodedInvariant(s)
-//ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-//func (s *Decoded) DecodeFromBytes(data []byte, ghost p perm) error {
-//	unfold DecodedInvariant(s)
-//	unfold BaseInvariant(&s.Base)
-//	if err := s.Base.DecodeFromBytes(data, p/2); err != nil {
-//		return err
-//	}
-//	if minLen := s.Len(); len(data) < minLen {
-//		return serrors.New("DecodedPath raw too short", "expected", minLen, "actual", len(data))
-//	}
-//
-//	offset := MetaLen
-//	s.InfoFields = make([]*path.InfoField, s.NumINF)
-//
-//	invariant acc(s, 1/2)
-//	invariant len(s.InfoFields) == s.NumINF
-//	invariant 0 <= i && i <= int(s.NumINF)
-//	// invariant MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data)
-//	invariant MetaLen + int(s.NumINF) * path.InfoLen <= len(data)
-//	invariant offset == MetaLen + i * path.InfoLen
-//	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-//	invariant forall j int :: 0 <= j && j < len(s.InfoFields) ==> acc(&(s.InfoFields)[j])
-//	for i := 0; i < int(s.NumINF); i++ {
-//		info := &path.InfoField{}
-//		assert forall j int :: 0 <= j && j < path.InfoLen ==> &data[offset : offset+path.InfoLen][j] == &data[offset + j]
-//		if err := info.DecodeFromBytes(data[offset : offset+path.InfoLen], p/2); err != nil {
-//			return err
-//		}
-//		// (joao) add parentheses surrounding s.InfoFields
-//		(s.InfoFields)[i] = info
-//		offset += path.InfoLen
-//	}
-//	s.HopFields = make([]*path.HopField, s.NumHops)
-// (joao) current progress until here
-//	invariant acc(s, 1/2)
-//	invariant 0 <= i && i <= int(s.NumHops)
-//	invariant len(s.HopFields) == s.NumHops
-//	invariant 6 + path.MacLen <= len(data)
-//	invariant MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data)
-//	invariant offset == MetaLen + int(s.NumINF) * path.InfoLen + i * path.HopLen
-//	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-//	invariant forall j int :: 0 <= j && j < len(s.HopFields) ==> acc(&(s.HopFields)[j])
-//	for i := 0; i < int(s.NumHops); i++ {
-//		hop := &path.HopField{}
-//		assert forall j int :: 0 <= j && j < int(path.HopLen) ==> &(data[offset : offset+path.HopLen][j]) == &data[offset + j]
-//		if err := hop.DecodeFromBytes(data[offset : offset+path.HopLen], p/2); err != nil {
-//			return err
-//		}
+/*
+requires acc(s)
+preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
+ensures res == nil ==> DecodedInvariant(s) 
+func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
+	if err := s.Base.DecodeFromBytes(data); err != nil {
+		return err
+	}
+	if minLen := s.Len(); len(data) < minLen {
+		return serrors.New("DecodedPath raw too short", "expected", minLen, "actual", len(data))
+	}
+	offset := MetaLen
+	s.InfoFields = make([]*path.InfoField, s.NumINF)
+	for i := 0; i < int(s.NumINF); i++ {
+		info := &path.InfoField{}
+		assert forall j int :: 0 <= j && j < path.InfoLen ==> &data[offset : offset+path.InfoLen][j] == &data[offset + j]
+		if err := info.DecodeFromBytes(data[offset : offset+path.InfoLen]); err != nil {
+			return err
+		}
+		// (joao) add parentheses surrounding s.InfoFields
+		(s.InfoFields)[i] = info
+		offset += path.InfoLen
+	}
+	s.HopFields = make([]*path.HopField, s.NumHops)
+	for i := 0; i < int(s.NumHops); i++ {
+		hop := &path.HopField{}
+		assert forall j int :: 0 <= j && j < int(path.HopLen) ==> &(data[offset : offset+path.HopLen][j]) == &data[offset + j]
+		if err := hop.DecodeFromBytes(data[offset : offset+path.HopLen]); err != nil {
+			return err
+		}
 		// (joao) add parentheses surrounding s.HopFields
-//		(s.HopFields)[i] = hop
-//		offset += path.HopLen
-//	}
-//	fold BaseInvariant(&s.Base)
-//	fold DecodedInvariant(s)
-//	return nil
-//}
+		(s.HopFields)[i] = hop
+		offset += path.HopLen
+	}
+	return nil
+}
+*/
 
-// (joao) not present in the original code
+// (joao) not present in the original code. Extract unfolding to a pure function
+//        as sugested in Sascha's thesis
 requires acc(DecodedInvariant(s), _)
 pure func DecodedLen(s *Decoded) int {
 	return unfolding acc(DecodedInvariant(s), _) in s.Len()
@@ -237,7 +214,6 @@ func outlineFstRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error)
 		assert len(b) >= offset+path.InfoLen
 		assert offset >= 0 && offset+path.InfoLen >= 0 && offset < offset+path.InfoLen
 		info := (s.InfoFields)[i]
-// (joao) uncommenting the following causes gobra to diverge
 		assert len(b[offset : offset+path.InfoLen]) == path.InfoLen
 		assert forall j int :: 0 <= j && j < len(b[offset : offset+path.InfoLen]) ==> &b[offset : offset+path.InfoLen][j] == &b[offset + j]
 		if err := info.SerializeTo(b[offset : offset+path.InfoLen]); err != nil {
@@ -280,31 +256,74 @@ func outlineSndRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error)
 }
 
 // Reverse reverses a SCION path.
-//func (s *Decoded) Reverse() error {
-//	if s.NumINF == 0 {
-//		// Empty path doesn't need reversal.
-//		return nil
-//	}
-//	// Reverse order of InfoFields and SegLens
-//	for i, j := 0, s.NumINF-1; i < j; i, j = i+1, j-1 {
-//		s.InfoFields[i], s.InfoFields[j] = s.InfoFields[j], s.InfoFields[i]
-//		s.PathMeta.SegLen[i], s.PathMeta.SegLen[j] = s.PathMeta.SegLen[j], s.PathMeta.SegLen[i]
-//	}
-//	// Reverse cons dir flags
-//	for i := 0; i < s.NumINF; i++ {
-//		info := s.InfoFields[i]
-//		info.ConsDir = !info.ConsDir
-//	}
-//	// Reverse order of hop fields
-//	for i, j := 0, s.NumHops-1; i < j; i, j = i+1, j-1 {
-//		s.HopFields[i], s.HopFields[j] = s.HopFields[j], s.HopFields[i]
-//	}
-//	// Update CurrINF and CurrHF and SegLens
-//	s.PathMeta.CurrINF = uint8(s.NumINF) - s.PathMeta.CurrINF - 1
-//	s.PathMeta.CurrHF = uint8(s.NumHops) - s.PathMeta.CurrHF - 1
-//
-//	return nil
-//}
+requires DecodedInvariant(s)
+ensures DecodedInvariant(s)
+func (s *Decoded) Reverse() error {
+	unfold DecodedInvariant(s)
+	// (joao) use getNumINF to avoid unfolding here
+	//if s.NumINF == 0 {
+	if getNumINF(&s.Base) == 0 {
+		// Empty path doesn't need reversal.
+		fold DecodedInvariant(s)
+		return nil
+	}
+	// Reverse order of InfoFields and SegLens
+	invariant BaseInvariant(&s.Base)
+	invariant acc(&(s.InfoFields))
+	invariant acc(&(s.HopFields), 1/2)
+	invariant 0 <= j && j <= getNumINF(&s.Base)-1
+	invariant 0 <= i && i <= j + 1
+	invariant getNumINF(&s.Base) == len(s.InfoFields)
+	invariant getNumHops(&s.Base) == len(s.HopFields)
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i])
+	// (joao) use getNumINF to avoid unfolding here
+	// for i, j := 0, s.NumINF-1; i < j; i, j = i+1, j-1 {
+	for i, j := 0, getNumINF(&s.Base)-1; i < j; i, j = i+1, j-1 {
+		// (joao) added parentheses to make gobra parse
+		unfold BaseInvariant(&s.Base)
+		(s.InfoFields)[i], (s.InfoFields)[j] = (s.InfoFields)[j], (s.InfoFields)[i]
+		(s.PathMeta.SegLen)[i], (s.PathMeta.SegLen)[j] = (s.PathMeta.SegLen)[j], (s.PathMeta.SegLen)[i]
+		fold BaseInvariant(&s.Base)
+	}
+	// Reverse cons dir flags
+	invariant acc(BaseInvariant(&s.Base), 1/2)
+	invariant acc(&(s.InfoFields), 1/2)
+	invariant 0 <= i && i <= getNumINF(&s.Base)
+	invariant getNumINF(&s.Base) == len(s.InfoFields)
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i])
+	// (joao) use getNumINF to avoid unfolding here
+	//	for i := 0; i < s.NumINF; i++ {
+	for i := 0; i < getNumINF(&s.Base); i++ {
+		// (joao) add parentheses
+		info := (s.InfoFields)[i]
+		info.ConsDir = !info.ConsDir
+	}
+	// Reverse order of hop fields
+	invariant BaseInvariant(&s.Base)
+	invariant acc(&(s.HopFields), 1/2)
+	invariant acc(&(s.InfoFields), 1/2)
+	invariant -1 <= j && j <= getNumHops(&s.Base)-1
+	invariant 0 <= i && i <= j + 1
+	invariant getNumINF(&s.Base) == len(s.InfoFields)
+	invariant getNumHops(&s.Base) == len(s.HopFields)
+	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i]) && path.HopFieldInv((s.HopFields)[i])
+	// (joao) use getNumHops to avoid unfolding here
+	//	for i, j := 0, s.NumHops-1; i < j; i, j = i+1, j-1 {
+	for i, j := 0, getNumHops(&s.Base)-1; i < j; i, j = i+1, j-1 {
+		// (joao) added parentheses to make gobra parse
+		(s.HopFields)[i], (s.HopFields)[j] = (s.HopFields)[j], (s.HopFields)[i]
+	}
+
+	unfold BaseInvariant(&s.Base)
+	s.PathMeta.CurrINF = uint8(s.NumINF) - s.PathMeta.CurrINF - 1
+	s.PathMeta.CurrHF = uint8(s.NumHops) - s.PathMeta.CurrHF - 1
+	fold BaseInvariant(&s.Base)
+
+	fold DecodedInvariant(s)
+	return nil
+}
 
 // ToRaw tranforms scion.Decoded into scion.Raw
 //func (s *Decoded) ToRaw() (*Raw, error) {

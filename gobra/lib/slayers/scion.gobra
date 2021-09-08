@@ -195,6 +195,7 @@ pred InvariantSCION(s *SCION) {
 	(s.RawDstAddr != nil ==> (validAddrLen(s.DstAddrLen) && lengthToAddrLen(len(s.RawDstAddr)) == s.DstAddrLen && forall i int :: 0 <= i && i < len(s.RawDstAddr) ==> acc(&(s.RawDstAddr)[i])))
 }
 
+/*
 ghost
 ensures InvariantSCION(s)
 func soundInvariantSCION() (s *SCION) {
@@ -203,6 +204,7 @@ func soundInvariantSCION() (s *SCION) {
 	fold InvariantSCION(s)
 	return s
 }
+*/
 
 // (joao) gopacket not supported for now
 //func (s *SCION) LayerType() gopacket.LayerType {
@@ -384,13 +386,14 @@ func (s *SCION) LayerPayload() []byte
 requires p > 0
 requires acc(InvariantSCION(s), p)
 ensures acc(InvariantSCION(s), p)
-func (s *SCION) DstAddr(ghost p perm) (net.Addr, error) {
+//(joao) commented to save CI time
+func (s *SCION) DstAddr(ghost p perm) (net.Addr, error) /*{
 	unfold acc(InvariantSCION(s), p)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr, p)
 	fold acc(InvariantSCION(s), p)
 	return res, err
-}
+}*/
 
 // SrcAddr parses the source address into a net.Addr. The returned net.Addr references data from the
 // underlaying layer data. Changing the net.Addr object might lead to inconsistent layer information
@@ -399,43 +402,50 @@ func (s *SCION) DstAddr(ghost p perm) (net.Addr, error) {
 requires p > 0
 requires acc(InvariantSCION(s), p)
 ensures acc(InvariantSCION(s), p)
-func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) {
+//(joao) commented to save CI time
+func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) /*{
 	unfold acc(InvariantSCION(s), p)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr, p)
 	fold acc(InvariantSCION(s), p)
 	return res, err
 }
+*/
 
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
 // SetDstAddr takes ownership of dst and callers should not write to it after calling SetDstAddr.
 // Changes to dst might leave the layer in an inconsistent state.
 requires InvariantSCION(s) && dst.mem()
 ensures InvariantSCION(s)
-func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
+//(joao) commented to save CI time
+func (s *SCION) SetDstAddr(dst net.Addr) (ret error) /*{
 	unfold InvariantSCION(s)
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
 	fold InvariantSCION(s)
 	return err
 }
+*/
 
 // SetSrcAddr sets the source address and updates the DstAddrLen/Type fields accordingly.
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
 // Changes to src might leave the layer in an inconsistent state.
 requires InvariantSCION(s) && src.mem()
 ensures InvariantSCION(s)
-func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
+//(joao) commented to save CI time
+func (s *SCION) SetSrcAddr(src net.Addr) (ret error) /*{
 	var err error
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)
 	return err
 }
+*/
 
 requires p > 0
 requires lengthToAddrLen(len(raw)) == addrLen
 requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
 ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
-func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (net.Addr, error) {
+// (joao) commented to save CI time
+func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (net.Addr, error) /*{
 	switch addrLen {
 	case AddrLen4:
 		switch addrType {
@@ -452,7 +462,7 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (ne
 	}
 	return nil, serrors.New("unsupported address type/length combination",
 		"type", addrType, "len", addrLen)
-}
+}*/
 
 requires hostAddr.mem()
 ensures err == nil ==> validAddrLen(addrLen)
@@ -477,9 +487,10 @@ func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, 
 // in bytes.
 requires acc(InvariantSCION(s), _)
 ensures unfolding acc(InvariantSCION(s), _) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
-pure func (s *SCION) AddrHdrLen() (res int) {
+pure func (s *SCION) AddrHdrLen() (res int) /*{
 	return unfolding InvariantSCION(s) in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 }
+*/
 
 // SerializeAddrHdr serializes destination and source ISD-AS-Host address triples into the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
@@ -488,7 +499,8 @@ pure func (s *SCION) AddrHdrLen() (res int) {
 requires p > 0
 requires acc(InvariantSCION(s), p)
 // ensures InvariantSCION(s)
-func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) error {
+// (joao) commented to save CI time
+func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) error /*{
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(buf))
@@ -506,7 +518,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) error {
 //	copy(buf[offset:offset+srcAddrBytes], s.RawSrcAddr)
 	//fold InvariantSCION(s)
 	return nil
-}
+}*/
 
 // DecodeAddrHdr decodes the destination and source ISD-AS-Host address triples from the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
@@ -543,7 +555,8 @@ func (s *SCION) DecodeAddrHdr(data []byte, ghost p perm) error // {
 requires p > 0
 requires s != nil ==> acc(InvariantSCION(s), p)
 ensures s != nil ==> acc(InvariantSCION(s), p)
-func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8, ghost p perm) (uint16, error) {
+func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8, ghost p perm) (uint16, error) /*{
+//(joao) Commented out to save CI time
 	if s == nil {
 		return 0, serrors.New("SCION header missing")
 	}
@@ -555,12 +568,13 @@ func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8, ghost p perm)
 	folded := s.foldChecksum(csum)
 	return folded, nil
 }
+*/
 
 requires p > 0
 requires acc(InvariantSCION(s), p)
 requires acc(InvariantSCION(s), p)
 // ensures (len(s.RawSrcAddr) > 0 && len(s.RawDstAddr) > 0) ==> resErr == nil
-func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8, ghost p perm) (resUint uint32, resErr error) {
+func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8, ghost p perm) (resUint uint32, resErr error) /* {
 	unfold acc(InvariantSCION(s), p)
 	if len(s.RawDstAddr) == 0 {
 		fold acc(InvariantSCION(s), p)
@@ -605,8 +619,9 @@ func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8, ghost p perm) (
 	csum += uint32(protocol)
 	return csum, nil
 }
+*/
 
-
+/* (joao) Commented out to save CI time
 requires p > 0
 requires forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], p)
 ensures forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], p)
@@ -633,3 +648,4 @@ func (s *SCION) foldChecksum(csum uint32) uint16 {
 	}
 	return ^uint16(csum)
 }
+*/
