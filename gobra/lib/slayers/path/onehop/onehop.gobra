@@ -1,0 +1,185 @@
+// Copyright 2020 Anapaya Systems
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package onehop
+
+import (
+//	"github.com/scionproto/scion/go/lib/serrors"
+	"gobra/lib/serrors"
+//	"github.com/scionproto/scion/go/lib/slayers/path"
+	"gobra/lib/slayers/path"
+//	"github.com/scionproto/scion/go/lib/slayers/path/scion"
+	"gobra/lib/slayers/path/scion"
+)
+
+// PathLen is the length of a serialized one hop path in bytes
+const PathLen = path.InfoLen + 2*path.HopLen
+
+// Path encodes a one hop path. A one hop path is a special path that is created by a SCION router
+// in the first AS and completed by a SCION router in the second AS. It is used during beaconing
+// when there is not yet any other path segment available.
+type Path struct {
+	Info      path.InfoField
+	FirstHop  path.HopField
+	SecondHop path.HopField
+}
+
+pred OneHopInv(o *Path) {
+	acc(&o.Info) &&
+	path.HopFieldInv(&o.FirstHop) &&
+	path.HopFieldInv(&o.SecondHop)
+}
+
+//func satisfiableOneHopInv() {
+//	o := &Path{}
+//
+//	o.Info = path.InfoField{}
+//
+//	o.FirstHop = path.HopField{}
+//	o.FirstHop.Mac = make([]byte, 6)
+//	fold path.HopFieldInv(&o.FirstHop)
+//
+//	o.SecondHop = path.HopField{}
+//	o.SecondHop.Mac = make([]byte, 6)
+//	fold path.HopFieldInv(&o.SecondHop)
+//
+//	fold OneHopInv(o)
+//}
+
+requires acc(o)
+preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
+ensures err == nil ==> OneHopInv(o)
+ensures err != nil ==> acc(o)
+func (o *Path) DecodeFromBytes(data []byte) (err error) {
+	if len(data) < PathLen {
+		return serrors.New("buffer too short for OneHop path", "expected", PathLen, "actual",
+			len(data))
+	}
+	offset := 0
+	assert len(data) >= path.InfoLen
+	assert forall i int :: 0 <= i && i < path.InfoLen ==> &data[:path.InfoLen][i] == &data[i]
+	if err := o.Info.DecodeFromBytes(data[:path.InfoLen]); err != nil {
+		return err
+	}
+	offset += path.InfoLen
+	assert 0 <= offset
+	assert offset + path.HopLen <= len(data)
+	assert forall i int :: 0 <= i && i < path.HopLen ==> &data[offset : offset+path.HopLen][i] == &data[offset + i]
+	if err := o.FirstHop.DecodeFromBytes(data[offset : offset+path.HopLen]); err != nil {
+		return err
+	}
+	offset += path.HopLen
+	assert 0 <= offset
+	assert offset + path.HopLen <= len(data)
+	assert forall i int :: 0 <= i && i < path.HopLen ==> &data[offset : offset+path.HopLen][i] == &data[offset + i]
+	// (joao) introduced `tmp` var to fold before returning
+	tmp := o.SecondHop.DecodeFromBytes(data[offset : offset+path.HopLen])
+
+	if tmp == nil {
+		fold OneHopInv(o)
+	} else {
+		unfold path.HopFieldInv(&o.FirstHop)
+	}
+	return tmp
+}
+
+preserves acc(OneHopInv(o), 1/100)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func (o *Path) SerializeTo(b []byte) error {
+	if len(b) < PathLen {
+		return serrors.New("buffer too short for OneHop path", "expected", PathLen, "actual",
+			len(b))
+	}
+	offset := 0
+	unfold acc(OneHopInv(o), 1/100)
+	assert forall i int :: 0 <= i && i < offset+path.InfoLen ==> &b[:offset+path.InfoLen][i] == &b[i]
+	if err := o.Info.SerializeTo(b[:offset+path.InfoLen]); err != nil {
+		fold acc(OneHopInv(o), 1/100)
+		return err
+	}
+	offset += path.InfoLen
+	assert forall i int :: 0 <= i && i < offset+path.HopLen ==> &b[offset : offset+path.HopLen][i] == &b[offset+i]
+	if err := o.FirstHop.SerializeTo(b[offset : offset+path.HopLen]); err != nil {
+		fold acc(OneHopInv(o), 1/100)
+		return err
+	}
+	offset += path.HopLen
+	assert forall i int :: 0 <= i && i < offset+path.HopLen ==> &b[offset : offset+path.HopLen][i] == &b[offset+i]
+	// (joao) introduce `tmp` to fold before returning
+	tmp := o.SecondHop.SerializeTo(b[offset : offset+path.HopLen])
+	fold acc(OneHopInv(o), 1/100)
+	return tmp
+}
+
+// ToSCIONDecoded converts the one hop path in to a normal SCION path in the
+// decoded format.
+// (joao) The spec for this method is currently assumed
+requires acc(OneHopInv(o), 1/100)
+ensures acc(OneHopInv(o), 1/100)
+ensures err == nil ==> scion.DecodedInvariant(dec)
+func (o *Path) ToSCIONDecoded() (dec *scion.Decoded, err error) {
+	unfold acc(OneHopInv(o), 1/100)
+	unfold acc(path.HopFieldInv(&o.SecondHop), 1/1000)
+	if o.SecondHop.ConsIngress == 0 {
+		fold acc(path.HopFieldInv(&o.SecondHop), 1/1000)
+		fold acc(OneHopInv(o), 1/100)
+		return nil, serrors.New("incomplete path can't be converted")
+	}
+	assume false
+//// (joao) Gobra Error: Causes "node not in tree: Base" exception
+//	unfold path.HopFieldInv(&o.FirstHop)
+//	p := &scion.Decoded{
+//		Base: scion.Base{
+//			PathMeta: scion.MetaHdr{
+//				SegLen: [3]uint8{2, 0, 0},
+//			},
+//			NumHops: 2,
+//			NumINF:  1,
+//		},
+//		InfoFields: []*path.InfoField{
+//			{
+//				ConsDir:   true,
+//				SegID:     o.Info.SegID,
+//				Timestamp: o.Info.Timestamp,
+//			},
+//		},
+//		HopFields: []*path.HopField{
+//			{
+//				IngressRouterAlert: o.FirstHop.IngressRouterAlert,
+//				EgressRouterAlert:  o.FirstHop.EgressRouterAlert,
+//				ConsIngress:        o.FirstHop.ConsIngress,
+//				ConsEgress:         o.FirstHop.ConsEgress,
+//				ExpTime:            o.FirstHop.ExpTime,
+//				Mac:                append([]byte(nil), o.FirstHop.Mac...),
+//			},
+//			{
+//				IngressRouterAlert: o.SecondHop.IngressRouterAlert,
+//				EgressRouterAlert:  o.SecondHop.EgressRouterAlert,
+//				ConsIngress:        o.SecondHop.ConsIngress,
+//				ConsEgress:         o.SecondHop.ConsEgress,
+//				ExpTime:            o.SecondHop.ExpTime,
+//				Mac:                append([]byte(nil), o.SecondHop.Mac...),
+//			},
+//		},
+//	}
+//	return p, nil
+}
+
+func (o *Path) Reverse() error {
+	return serrors.New("OneHop path cannot be reversed")
+}
+
+func (o *Path) Len() int {
+	return PathLen
+}
