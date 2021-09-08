@@ -40,8 +40,12 @@ type Base struct {
 
 pred BaseInvariant(b *Base) {
 	acc(b) &&
-	b.NumINF >= 0 && b.NumINF <= 3 && // there are at most 3 InfoFields, one per segment
-	b.NumHops >= 0 
+	// 3 is the value of MaxINFs and 64 is the number of MaxHops. Even though they are
+	// defined in this package, using their actual values allows one to verify files
+	// independently
+	b.NumINF >= 0 && b.NumINF <= 3 &&
+	// (joao) the code cannot establish this invariant yet
+	b.NumHops >= 0 // && b.NumHops <= 64
 }
 
 requires acc(s)
@@ -59,7 +63,7 @@ func (s *Base) DecodeFromBytes(data []byte) (res error) {
 
 	invariant -1 <= i && i <= 2
 	invariant acc(s)
-	invariant s.NumHops >= 0 && s.NumINF >= 0 && s.NumINF <= 3
+	invariant s.NumHops >= 0 && s.NumINF >= 0 && s.NumINF <= 3 // && s.NumHops <= 64
 	for i := 2; i >= 0; i-- {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 		if (s.PathMeta.SegLen)[i] == 0 && s.NumINF > 0 {
