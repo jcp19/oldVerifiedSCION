@@ -15,7 +15,7 @@
 package path
 
 import (
-	// "encoding/binary"
+	"encoding/binary"
 	"time"
 
 	"gobra/lib/serrors"
@@ -68,37 +68,82 @@ type HopField struct {
 	Mac []byte
 }
 
+pred HopFieldInv(h *HopField) {
+	acc(h) &&
+	len(h.Mac) == MacLen &&
+	forall i int :: 0 <= i &&
+	i < len(h.Mac) ==> acc(&(h.Mac)[i])
+}
+
+// (joao) verifies, as expected
+// func soundHopFieldInv() {
+// 	hop := &HopField{}
+// 	hop.Mac = make([]byte, 6)
+// 	fold HopFieldInv(hop)
+// }
+
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
 // path.HopLen
 requires acc(h)
-requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
-ensures acc(h)
-ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/2)
-func (h *HopField) DecodeFromBytes(raw []byte) error {
+preserves forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/1000)
+ensures res == nil ==> HopFieldInv(h)
+ensures res != nil ==> acc(h)
+ensures len(raw) >= HopLen ==> res == nil
+func (h *HopField) DecodeFromBytes(raw []byte) (res error) {
 	if len(raw) < HopLen {
 		return serrors.New("HopField raw too short", "expected", HopLen, "actual", len(raw))
 	}
 	h.EgressRouterAlert = (raw[0] & 0x1) == 0x1
 	h.IngressRouterAlert = (raw[0] & 0x2) == 0x2
 	h.ExpTime = raw[1]
-	// (joao) binary implemented as a type instead of global expression
-	// h.ConsIngress = binary.BigEndian.Uint16(raw[2:4])
-	// h.ConsEgress = binary.BigEndian.Uint16(raw[4:6])
-	// (joao) append is not yet supported
-	// h.Mac = append([]byte(nil), raw[6:6+MacLen]...)
+
+	assert &raw[2:4][0] == &raw[2] && &raw[2:4][1] == &raw[3]
+	h.ConsIngress = binary.BigEndian.Uint16(raw[2:4])
+	assert &raw[4:6][0] == &raw[4] && &raw[4:6][1] == &raw[5]
+	h.ConsEgress = binary.BigEndian.Uint16(raw[4:6])
+
+	// (joao) introduced temporary variable tmp to simplify intermediate assertions
+	assert len(raw[6:6+MacLen]) == MacLen
+	assert &raw[6:6+MacLen][0] == &raw[6]
+	assert &raw[6:6+MacLen][1] == &raw[7]
+	assert &raw[6:6+MacLen][2] == &raw[8]
+	assert &raw[6:6+MacLen][3] == &raw[9]
+	assert &raw[6:6+MacLen][4] == &raw[10]
+	assert &raw[6:6+MacLen][5] == &raw[11]
+	// (joao) outlining this call to append does not have obvious performance implications
+	// tmp := outlineAppend(raw[6:6+MacLen])
+	tmp := append(perm(1/2000), []byte(nil), raw[6:6+MacLen]...)
+	assert len(tmp) == MacLen
+	assert forall i int :: 0 <= i && i < len(tmp) ==> acc(&tmp[i])
+	h.Mac = tmp
+	fold HopFieldInv(h)
 	return nil
 }
 
+// (joao) outlining call to append above (outline keyword crashes gobra)
+// requires len(s) == MacLen
+// preserves forall i int :: 0 <= i && i < len(s) ==> acc(&s[i], 1/2000)
+// ensures len(res) == MacLen
+// ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
+// ensures forall i int :: 0 <= i && i < len(res) ==> res[i] == s[i]
+// func outlineAppend(s []byte) (res []byte) {
+// 	tmpSlice := []byte(nil)
+// 	assert len(tmpSlice) == 0
+// 	assert forall i int :: 0 <= i && i < len(tmpSlice) ==> acc(&tmpSlice[i])
+// 	tmp := append(perm(1/2000), tmpSlice, s.../*raw[6:6+MacLen]...*/)
+// 	return tmp
+// }
+
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // path.HopLen
-requires acc(h, 1/2)
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures acc(h, 1/2)
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (h *HopField) SerializeTo(b []byte) error {
+preserves acc(HopFieldInv(h), 1/1000)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures len(b) >= HopLen ==> err == nil
+func (h *HopField) SerializeTo(b []byte) (err error) {
 	if len(b) < HopLen {
 		return serrors.New("buffer for HopField too short", "expected", MacLen, "actual", len(b))
 	}
+	unfold acc(HopFieldInv(h), 1/1000)
 	b[0] = 0
 	if h.EgressRouterAlert {
 		b[0] |= 0x1
@@ -108,19 +153,30 @@ func (h *HopField) SerializeTo(b []byte) error {
 	}
 	b[1] = h.ExpTime
 
-	// (joao) No support for "binary" package yet
-	// binary.BigEndian.PutUint16(b[2:4], h.ConsIngress)
-	// binary.BigEndian.PutUint16(b[4:6], h.ConsEgress)
+	assert &b[2:4][0] == &b[2] && &b[2:4][1] == &b[3]
+	binary.BigEndian.PutUint16(b[2:4], h.ConsIngress)
+	assert &b[4:6][0] == &b[4] && &b[4:6][1] == &b[5]
+	binary.BigEndian.PutUint16(b[4:6], h.ConsEgress)
 
-	// (joao) copy method not supported
-	// copy(b[6:12], h.Mac)
+	assert &b[6:12][0] == &b[6] && &b[6:12][1] == &b[7]
+	assert &b[6:12][2] == &b[8] && &b[6:12][3] == &b[9]
+	assert &b[6:12][4] == &b[10] && &b[6:12][5] == &b[11]
+// (joao) outlining this call to copy reduces the verification time from ~8 min to ~3 min
+//  	copy(b[6:12], h.Mac, perm(1/2000))
+	outlineCopy(b[6:12], h.Mac)
+	fold acc(HopFieldInv(h), 1/1000)
 
 	return nil
 }
 
+preserves forall i int :: (0 <= i && i < len(dst)) ==> acc(&dst[i])
+preserves forall i int :: (0 <= i && i < len(src)) ==> acc(&src[i], 1/2000)
+func outlineCopy(dst, src []byte) {
+	copy(dst, src, perm(1/2000))
+}
+
 // ExpTimeToDuration calculates the relative expiration time in seconds.
 // Note that for a 0 value ExpTime, the minimal duration is expTimeUnit.
-func ExpTimeToDuration(expTime uint8) time.Duration {
-	// (joao) node not in tree: Millisecond
-	// return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit) * time.Second
-}
+func ExpTimeToDuration(expTime uint8) time.Duration // {
+//	return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit) * time.Second
+//}
