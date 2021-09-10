@@ -144,8 +144,9 @@ func asParse(s string, sep string) (resAS AS, resErr error) {
 	invariant 0 <= i && i <= asParts
 	invariant forall j int :: 0 <= j && j < len(parts) ==> acc(&parts[j])
 	for i := 0; i < asParts; i++ {
-// (joao) leads to error, types not comptabile with >>
-//		as <<= asPartBits
+		// (joao) leads to error, types not comptabile with >>. Currently rewritten.
+		// as <<= asPartBits
+		as = AS(uint64(as) << asPartBits) // (joao) rewritten version
 		v, err := strconv.ParseUint(parts[i], asPartBase, asPartBits)
 		if err != nil {
 			assume !validAS(s)
@@ -153,7 +154,9 @@ func asParse(s string, sep string) (resAS AS, resErr error) {
 			// return 0, common.NewBasicError("Unable to parse AS part", err, "raw", s)
 			return 0, common.NewBasicError(common.ErrMsg("Unable to parse AS part"), err, "raw", s)
 		}
-//		as |= AS(v)
+		// (joao) leads to error, types not comptabile with |. Currently rewritten.
+		// as |= AS(v)
+		as = AS(uint64(as) | uint64(AS(v)))
 	}
 	assume validAS(s)
 	return as, nil
@@ -170,10 +173,15 @@ func (as AS) FileFmt() string //{
 //	return as.fmt('_')
 //}
 
+pure
+func havocString() string
+
 func (as AS) fmt(sep byte) string {
 	if !as.inRange() {
-//		return fmt.Sprintf("%d [Illegal AS: larger than %d]", as, MaxAS)
-		return ""; // (joao) added to mimic the correct control flow of the program
+		// (joao) fmt not currently supported
+		// return fmt.Sprintf("%d [Illegal AS: larger than %d]", as, MaxAS)
+		// (joao) added to mimic the correct control flow of the program
+		return havocString();
 	}
 	// Format BGP ASes as decimal
 	if as <= MaxBGPAS {
@@ -182,8 +190,8 @@ func (as AS) fmt(sep byte) string {
 		return strconv.FormatUint(uint64(as), 10)
 	}
 	// Format all other ASes as 'sep'-separated hex.
-//	(joao) local constants are not yet supported, use `var` instead
-//	const maxLen = len("ffff:ffff:ffff")
+	// (joao) local constants are not yet supported, use `var` instead
+	// const maxLen = len("ffff:ffff:ffff")
 	var maxLen = len("ffff:ffff:ffff")
 	b := make([]byte, 0, maxLen)
 
@@ -196,8 +204,10 @@ func (as AS) fmt(sep byte) string {
 		// (joao) Gobra is not able to prove this automatically yet
 		assume uint64(as>>shift)&asPartMask >= 0
 		s := strconv.FormatUint(uint64(as>>shift)&asPartMask, asPartBase)
-// (joao) type error: only slices can be unpacked
-//		b = append(perm(1/2), b, s...)
+		// (joao) type error: strings cannot be unpacked yet
+		// b = append(perm(1/2), b, s...)
+		// (joao) rewritten to:
+		b = append(perm(1/2), b, []byte(s)...)
 	}
 	return string(b)
 }
@@ -239,13 +249,11 @@ type IA struct {
 	A AS
 }
 
-requires p > 0
 requires b.Len() >= 8
-requires forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], p)
-ensures forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], p)
-func IAFromRaw(b common.RawBytes, ghost p perm) (ret IA) {
+preserves forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], 1/1000)
+func IAFromRaw(b common.RawBytes) (ret IA) {
 	ia := &IA{}
-	ia.Parse(b, p)
+	ia.Parse(b)
 	return *ia
 }
 
@@ -292,14 +300,9 @@ func (ia IA) MarshalText() ([]byte, error) {
 }
 
 // UnmarshalText allows IA to be used as a map key in JSON.
-requires p > 0
-requires acc(ia)
-// (joao) this precondition is required even though Gobra does not complain about
-// it if is missing (check issue #246 of Gobra)
-requires forall i int :: 0 <= i && i < len(text) ==> acc(&text[i], p)
-ensures acc(ia)
-ensures forall i int :: 0 <= i && i < len(text) ==> acc(&text[i], p)
-func (ia *IA) UnmarshalText(text []byte, ghost p perm) error {
+preserves acc(ia)
+preserves forall i int :: 0 <= i && i < len(text) ==> acc(&text[i], 1/1000)
+func (ia *IA) UnmarshalText(text []byte) error {
 	if len(text) == 0 {
 		*ia = IA{}
 		return nil
@@ -312,11 +315,9 @@ func (ia *IA) UnmarshalText(text []byte, ghost p perm) error {
 	return nil
 }
 
-requires p > 0
 requires b.Len() >= 8
-requires acc(ia) && forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], p)
-ensures acc(ia) && forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], p)
-func (ia *IA) Parse(b common.RawBytes, ghost p perm) {
+preserves acc(ia) && forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], 1/1000)
+func (ia *IA) Parse(b common.RawBytes) {
 	//*ia = IAInt(binary.BigEndian.Uint64(b)).IA()
 	*ia = (IAInt(binary.BigEndian.Uint64(b))).IA()
 }
@@ -395,12 +396,9 @@ func (ia IAInt) MarshalText() (res []byte, e error) {
 	return []byte((IAInt(ia)).String()), nil
 }
 
-requires p > 0
-requires acc(ia)
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
-ensures acc(ia)
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], p)
-func (ia *IAInt) UnmarshalText(b []byte, ghost p perm) error {
+preserves acc(ia)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+func (ia *IAInt) UnmarshalText(b []byte) error {
 	tIA, err := IAFromString(string(b))
 	if err != nil {
 		return nil

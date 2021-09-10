@@ -26,10 +26,8 @@ pred (r RawBytes) Mem() {
 	forall i int :: 0 <= i && i < len(r) ==> acc(&r[i])
 }
 
-requires p > 0
-requires acc(r.Mem(), p)
-ensures acc(r.Mem(), p)
-func (r RawBytes) String(ghost p perm) string //{
+preserves acc(r.Mem(), 1/100000)
+func (r RawBytes) String() string //{
 //  return fmt.Sprintf("%x", []byte(r))
 //}
 
@@ -37,25 +35,23 @@ pure func (r RawBytes) Len() int {
 	return len(r)
 }
 
-requires p > 0
-requires acc(r.Mem(), p)
-ensures  acc(r.Mem(), p)
-ensures  res.Mem() && err == nil
-func (r RawBytes) Copy(ghost p perm) (res Payload, err error) {
-	unfold acc(r.Mem(), p)
+requires acc(r.Mem(), 1/100000)
+ensures  acc(r.Mem(), 1/100000)
+ensures  res.Mem()
+ensures  err == nil
+func (r RawBytes) Copy() (res Payload, err error) {
+	unfold acc(r.Mem(), 1/1000000)
 	// (joao) introduced var `tmp` to allow folding and unfolding
-	tmp := append(p, RawBytes{}, r...)
-	fold acc(r.Mem(), p)
+	var tmp RawBytes = append(perm(1/10000000), RawBytes{}, r...)
+	fold acc(r.Mem(), 1/1000000)
 	fold tmp.Mem()
 	return tmp, nil
 }
 
-requires 0 < p && p < 1
-requires b.Mem()
-requires acc(r.Mem(), p)
-ensures  b.Mem()
-ensures  acc(r.Mem(), p)
-func (r RawBytes) WritePld(b RawBytes, ghost p perm) (int, error) {
+preserves acc(r.Mem(), 1/100000)
+preserves acc(b.Mem())
+ensures len(r) <= len(b) ==> err == nil
+func (r RawBytes) WritePld(b RawBytes) (res int, err error) {
 	if len(b) < len(r) {
 		// (joao) Gobra does not type check if the type conversion to ErrMsg is not present
 		// return 0, NewBasicError("Insufficient space", nil, "expected", len(r), "actual", len(b))
@@ -63,15 +59,16 @@ func (r RawBytes) WritePld(b RawBytes, ghost p perm) (int, error) {
 	}
 	// (joao) introduced var `tmp` to be able to do the folds after the return statement
 	unfold b.Mem()
-	unfold acc(r.Mem(), p)
-	tmp := copy(b, r, p)
-	fold acc(r.Mem(), p)
+	unfold acc(r.Mem(), 1/100000)
+	tmp := copy(b, r, perm(1/1000000))
+	fold acc(r.Mem(), 1/100000)
 	fold b.Mem()
 	return tmp, nil
 }
 
-requires r.Mem()
-ensures  r.Mem() && unfolding r.Mem() in forall i int :: 0 <= i && i < len(r) ==> r[i] == 0
+// (joao) Trusted function
+preserves r.Mem()
+ensures   unfolding r.Mem() in forall i int :: 0 <= i && i < len(r) ==> r[i] == 0
 func (r RawBytes) Zero() // {
 //	for i := range r {
 //		r[i] = 0
