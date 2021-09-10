@@ -1,0 +1,89 @@
+package gopacket
+
+type Layer interface {
+	pred ContentsMem()
+	pred PayloadMem()
+
+	// (lhalm) returns a global constant, no need for memory permissions
+	pure LayerType() LayerType
+
+	requires 0 < p && p <= 1
+	requires acc(ContentsMem(), p)
+	ensures acc(ContentsMem(), p/2)
+	ensures acc(bytesAcc(data), p/2)
+	LayerContents(ghost p perm) (data []byte)
+
+	requires 0 < p && p <= 1
+	requires acc(PayloadMem(), p)
+	ensures acc(PayloadMem(), p/2)
+	ensures acc(bytesAcc(data), p/2)
+	LayerPayload(ghost p perm) (data []byte)
+}
+
+type NetworkLayer interface {
+	pred Mem()
+	pred ContentsMem()
+	pred PayloadMem()
+
+	// (lhalm) interface composition not supported, add methods manually
+	// Layer	
+	
+	// (lhalm) returns a global constant, no need for memory permissions
+	pure LayerType() LayerType
+
+	requires 0 < p && p <= 1
+	requires acc(Mem(), p)
+	requires acc(ContentsMem(), p)
+	ensures acc(Mem(), p)
+	ensures acc(ContentsMem(), p/2)
+	ensures acc(bytesAcc(data), p/2)
+	LayerContents(ghost p perm) (data []byte)
+
+	requires 0 < p && p <= 1
+	requires acc(Mem(), p)
+	requires acc(PayloadMem(), p)
+	ensures acc(Mem(), p)
+	ensures acc(PayloadMem(), p/2)
+	ensures acc(bytesAcc(data), p/2)
+	LayerPayload(ghost p perm) (data []byte)
+
+	// (lhalm) end of Layer methods
+	// NetworkFlow() Flow
+}
+
+// pred (p Payload) Mem() { true }
+// (Payload) implements SerializableLayer {
+
+// 	pure (p Payload) LayerType() (lt LayerType) {
+// 		return p.LayerType()
+// 	} 
+
+// 	(p Payload) SerializeTo(b SerializeBuffer, opts SerializeOptions) (err error) {
+// 		err = p.SerializeTo(b, opts)
+// 	}
+// }
+
+// type Payload []byte
+
+// pure func (p Payload) LayerType() LayerType
+
+// func (p Payload) LayerContents() []byte
+
+// func (p Payload) LayerPayload() []byte
+
+// func (p Payload) Payload() []byte { return []byte(p) }
+
+// func (p Payload) String() string
+
+// func (p Payload) GoString() string
+
+// func (p Payload) CanDecode() LayerClass { return LayerTypePayload }
+
+// func (p Payload) NextLayerType() LayerType { return LayerTypeZero }
+
+// func (p *Payload) DecodeFromBytes(data []byte, df DecodeFeedback) error {
+// 	*p = Payload(data)
+// 	return nil
+// }
+
+// func (p Payload) SerializeTo(b SerializeBuffer, opts SerializeOptions) error

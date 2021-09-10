@@ -1,0 +1,54 @@
+package gopacket
+
+type SerializableLayer interface {
+	pred Mem()
+
+	requires Mem() && b.Mem()
+	ensures Mem() && b.Mem()
+	SerializeTo(b SerializeBuffer, opts SerializeOptions) error
+
+	pure LayerType() LayerType
+}
+
+type SerializeOptions struct {
+	FixLengths bool
+	ComputeChecksums bool
+}
+
+type SerializeBuffer interface {
+	pred Mem()
+
+	requires Mem()
+	ensures Mem()
+	ensures bytesAcc(data)
+	Bytes() (data []byte)
+
+	requires Mem()
+	ensures Mem()
+	ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+	PrependBytes(num int) (data []byte, error)
+
+	requires Mem()
+	ensures Mem()
+	ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+	AppendBytes(num int) (data []byte, error)
+
+	requires Mem()
+	ensures Mem()
+	Clear() error
+
+	requires Mem()
+	ensures Mem()
+	ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+	Layers() (data []LayerType)
+
+	requires Mem()
+	ensures Mem()
+	PushLayer(LayerType)
+}
+
+requires forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
+requires w.Mem()
+ensures forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
+ensures w.Mem()
+func SerializeLayers(w SerializeBuffer, opts SerializeOptions, layers ...SerializableLayer) error 
