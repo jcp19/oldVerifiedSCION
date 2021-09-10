@@ -22,25 +22,53 @@ import (
 
 type RawBytes []byte
 
+pred (r RawBytes) Mem() {
+	forall i int :: 0 <= i && i < len(r) ==> acc(&r[i])
+}
+
+preserves acc(r.Mem(), 1/100000)
 func (r RawBytes) String() string //{
 //  return fmt.Sprintf("%x", []byte(r))
 //}
 
-func (r RawBytes) Len() int //{
-//	return len(r)
-//}
+pure func (r RawBytes) Len() int {
+	return len(r)
+}
 
-//func (r RawBytes) Copy() (Payload, error) // {
-//	return append(RawBytes{}, r...), nil
-//}
+requires acc(r.Mem(), 1/100000)
+ensures  acc(r.Mem(), 1/100000)
+ensures  res.Mem()
+ensures  err == nil
+func (r RawBytes) Copy() (res Payload, err error) {
+	unfold acc(r.Mem(), 1/1000000)
+	// (joao) introduced var `tmp` to allow folding and unfolding
+	var tmp RawBytes = append(perm(1/10000000), RawBytes{}, r...)
+	fold acc(r.Mem(), 1/1000000)
+	fold tmp.Mem()
+	return tmp, nil
+}
 
-func (r RawBytes) WritePld(b RawBytes) (int, error) // {
-//	if len(b) < len(r) {
-//		return 0, NewBasicError("Insufficient space", nil, "expected", len(r), "actual", len(b))
-//	}
-//	return copy(b, r), nil
-//}
+preserves acc(r.Mem(), 1/100000)
+preserves acc(b.Mem())
+ensures len(r) <= len(b) ==> err == nil
+func (r RawBytes) WritePld(b RawBytes) (res int, err error) {
+	if len(b) < len(r) {
+		// (joao) Gobra does not type check if the type conversion to ErrMsg is not present
+		// return 0, NewBasicError("Insufficient space", nil, "expected", len(r), "actual", len(b))
+		return 0, NewBasicError(ErrMsg("Insufficient space"), nil, "expected", len(r), "actual", len(b))
+	}
+	// (joao) introduced var `tmp` to be able to do the folds after the return statement
+	unfold b.Mem()
+	unfold acc(r.Mem(), 1/100000)
+	tmp := copy(b, r, perm(1/1000000))
+	fold acc(r.Mem(), 1/100000)
+	fold b.Mem()
+	return tmp, nil
+}
 
+// (joao) Trusted function
+preserves r.Mem()
+ensures   unfolding r.Mem() in forall i int :: 0 <= i && i < len(r) ==> r[i] == 0
 func (r RawBytes) Zero() // {
 //	for i := range r {
 //		r[i] = 0
