@@ -451,10 +451,14 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 //	defer d.mtx.Unlock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	if d.running {
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 //		return modifyExisting
 		return modifyExisting()
 	}
 	if conn == nil {
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 //		return emptyValue
 		return emptyValue()
 	}
@@ -542,6 +546,8 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 //	defer d.mtx.Unlock()
 	if a == nil {
 //		return emptyValue
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 		return emptyValue()
 	}
 //	if d.svc == nil {
@@ -553,6 +559,8 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 //		d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
 //		d.Metrics.ServiceInstanceCount.With(labels).Add(1)
 //	}
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
@@ -891,9 +899,10 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 	srcUDPAddr, ok := src.(*net.UDPAddr)
 	if !ok {
 		fold DataPlaneMutexInvariant(d)
+		// (joao) No support for fmt
 		// return serrors.New("type assertion failure", "from", fmt.Sprintf("%v(%T)", src, src),
 		//	"expected", "*net.IPAddr")
-		return serrors.New("error") // TODO: remove after adding support for fmt
+		return serrors.New("error") // (joao) TODO: remove after adding support for fmt
 	}
 //
 //	for k, v := range d.internalNextHops {
@@ -1312,7 +1321,7 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error)
 	return p.handleSCMPTraceRouteRequest(p.ingressID)
 }
 
-// TODO: clean-up, minimize permissions, write postconditions
+// (joao) TODO: clean-up, minimize permissions, write postconditions
 requires acc(&p.infoField) && acc(&p.infoField.ConsDir)
 requires acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert)
 requires acc(&p.hopField.ConsIngress) && acc(&p.hopField.ConsEgress)

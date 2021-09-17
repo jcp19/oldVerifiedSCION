@@ -40,19 +40,21 @@ type Base struct {
 
 pred BaseInvariant(b *Base) {
 	acc(b) &&
-	b.NumINF >= 0 && b.NumINF <= 3 && // there are at most 3 InfoFields, one per segment
-	b.NumHops >= 0 
+	// 3 is the value of MaxINFs and 64 is the number of MaxHops. Even though they are
+	// defined in this package, using their actual values allows one to verify files
+	// independently
+	b.NumINF >= 0 && b.NumINF <= 3 &&
+	// (joao) the code cannot establish this invariant yet
+	b.NumHops >= 0 // && b.NumHops <= 64
 }
 
-requires p > 0
 requires acc(s)
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
+preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
 ensures res != nil ==> acc(s)
 ensures res == nil ==> BaseInvariant(s)
-ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-func (s *Base) DecodeFromBytes(data []byte, ghost p perm) (res error) {
+func (s *Base) DecodeFromBytes(data []byte) (res error) {
 	// PathMeta takes care of bounds check.
-	err := s.PathMeta.DecodeFromBytes(data, p/2)
+	err := s.PathMeta.DecodeFromBytes(data)
 	if err != nil {
 		return err
 	}
@@ -61,7 +63,7 @@ func (s *Base) DecodeFromBytes(data []byte, ghost p perm) (res error) {
 
 	invariant -1 <= i && i <= 2
 	invariant acc(s)
-	invariant s.NumHops >= 0 && s.NumINF >= 0 && s.NumINF <= 3
+	invariant s.NumHops >= 0 && s.NumINF >= 0 && s.NumINF <= 3 // && s.NumHops <= 64
 	for i := 2; i >= 0; i-- {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 		if (s.PathMeta.SegLen)[i] == 0 && s.NumINF > 0 {
@@ -99,43 +101,55 @@ func (s *Base) IncPath() error {
 	}
 	s.PathMeta.CurrHF++
 	// Update CurrINF
-	// (joao) introduce tmp1 and tmp2 be able to fold required predicates
-	tmp1 := s.PathMeta.CurrHF
-	fold BaseInvariant(s)
-	tmp2 := s.infIndexForHF(tmp1, 1/2)
-	unfold BaseInvariant(s)
-	s.PathMeta.CurrINF = tmp2
+	s.PathMeta.CurrINF = s.infIndexForHF(s.PathMeta.CurrHF)
 	fold BaseInvariant(s)
 	return nil
 }
 
 // IsXover returns whether we are at a crossover point.
-requires p > 0
-requires acc(BaseInvariant(s), p)
-ensures acc(BaseInvariant(s), p)
-func (s *Base) IsXover(ghost p perm) bool {
+preserves acc(BaseInvariant(s), 1/100)
+func (s *Base) IsXover() bool {
 // (joao) tmp was introduced by me to simplify the unfoldings of BaseInvariant(s)
-	tmp := unfolding acc(BaseInvariant(s), p) in s.PathMeta.CurrINF
-	return tmp != s.infIndexForHF(tmp+1, p)
+	unfold acc(BaseInvariant(s), 1/100)
+	tmp := s.PathMeta.CurrINF != s.infIndexForHF(s.PathMeta.CurrINF+1)
+	fold acc(BaseInvariant(s), 1/100)
+	return tmp
 }
 
-requires p > 0
-requires acc(BaseInvariant(s), p)
-ensures acc(BaseInvariant(s), p)
-func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
+// (joao) introduced to reduce verification time, as suggested in 
+// https://ethz.ch/content/dam/ethz/special-interest/infk/chair-program-method/pm/documents/Education/Theses/Sascha_Forster_BA_report(3).pdf
+requires acc(BaseInvariant(s), _)
+ensures res >= 0 && res <= 3
+pure func getNumINF(s *Base) (res int) {
+	return unfolding acc(BaseInvariant(s), _) in s.NumINF
+}
+
+// (joao) introduced to reduce verification time
+requires acc(BaseInvariant(s), _)
+ensures res >= 0
+pure func getNumHops(s *Base) (res int) {
+	return unfolding acc(BaseInvariant(s), _) in s.NumHops
+}
+
+// (joao) introduced to reduce verification time
+requires acc(BaseInvariant(s), _)
+pure func getCurrHF(s *Base) (res uint8) {
+	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
+}
+
+// (joao) spec in terms of implementation details not problematic because it is not exported
+// requires acc(BaseInvariant(s), p)
+// ensures acc(BaseInvariant(s), p)
+preserves acc(s, 1/1000) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
+func (s *Base) infIndexForHF(hf uint8) uint8 {
 	left := uint8(0)
 
-	unfold acc(BaseInvariant(s), p)
-
-	invariant acc(s, p)
-	invariant s.NumINF >= 0 && s.NumINF <= 3
-	invariant s.NumHops >= 0 
+	invariant acc(s, 1/1000) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
 	invariant 0 <= i && i <= 3
 	for i := 0; i < s.NumINF; i++ {
 		if hf >= left {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 			if hf < left+(s.PathMeta.SegLen)[i] {
-				fold acc(BaseInvariant(s), p)
 				return uint8(i)
 			}
 		}
@@ -144,9 +158,7 @@ func (s *Base) infIndexForHF(hf uint8, ghost p perm) uint8 {
 	}
 	// at the end we just return the last index.
 // (joao) the RHS of the following declaration used to be in the return statement
-	ret := uint8(s.NumINF - 1)
-	fold acc(BaseInvariant(s), p)
-	return ret
+	return uint8(s.NumINF - 1)
 }
 
 // Len returns the length of the path in bytes.
@@ -161,6 +173,8 @@ pure func (s *Base) Len() (res int) // {
 
 // MetaHdr is the PathMetaHdr of a SCION (data-plane) path type.
 type MetaHdr struct {
+	// (joao) Currently, there are no restrictions on the value CurrINF and CurrHF may hold.
+	// In particular, they do not need to be valid indexes
 	CurrINF uint8
 	CurrHF  uint8
 	SegLen  [3]uint8
@@ -168,12 +182,11 @@ type MetaHdr struct {
 
 // DecodeFromBytes populates the fields from a raw buffer. The buffer must be of length >=
 // scion.MetaLen
-requires p > 0
 requires acc(m)
-requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
+requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/100)
 ensures acc(m)
-ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
-func (m *MetaHdr) DecodeFromBytes(raw []byte, ghost p perm) error {
+ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/100)
+func (m *MetaHdr) DecodeFromBytes(raw []byte) error {
 	if len(raw) < MetaLen {
 		return serrors.New("MetaHdr raw too short", "expected", MetaLen, "actual", len(raw))
 	}
@@ -190,14 +203,11 @@ func (m *MetaHdr) DecodeFromBytes(raw []byte, ghost p perm) error {
 
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // scion.MetaLen
-requires p > 0
-requires acc(m, p)
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures acc(m, p)
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+preserves acc(m, 1/100)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures len(b) >= MetaLen ==> res == nil
 ensures len(b) < MetaLen ==> res != nil
-func (m *MetaHdr) SerializeTo(b []byte, ghost p perm) (res error) {
+func (m *MetaHdr) SerializeTo(b []byte) (res error) {
 	if len(b) < MetaLen {
 		return serrors.New("buffer for MetaHdr too short", "expected", MetaLen, "actual", len(b))
 	}
@@ -209,6 +219,19 @@ func (m *MetaHdr) SerializeTo(b []byte, ghost p perm) (res error) {
 	binary.BigEndian.PutUint32(b, line)
 
 	return nil
+}
+
+// (joao) introduced this method to decrease verification time when calling SerializeTo
+//        from a context with s.BaseInvariant()
+preserves acc(BaseInvariant(s), 1/100)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures len(b) >= MetaLen ==> res == nil
+ensures len(b) < MetaLen ==> res != nil
+func (s *Base) SerializePathMetaTo(b []byte) (res error) {
+	unfold acc(BaseInvariant(s), 1/100)
+	res = s.PathMeta.SerializeTo(b)
+	fold acc(BaseInvariant(s), 1/100)
+	return res
 }
 
 // (joao) fmt still not supported

@@ -27,17 +27,15 @@ type Payload interface {
 	requires acc(Mem(), _)
 	pure Len() int
 
-	requires q > 0
-	requires acc(Mem(), q)
-	// (joao) should work correctly after Gobra issues #312 and #318 have been fixed
-	ensures  acc(Mem(), q) // && res.Mem()
-	Copy(ghost q perm) (res Payload, err error)
+	requires acc(Mem(), 1/100000)
+	ensures  acc(Mem(), 1/100000)
+	ensures  res.Mem()
+	Copy() (res Payload, err error)
 
 	// Writes payload to buffer
-	requires 0 < p && p < 1
+	requires acc(Mem(), 1/100000)
 	requires b.Mem()
-	requires acc(Mem(), p)
+	ensures  acc(Mem(), 1/100000)
 	ensures  b.Mem()
-	ensures  acc(Mem(), p)
-	WritePld(b RawBytes, ghost p perm) (int, error)
+	WritePld(b RawBytes) (res int, err error)
 }

@@ -28,9 +28,11 @@ import (
 	"strings"
 )
 
+// TODO: define ErrorMem() for every data-structure
+
 // Wrapper allows recursing into nested errrors.
 type Wrapper interface {
-	// (joao): not supported
+	// (joao) causes "node not in tree: Error"
 	// error
 	Unwrap() error
 	// TopError should return the top level error without the wrapped ones.
@@ -52,20 +54,20 @@ func (e basicError) Error() string {
 	return FmtError(e)
 }
 
+requires isComparable(err)
 func (e basicError) Is(err error) bool {
 	switch other := err.(type) {
 	case basicError:
 		return e.msg == other.msg
 	default:
 		if e.msg.err != nil {
-			// (joao) possibly another error! might panic
-			// return e.msg.err == err
-			;
+			return e.msg.err == err
 		}
 		return false
 	}
 }
 
+// (joao) Trusted
 func (e basicError) As(as interface{}) bool // {
 //	if e.msg.err != nil {
 //		// (joao) errors package not supported yet
@@ -79,14 +81,16 @@ func (e basicError) Unwrap() error {
 	return e.cause
 }
 
-func (e basicError) TopError() string {
-	s := make([]string, 0, 1+(len(e.logCtx)/2))
+// (joao) Trusted
+func (e basicError) TopError() string // {
+//	// (joao) appending strings still not supported
+//	s := make([]string, 0, 1+(len(e.logCtx)/2))
 //	s = append(s, e.msgString())
-	for i := 0; i < len(e.logCtx); i += 2 {
+//	for i := 0; i < len(e.logCtx); i += 2 {
 //		s = append(s, fmt.Sprintf("%s=\"%v\"", e.logCtx[i], e.logCtx[i+1]))
-	}
-	return strings.Join(s, " ")
-}
+//	}
+//	return strings.Join(s, " ")
+//}
 
 func (e basicError) msgString() string {
 	if e.msg.err != nil {
@@ -96,25 +100,28 @@ func (e basicError) msgString() string {
 }
 
 // IsTimeout returns whether err is or is caused by a timeout error.
-func IsTimeout(err error) bool {
-	// (joao) added `;` to make this parse
-	// var t interface{ Timeout() bool }
-	var t interface{ Timeout() bool; }
+// (joao) Trusted
+func IsTimeout(err error) bool // {
+//	// (joao) added `;` to make this parse
+//	// var t interface{ Timeout() bool }
+//	var t interface{ Timeout() bool; }
 //	return errors.As(err, &t) && t.Timeout()
-}
+//}
 
 // IsTemporary returns whether err is or is caused by a temporary error.
-func IsTemporary(err error) bool {
-	// (joao) added `;` to make this parse
-	// var t interface{ Temporary() bool }
-	var t interface{ Temporary() bool; }
+// (joao) Trusted
+func IsTemporary(err error) bool // {
+//	// (joao) added `;` to make this parse
+//	// var t interface{ Temporary() bool }
+//	var t interface{ Temporary() bool; }
 //	return errors.As(err, &t) && t.Temporary()
-}
+//}
 
 // WithCtx returns an error that is the same as the given error but contains the
 // additional context. The additional context is printed in the Error method.
 // The returned error implements Is and Is(err) returns true.
-func WithCtx(err error, logCtx ...interface{}) error {
+ensures res != nil
+func WithCtx(err error, logCtx ...interface{}) (res error) {
 	return basicError{
 		msg:    errOrMsg{err: err},
 		logCtx: logCtx,
@@ -125,7 +132,8 @@ func WithCtx(err error, logCtx ...interface{}) error {
 // Wrap wraps the cause with the msg error and adds context to the resulting
 // error. The returned error implements Is and Is(msg) and Is(cause) returns
 // true.
-func Wrap(msg, cause error, logCtx ...interface{}) error {
+ensures res != nil
+func Wrap(msg, cause error, logCtx ...interface{}) (res error) {
 	return basicError{
 		msg:    errOrMsg{err: msg},
 		cause:  cause,
@@ -136,7 +144,8 @@ func Wrap(msg, cause error, logCtx ...interface{}) error {
 // WrapStr wraps the cause with an error that has msg in the error message and
 // adds the additional context. The returned error implements Is and Is(cause)
 // returns true.
-func WrapStr(msg string, cause error, logCtx ...interface{}) error {
+ensures res != nil
+func WrapStr(msg string, cause error, logCtx ...interface{}) (res error) {
 	return basicError{
 		msg:    errOrMsg{str: msg},
 		cause:  cause,
@@ -148,9 +157,9 @@ func WrapStr(msg string, cause error, logCtx ...interface{}) error {
 ensures res != nil
 func New(msg string, logCtx ...interface{}) (res error) {
 	if len(logCtx) == 0 {
-		// (joao) not supported yet
+		// (joao) package "errors" not supported yet
 		// return errors.New(msg)
-		assume false //TODO: remove
+		assume false
 	}
 	return &basicError{
 		msg:    errOrMsg{str: msg},
@@ -172,27 +181,31 @@ func (e List) ToError() error {
 // errList is the internal error interface implementation of error List.
 type errList []error
 
+// (joao) Trusted
+// preserves forall i int :: 0 <= i && i < len(e) ==> acc(&e[i], 1/10000)
 func (e errList) Error() string // {
 //	return fmtErrors(e)
 //}
 
 // FmtError formats the error for logging. It walks through all wrapped errors,
 // putting each on a new line, and indenting multi-line errors.
-func FmtError(e error) string {
-	var s, ns []string
-	for {
-		ns, e = innerFmtError(e)
+// (joao) Trusted
+func FmtError(e error) string // {
+//	var s, ns []string
+//	for {
+//		ns, e = innerFmtError(e)
 //		s = append(s, ns...)
-		if e == nil {
+//		if e == nil {
 //			break
-		}
-	}
-	return strings.Join(s, "\n    ")
-}
+//		}
+//	}
+//	return strings.Join(s, "\n    ")
+//}
 
-func innerFmtError(e error) ([]string, error) {
-	var s []string
-	var lines []string
+// (joao) Trusted
+func innerFmtError(e error) ([]string, error) // {
+//	var s []string
+//	var lines []string
 //	switch e := e.(type) {
 //	case Wrapper:
 //		lines = strings.Split(e.TopError(), "\n")
@@ -212,15 +225,17 @@ func innerFmtError(e error) ([]string, error) {
 //		}
 //	}
 //	return s, errors.Unwrap(e)
-}
+//}
 
 
 // fmtErrors formats a slice of errors for logging.
-func fmtErrors(errs []error) string {
-	s := make([]string, 0, len(errs))
-	// (joao) no support for range statements
+// (joao) Trusted
+preserves forall i int :: 0 <= i && i < len(errs) ==> acc(&errs[i], 1/10000)
+func fmtErrors(errs []error) string // {
+//	s := make([]string, 0, len(errs))
+//	// (joao) no support for range statements
 //	for _, e := range errs {
 //		s = append(s, e.Error())
 //	}
-	return strings.Join(s, "\n")
-}
+//	return strings.Join(s, "\n")
+//}

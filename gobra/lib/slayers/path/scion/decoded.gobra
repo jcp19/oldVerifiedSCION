@@ -29,17 +29,17 @@ const (
 )
 
 pred DecodedInvariant(d* Decoded) {
-	acc(d) &&
+	// acc(d) &&
+	acc(&d.InfoFields) &&
+	acc(&d.HopFields) &&
 	BaseInvariant(&d.Base) &&
-	(unfolding BaseInvariant(&d.Base) in (d.NumINF <= MaxINFs && len(d.InfoFields) == d.NumINF)) &&
-	(unfolding BaseInvariant(&d.Base) in (d.NumHops <= MaxHops && len(d.HopFields) == d.NumHops)) &&
-	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc(&(d.InfoFields)[i])) &&
-	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc((d.InfoFields)[i])) &&
-	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i])) &&
-	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc((d.HopFields)[i]))
+	getNumINF(&d.Base) <= MaxINFs && len(d.InfoFields) == getNumINF(&d.Base) &&
+	// (joao) MaxHops is pretty much ignored in this package, no checks are made to
+	//        ensure that the number of hops in a path is less than this number.
+	/* getNumHops(&d.Base) <= MaxHops  && */ len(d.HopFields) == getNumHops(&d.Base) &&
+	(forall i int :: 0 <= i && i < len(d.InfoFields) ==> acc(&(d.InfoFields)[i]) && acc((d.InfoFields)[i])) &&
+	(forall i int :: 0 <= i && i < len(d.HopFields) ==> acc(&(d.HopFields)[i]) && path.HopFieldInv((d.HopFields)[i]))
 }
-
-// (joao) TODO: Check satisfiability of DecodedInvariant
 
 // Decoded implements the SCION (data-plane) path type. Decoded is intended to be used in
 // non-performance critical code paths, where the convenience of having a fully parsed path trumps
@@ -52,91 +52,160 @@ type Decoded struct {
 	HopFields []*path.HopField
 }
 
-// DecodeFromBytes fully decodes the SCION path into the corresponding fields.
-//requires p > 0
-//requires DecodedInvariant(s)
-//requires unfolding DecodedInvariant(s) in unfolding BaseInvariant(&s.Base) in MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data) && 6 + path.MacLen <= len(data)
-//requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-//// ensures DecodedInvariant(s)
-//ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-//func (s *Decoded) DecodeFromBytes(data []byte, ghost p perm) error {
-//	unfold DecodedInvariant(s)
-//	unfold BaseInvariant(&s.Base)
-//	if err := s.Base.DecodeFromBytes(data, p/2); err != nil {
-//		return err
-//	}
-//	if minLen := s.Len(); len(data) < minLen {
-//		return serrors.New("DecodedPath raw too short", "expected", minLen, "actual", len(data))
-//	}
-//
-//	offset := MetaLen
-//	s.InfoFields = make([]*path.InfoField, s.NumINF)
-//
-//	invariant acc(s, 1/2)
-//	invariant len(s.InfoFields) == s.NumINF
-//	invariant 0 <= i && i <= int(s.NumINF)
-//	// invariant MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data)
-//	invariant MetaLen + int(s.NumINF) * path.InfoLen <= len(data)
-//	invariant offset == MetaLen + i * path.InfoLen
-//	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-//	invariant forall j int :: 0 <= j && j < len(s.InfoFields) ==> acc(&(s.InfoFields)[j])
-//	for i := 0; i < int(s.NumINF); i++ {
-//		info := &path.InfoField{}
-//		assert forall j int :: 0 <= j && j < path.InfoLen ==> &data[offset : offset+path.InfoLen][j] == &data[offset + j]
-//		if err := info.DecodeFromBytes(data[offset : offset+path.InfoLen], p/2); err != nil {
-//			return err
-//		}
-//		// (joao) add parentheses surrounding s.InfoFields
-//		(s.InfoFields)[i] = info
-//		offset += path.InfoLen
-//	}
-//	s.HopFields = make([]*path.HopField, s.NumHops)
-// (joao) current progress until here
-//	invariant acc(s, 1/2)
-//	invariant 0 <= i && i <= int(s.NumHops)
-//	invariant len(s.HopFields) == s.NumHops
-//	invariant 6 + path.MacLen <= len(data)
-//	invariant MetaLen + int(s.NumINF) * path.InfoLen + int(path.HopLen) * s.NumHops <= len(data)
-//	invariant offset == MetaLen + int(s.NumINF) * path.InfoLen + i * path.HopLen
-//	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], p)
-//	invariant forall j int :: 0 <= j && j < len(s.HopFields) ==> acc(&(s.HopFields)[j])
-//	for i := 0; i < int(s.NumHops); i++ {
-//		hop := &path.HopField{}
-//		assert forall j int :: 0 <= j && j < int(path.HopLen) ==> &(data[offset : offset+path.HopLen][j]) == &data[offset + j]
-//		if err := hop.DecodeFromBytes(data[offset : offset+path.HopLen], p/2); err != nil {
-//			return err
-//		}
-		// (joao) add parentheses surrounding s.HopFields
-//		(s.HopFields)[i] = hop
-//		offset += path.HopLen
-//	}
-//	fold BaseInvariant(&s.Base)
-//	fold DecodedInvariant(s)
-//	return nil
+requires acc(DecodedInvariant(s), _)
+pure func getInfoFields(s *Decoded) []*path.InfoField {
+	return unfolding acc(DecodedInvariant(s), _) in s.InfoFields
+}
+
+requires acc(DecodedInvariant(s), 1/10000000)
+pure func getLenInfoFields(s *Decoded) int {
+	return unfolding acc(DecodedInvariant(s), 1/10000000) in len(s.InfoFields)
+}
+
+requires acc(DecodedInvariant(s), _)
+pure func getHopFields(s *Decoded) []*path.HopField {
+	return unfolding acc(DecodedInvariant(s), _) in s.HopFields
+}
+
+requires acc(DecodedInvariant(s),  1/10000000)
+pure func getLenHopFields(s *Decoded) int {
+	return unfolding acc(DecodedInvariant(s), 1/10000000) in len(s.HopFields)
+}
+
+// // Succeeds, as expected
+// // ghost
+//ensures DecodedInvariant(ret)
+//func soundDecoded1() (ret *Decoded) {
+// 	d := &Decoded{}
+// 	fold BaseInvariant(&d.Base)
+// 	fold DecodedInvariant(d)
+// 	return d
 //}
+
+// // Fails, as expected
+// ghost
+// requires DecodedInvariant(d)
+// func SoundDecoded2(d *Decoded) {
+// 	unfold DecodedInvariant(d)
+// 	unfold BaseInvariant(&d.Base)
+// 	assert false // multiple access do &d.Base
+// }
+
+// DecodeFromBytes fully decodes the SCION path into the corresponding fields.
+requires acc(s)
+preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
+ensures res == nil ==> DecodedInvariant(s) 
+func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
+	if err := s.Base.DecodeFromBytes(data); err != nil {
+		return err
+	}
+	if minLen := s.Len(); len(data) < minLen {
+		return serrors.New("DecodedPath raw too short", "expected", minLen, "actual", len(data))
+	}
+
+	assert getNumINF(&s.Base) >= 0
+	assert getNumHops(&s.Base) >= 0
+	assert len(data) >= MetaLen + getNumINF(&s.Base) * path.InfoLen + getNumHops(&s.Base) * path.HopLen
+	offset := MetaLen
+	// (joao) use getNumINF to avoid unfoldings
+	// s.InfoFields = make([]*path.InfoField, s.NumINF)
+	s.InfoFields = make([]*path.InfoField, getNumINF(&s.Base))
+
+	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/1000)
+	invariant acc(BaseInvariant(&s.Base), 1/2)
+	invariant 0 <= i && i <= getNumINF(&s.Base)
+	invariant acc(&s.InfoFields, 1/2)
+	invariant forall j int :: 0 <= j && j < getNumINF(&s.Base) ==> acc(&(s.InfoFields)[j])
+	invariant forall j int :: 0 <= j && j < i ==> acc((s.InfoFields)[j])
+	invariant len(data) >= MetaLen + getNumINF(&s.Base) * path.InfoLen + getNumHops(&s.Base) * path.HopLen
+	invariant offset == MetaLen + i * path.InfoLen
+	// (joao) changed to getNumINF() to avoid unfoldings
+	// for i := 0; i < int(s.NumINF); i++ {
+	for i := 0; i < getNumINF(&s.Base); i++ {
+		info := &path.InfoField{}
+		assert 0 <= offset && offset < len(data)
+		assert 0 <= offset+path.InfoLen && offset+path.InfoLen <= len(data)
+		assert forall j int :: 0 <= j && j < path.InfoLen ==> &data[offset : offset+path.InfoLen][j] == &data[offset + j]
+		if err := info.DecodeFromBytes(data[offset : offset+path.InfoLen]); err != nil {
+			return err
+		}
+		// (joao) add parentheses surrounding s.InfoFields
+		(s.InfoFields)[i] = info
+		offset += path.InfoLen
+	}
+
+	// (joao) use getNumHops to avoid unfoldings
+	// s.HopFields = make([]*path.HopField, s.NumHops)
+	s.HopFields = make([]*path.HopField, getNumHops(&s.Base))
+
+	invariant forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/1000)
+	invariant acc(BaseInvariant(&s.Base), 1/2)
+	invariant 0 <= i && i <= getNumHops(&s.Base)
+	invariant acc(&s.HopFields, 1/2)
+	invariant forall j int :: 0 <= j && j < getNumHops(&s.Base) ==> acc(&(s.HopFields)[j])
+	invariant forall j int, l int :: 0 <= j && j < i && 0 <= l && l < i && j != l ==> (s.HopFields)[j] != (s.HopFields)[l]
+	invariant forall j int :: 0 <= j && j < i ==> path.HopFieldInv((s.HopFields)[j])
+	invariant len(data) >= MetaLen + getNumINF(&s.Base) * path.InfoLen + getNumHops(&s.Base) * path.HopLen
+	invariant offset == MetaLen + getNumINF(&s.Base) * path.InfoLen + i * path.HopLen
+	// (joao) changed to getNumHops() to avoid unfoldings
+	// for i := 0; i < int(s.NumHops); i++ {
+	for i := 0; i < getNumHops(&s.Base); i++ {
+		assert forall j int :: 0 <= j && j < i ==> (s.HopFields)[j] != nil ==> path.HopFieldInv((s.HopFields)[j])
+		hop := &path.HopField{}
+
+		// (joao) ASSUMPTION: required to avoid error "Receiver path.HopFieldInv((s.HopFields)[j]) might not be injective"
+		assume forall j int :: 0 <= j && j < i ==> (s.HopFields)[j] != hop
+		assert 0 <= offset && offset < len(data)
+		assert 0 <= offset+path.InfoLen && offset+path.HopLen <= len(data)
+		assert forall j int :: 0 <= j && j < int(path.HopLen) ==> &(data[offset : offset+path.HopLen][j]) == &data[offset + j]
+
+		if err := hop.DecodeFromBytes(data[offset : offset+path.HopLen]); err != nil {
+			return err
+		}
+		// (joao) add parentheses surrounding s.HopFields
+		(s.HopFields)[i] = hop
+		offset += path.HopLen
+	}
+	fold DecodedInvariant(s)
+	return nil
+}
+
+// (joao) not present in the original code. Extract unfolding to a pure function
+//        as sugested in Sascha's thesis
+requires acc(DecodedInvariant(s), _)
+pure func DecodedLen(s *Decoded) int {
+	return unfolding acc(DecodedInvariant(s), _) in s.Len()
+} 
 
 // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
 // otherwise an error is returned.
-requires p > 0
-preserves acc(DecodedInvariant(s), p)
+preserves acc(DecodedInvariant(s), 1/10)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (s *Decoded) SerializeTo(b []byte, ghost p perm) error {
-	unfold acc(DecodedInvariant(s), p)
+func (s *Decoded) SerializeTo(b []byte) error {
+	unfold acc(DecodedInvariant(s), 1/10)
 	if len(b) < s.Len() {
 		ret := serrors.New("buffer too small to serialize path.", "expected", s.Len(),
 			"actual", len(b))
-		fold acc(DecodedInvariant(s), p)
+		fold acc(DecodedInvariant(s), 1/10)
 		return ret
 	}
-	unfold acc(BaseInvariant(&s.Base), p)
-	if err := s.PathMeta.SerializeTo(b[:MetaLen], p/2); err != nil {
-		fold acc(BaseInvariant(&s.Base), p)
-		fold acc(DecodedInvariant(s), p)
+	assert forall i int :: 0 <= i && i < MetaLen ==> &b[:MetaLen][i] == &b[i]
+// (joao) change called function to reduce verification time. This function was introduced
+//        only to reduce the proof effort, it is a wrapper to SeralizeTo
+//	if err := s.PathMeta.SerializeTo(b[:MetaLen]); err != nil {
+	if err := (&s.Base).SerializePathMetaTo(b[:MetaLen]); err != nil {
+		fold acc(DecodedInvariant(s), 1/10)
 		return err
 	}
-	fold acc(BaseInvariant(&s.Base), p)
-//	fold acc(DecodedInvariant(s), p)
+	fold acc(DecodedInvariant(s), 1/10)
 	offset := MetaLen
+
+	assert forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	assert acc(DecodedInvariant(s), 1/10)
+	assert 0 <= getLenInfoFields(s)
+	assert len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen
+	assert path.InfoLen >= 0
+
 // (joao) range still not supported
 //	for _, info := range s.InfoFields {
 //		if err := info.SerializeTo(b[offset : offset+path.InfoLen]); err != nil {
@@ -144,81 +213,172 @@ func (s *Decoded) SerializeTo(b []byte, ghost p perm) error {
 //		}
 //		offset += path.InfoLen
 //	}
-// (joao) rewrote the range above as follows:
-	invariant p > 0
-	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-	invariant acc(s, p)
-	// invariant acc(&s.InfoFields, p) && acc(&s.HopFields, p)
-	invariant 0 <= i && i <= len(s.InfoFields)
-	invariant offset == MetaLen + i * path.InfoLen
-	// Body of DecodedInvariant, to be able to fold inside the loop
-	// invariant acc(s, p)
-	invariant acc(BaseInvariant(&s.Base), p)
-	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i], p)
-	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i], p)
-	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i], p)
-	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc((s.HopFields)[i], p)
-	// End of body of DecodedInvariant, to be able to fold inside the loop
-	invariant len(b) >= MetaLen + len(s.InfoFields) * path.InfoLen
-	for i := 0; i < len(s.InfoFields); i++ {
-		info := (s.InfoFields)[i]
-		assert acc(info, p)
-		assert forall i int :: 0 <= i && i < path.InfoLen ==>
-			&b[offset : offset+path.InfoLen][i] == &b[offset + i]
-		if err := info.SerializeTo(b[offset : offset+path.InfoLen], p); err != nil {
-			fold acc(DecodedInvariant(s), p)
-			return err
-		}
-		offset += path.InfoLen
+// (joao) outlined and rewrote the loop above in the function `outlineFstRangeSerializeTo`
+	if offset, err := outlineFstRangeSerializeTo(s, b); err != nil {
+		return err
 	}
 
+// (joao) assertion causes verification to not terminate
+//	assert offset == MetaLen + getLenInfoFields(s) * path.InfoLen
+
+// (joao) range still not supported
 //	for _, hop := range s.HopFields {
 //		if err := hop.SerializeTo(b[offset : offset+path.HopLen]); err != nil {
 //			return err
 //		}
 //		offset += path.HopLen
 //	}
-	fold acc(BaseInvariant(&s.Base), p)
-	fold acc(DecodedInvariant(s), p)
+// (joao) outlined and rewrote the loop above in the function `outlineSndRangeSerializeTo`
+	if offset, err := outlineSndRangeSerializeTo(s, b); err != nil {
+		return err
+	}
 	return nil
 }
 
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+requires acc(DecodedInvariant(s), 1/100)
+requires len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen
+ensures acc(DecodedInvariant(s), 1/100)
+ensures err == nil ==> newOffset == MetaLen + getLenInfoFields(s) * path.InfoLen
+func outlineFstRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error) {
+	offset := MetaLen
+
+	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	invariant acc(DecodedInvariant(s), 1/100)
+	invariant 0 <= i && i <= getLenInfoFields(s)
+	invariant offset == MetaLen + i * path.InfoLen
+	invariant len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen
+	for i := 0; i < getLenInfoFields(s); i++ {
+		unfold acc(DecodedInvariant(s), 1/100)
+		assert acc(&(s.InfoFields)[i], 1/100) && acc((s.InfoFields)[i], 1/100)
+		assert len(b) >= offset+path.InfoLen
+		assert offset >= 0 && offset+path.InfoLen >= 0 && offset < offset+path.InfoLen
+		info := (s.InfoFields)[i]
+		assert len(b[offset : offset+path.InfoLen]) == path.InfoLen
+		assert forall j int :: 0 <= j && j < len(b[offset : offset+path.InfoLen]) ==> &b[offset : offset+path.InfoLen][j] == &b[offset + j]
+		if err := info.SerializeTo(b[offset : offset+path.InfoLen]); err != nil {
+			fold acc(DecodedInvariant(s), 1/100)
+			return 0, err
+		}
+		fold acc(DecodedInvariant(s), 1/100)
+		offset += path.InfoLen
+	}
+	return offset, nil
+}
+
+requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+requires acc(DecodedInvariant(s), 1/100)
+requires len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen + getLenHopFields(s) * path.HopLen
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures acc(DecodedInvariant(s), 1/100)
+ensures err == nil ==> newOffset == MetaLen + getLenInfoFields(s) * path.InfoLen + getLenHopFields(s) * path.HopLen
+func outlineSndRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error) {
+	offset := MetaLen + getLenInfoFields(s) * path.InfoLen
+	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	invariant acc(DecodedInvariant(s), 1/100)
+	invariant 0 <= i && i <= getLenHopFields(s)
+	invariant offset == MetaLen + getLenInfoFields(s) * path.InfoLen + i * path.HopLen
+	invariant len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen + getLenHopFields(s) * path.HopLen
+	for i := 0; i < getLenHopFields(s); i++ {
+		unfold acc(DecodedInvariant(s), 1/100)
+		assert acc(&(s.HopFields)[i], 1/100) && acc(path.HopFieldInv((s.HopFields)[i]), 1/100)
+		assert len(b) >= offset+path.HopLen
+		hop := (s.HopFields)[i] 
+		assert forall i int :: 0 <= i && i < len(b[offset : offset+path.HopLen]) ==> &b[offset : offset+path.HopLen][i] == &b[offset + i]
+		if err := hop.SerializeTo(b[offset : offset+path.HopLen]); err != nil {
+			fold acc(DecodedInvariant(s), 1/100)
+			return 0, err
+		}
+		offset += path.HopLen
+		fold acc(DecodedInvariant(s), 1/100)
+	}
+	return offset, nil
+}
+
 // Reverse reverses a SCION path.
-//func (s *Decoded) Reverse() error {
-//	if s.NumINF == 0 {
-//		// Empty path doesn't need reversal.
-//		return nil
-//	}
-//	// Reverse order of InfoFields and SegLens
-//	for i, j := 0, s.NumINF-1; i < j; i, j = i+1, j-1 {
-//		s.InfoFields[i], s.InfoFields[j] = s.InfoFields[j], s.InfoFields[i]
-//		s.PathMeta.SegLen[i], s.PathMeta.SegLen[j] = s.PathMeta.SegLen[j], s.PathMeta.SegLen[i]
-//	}
-//	// Reverse cons dir flags
-//	for i := 0; i < s.NumINF; i++ {
-//		info := s.InfoFields[i]
-//		info.ConsDir = !info.ConsDir
-//	}
-//	// Reverse order of hop fields
-//	for i, j := 0, s.NumHops-1; i < j; i, j = i+1, j-1 {
-//		s.HopFields[i], s.HopFields[j] = s.HopFields[j], s.HopFields[i]
-//	}
-//	// Update CurrINF and CurrHF and SegLens
-//	s.PathMeta.CurrINF = uint8(s.NumINF) - s.PathMeta.CurrINF - 1
-//	s.PathMeta.CurrHF = uint8(s.NumHops) - s.PathMeta.CurrHF - 1
-//
-//	return nil
-//}
+requires DecodedInvariant(s)
+ensures DecodedInvariant(s)
+func (s *Decoded) Reverse() error {
+	unfold DecodedInvariant(s)
+	// (joao) use getNumINF to avoid unfolding here
+	//if s.NumINF == 0 {
+	if getNumINF(&s.Base) == 0 {
+		// Empty path doesn't need reversal.
+		fold DecodedInvariant(s)
+		return nil
+	}
+	// Reverse order of InfoFields and SegLens
+	invariant BaseInvariant(&s.Base)
+	invariant acc(&(s.InfoFields))
+	invariant acc(&(s.HopFields), 1/2)
+	invariant 0 <= j && j <= getNumINF(&s.Base)-1
+	invariant 0 <= i && i <= j + 1
+	invariant getNumINF(&s.Base) == len(s.InfoFields)
+	invariant getNumHops(&s.Base) == len(s.HopFields)
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i])
+	// (joao) use getNumINF to avoid unfolding here
+	// for i, j := 0, s.NumINF-1; i < j; i, j = i+1, j-1 {
+	for i, j := 0, getNumINF(&s.Base)-1; i < j; i, j = i+1, j-1 {
+		// (joao) added parentheses to make gobra parse
+		unfold BaseInvariant(&s.Base)
+		(s.InfoFields)[i], (s.InfoFields)[j] = (s.InfoFields)[j], (s.InfoFields)[i]
+		(s.PathMeta.SegLen)[i], (s.PathMeta.SegLen)[j] = (s.PathMeta.SegLen)[j], (s.PathMeta.SegLen)[i]
+		fold BaseInvariant(&s.Base)
+	}
+	// Reverse cons dir flags
+	invariant acc(BaseInvariant(&s.Base), 1/2)
+	invariant acc(&(s.InfoFields), 1/2)
+	invariant 0 <= i && i <= getNumINF(&s.Base)
+	invariant getNumINF(&s.Base) == len(s.InfoFields)
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
+	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i])
+	// (joao) use getNumINF to avoid unfolding here
+	//	for i := 0; i < s.NumINF; i++ {
+	for i := 0; i < getNumINF(&s.Base); i++ {
+		// (joao) add parentheses
+		info := (s.InfoFields)[i]
+		info.ConsDir = !info.ConsDir
+	}
+	// Reverse order of hop fields
+	invariant BaseInvariant(&s.Base)
+	invariant acc(&(s.HopFields), 1/2)
+	invariant acc(&(s.InfoFields), 1/2)
+	invariant -1 <= j && j <= getNumHops(&s.Base)-1
+	invariant 0 <= i && i <= j + 1
+	invariant getNumINF(&s.Base) == len(s.InfoFields)
+	invariant getNumHops(&s.Base) == len(s.HopFields)
+	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i]) && path.HopFieldInv((s.HopFields)[i])
+	// (joao) use getNumHops to avoid unfolding here
+	//	for i, j := 0, s.NumHops-1; i < j; i, j = i+1, j-1 {
+	for i, j := 0, getNumHops(&s.Base)-1; i < j; i, j = i+1, j-1 {
+		// (joao) added parentheses to make gobra parse
+		(s.HopFields)[i], (s.HopFields)[j] = (s.HopFields)[j], (s.HopFields)[i]
+	}
+
+	unfold BaseInvariant(&s.Base)
+	s.PathMeta.CurrINF = uint8(s.NumINF) - s.PathMeta.CurrINF - 1
+	s.PathMeta.CurrHF = uint8(s.NumHops) - s.PathMeta.CurrHF - 1
+	fold BaseInvariant(&s.Base)
+
+	fold DecodedInvariant(s)
+	return nil
+}
 
 // ToRaw tranforms scion.Decoded into scion.Raw
-//func (s *Decoded) ToRaw() (*Raw, error) {
-//	b := make([]byte, s.Len())
-//	if err := s.SerializeTo(b); err != nil {
-//		return nil, err
-//	}
-//	raw := &Raw{}
-//	if err := raw.DecodeFromBytes(b); err != nil {
-//		return nil, err
-//	}
-//	return raw, nil
-//}
+requires acc(DecodedInvariant(s), 1/10)
+ensures acc(DecodedInvariant(s), 1/10)
+ensures err == nil ==> RawInvariant(raw)
+func (s *Decoded) ToRaw() (raw *Raw, err error) {
+	unfold acc(DecodedInvariant(s), 1/100)
+	b := make([]byte, s.Len())
+	fold acc(DecodedInvariant(s), 1/100)
+	if err := s.SerializeTo(b); err != nil {
+		return nil, err
+	}
+	raw := &Raw{}
+	if err := raw.DecodeFromBytes(b); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
