@@ -112,6 +112,7 @@ const (
 )
 
 // Path is the path contained in the SCION header.
+// TODO: (joao) implement all paths as subtypes of Path; must reflect all perms required in their specs
 type Path interface {
 	pred mem()
 	// SerializeTo serializes the path into the provided buffer.
@@ -125,8 +126,6 @@ type Path interface {
 	// Len returns the length of a path in bytes.
 	Len() int
 }
-
-// TODO: (joao) implement empty as instance of Path
 
 // SCION is the header of a SCION packet.
 type SCION struct {
