@@ -1,0 +1,51 @@
+package gopacket
+
+type DecodingLayer interface {
+	pred Mem()
+
+	// DecodeFromBytes(data []byte, df DecodeFeedback) error
+	// CanDecode() LayerClass
+	// NextLayerType() LayerType
+	// LayerPayload() []byte
+}
+
+type DecodingLayerParser struct {
+	// DecodingLayerParserOptions
+	// dlc   DecodingLayerContainer
+	// first LayerType
+	// df    DecodeFeedback
+
+	// decodeFunc DecodingLayerFunc
+
+	// Truncated bool
+}
+
+pred bytesAcc(data []byte) {
+	forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+}
+
+pred decodedAcc(data []LayerType) {
+	forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+}
+
+requires forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i])
+ensures forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i])
+ensures acc(d)
+func NewDecodingLayerParser(first LayerType, decoders ...DecodingLayer) (d *DecodingLayerParser)
+
+requires bytesAcc(data)
+requires acc(decoded) && decodedAcc(*decoded)
+ensures bytesAcc(data)
+ensures acc(decoded) && decodedAcc(*decoded)
+func (l *DecodingLayerParser) DecodeLayers(data []byte, decoded *[]LayerType) (err error)
+
+(UnsupportedLayerType) implements error {
+
+	(s UnsupportedLayerType) Error() (err string) {
+		err = s.Error()
+	}
+}
+
+type UnsupportedLayerType LayerType
+
+func (e UnsupportedLayerType) Error() string

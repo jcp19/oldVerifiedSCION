@@ -1,0 +1,18 @@
+package gopacket
+
+type LayerType int64
+
+type LayerTypeMetadata struct {
+	Name string
+	Decoder Decoder
+}
+
+requires meta.Decoder.Mem()
+func RegisterLayerType(num int, meta LayerTypeMetadata) LayerType
+
+requires 0 < p && p <= 1
+requires acc(bytesAcc(data), p)
+requires c.Mem()
+ensures acc(bytesAcc(data), p/2)
+ensures c.Mem()
+func (t LayerType) Decode(data []byte, c PacketBuilder, ghost p perm) error
