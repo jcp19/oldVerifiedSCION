@@ -181,6 +181,7 @@ pure func DecodedLen(s *Decoded) int {
 // otherwise an error is returned.
 preserves acc(DecodedInvariant(s), 1/10)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+decreases
 func (s *Decoded) SerializeTo(b []byte) error {
 	unfold acc(DecodedInvariant(s), 1/10)
 	if len(b) < s.Len() {
@@ -240,6 +241,7 @@ requires acc(DecodedInvariant(s), 1/100)
 requires len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen
 ensures acc(DecodedInvariant(s), 1/100)
 ensures err == nil ==> newOffset == MetaLen + getLenInfoFields(s) * path.InfoLen
+decreases
 func outlineFstRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error) {
 	offset := MetaLen
 
@@ -248,6 +250,7 @@ func outlineFstRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error)
 	invariant 0 <= i && i <= getLenInfoFields(s)
 	invariant offset == MetaLen + i * path.InfoLen
 	invariant len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen
+	decreases getLenInfoFields(s) - i
 	for i := 0; i < getLenInfoFields(s); i++ {
 		unfold acc(DecodedInvariant(s), 1/100)
 		assert acc(&(s.InfoFields)[i], 1/100) && acc((s.InfoFields)[i], 1/100)
@@ -272,6 +275,7 @@ requires len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen + getLenHopField
 ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures acc(DecodedInvariant(s), 1/100)
 ensures err == nil ==> newOffset == MetaLen + getLenInfoFields(s) * path.InfoLen + getLenHopFields(s) * path.HopLen
+decreases
 func outlineSndRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error) {
 	offset := MetaLen + getLenInfoFields(s) * path.InfoLen
 	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
@@ -279,6 +283,7 @@ func outlineSndRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error)
 	invariant 0 <= i && i <= getLenHopFields(s)
 	invariant offset == MetaLen + getLenInfoFields(s) * path.InfoLen + i * path.HopLen
 	invariant len(b) >= MetaLen + getLenInfoFields(s) * path.InfoLen + getLenHopFields(s) * path.HopLen
+	decreases getLenHopFields(s) - i
 	for i := 0; i < getLenHopFields(s); i++ {
 		unfold acc(DecodedInvariant(s), 1/100)
 		assert acc(&(s.HopFields)[i], 1/100) && acc(path.HopFieldInv((s.HopFields)[i]), 1/100)

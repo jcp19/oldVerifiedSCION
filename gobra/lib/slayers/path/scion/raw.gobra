@@ -47,6 +47,7 @@ requires acc(s)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures res == nil ==> RawInvariant(s)
 ensures res != nil ==> acc(s)
+decreases
 func (s *Raw) DecodeFromBytes(data []byte) (res error) {
 	if err := s.Base.DecodeFromBytes(data); err != nil {
 		return err
@@ -72,6 +73,7 @@ func (s *Raw) DecodeFromBytes(data []byte) (res error) {
 //        it modifies the underlying buffer
 preserves RawInvariant(s)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+decreases _
 func (s *Raw) SerializeTo(b []byte) error {
 	unfold RawInvariant(s)
 	if s.Raw == nil {
@@ -151,6 +153,7 @@ requires 0 <= idx
 preserves  acc(RawInvariant(s), 1/100)
 ensures retErr != nil ==> retInfo == nil
 ensures retErr == nil ==> acc(retInfo)
+decreases
 func (s *Raw) GetInfoField(idx int) (retInfo *path.InfoField, retErr error) {
 	unfold acc(RawInvariant(s), 1/100)
 	unfold acc(BaseInvariant(&s.Base), 1/100)
@@ -180,6 +183,7 @@ func (s *Raw) GetInfoField(idx int) (retInfo *path.InfoField, retErr error) {
 preserves acc(RawInvariant(s), 1/100)
 ensures retErr != nil ==> retInfo == nil
 ensures retErr == nil ==> acc(retInfo)
+decreases
 func (s *Raw) GetCurrentInfoField() (retInfo *path.InfoField, retErr error) {
 	// (joao) introduced idx to store an intermediate value
 	unfold acc(RawInvariant(s), 1/100)
@@ -195,6 +199,7 @@ func (s *Raw) GetCurrentInfoField() (retInfo *path.InfoField, retErr error) {
 // SetInfoField updates the InfoField at a given index.
 requires idx >= 0
 preserves RawInvariant(s) && acc(info, 1/1000)
+decreases
 func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
 	unfold RawInvariant(s)
 	unfold BaseInvariant(&s.Base)
@@ -225,6 +230,7 @@ requires 0 <= idx
 preserves acc(RawInvariant(s), 1/100)
 ensures retErr != nil ==> retHop == nil
 ensures retErr == nil ==> path.HopFieldInv(retHop)
+decreases
 func (s *Raw) GetHopField(idx int) (retHop *path.HopField, retErr error) {
 	unfold acc(RawInvariant(s), 1/100)
 	unfold acc(BaseInvariant(&s.Base), 1/100)
@@ -254,6 +260,7 @@ func (s *Raw) GetHopField(idx int) (retHop *path.HopField, retErr error) {
 preserves acc(RawInvariant(s), 1/100)
 ensures retErr != nil ==> retHop == nil
 ensures retErr == nil ==> path.HopFieldInv(retHop)
+decreases
 func (s *Raw) GetCurrentHopField() (retHop *path.HopField, retErr error) {
 	// (joao) introduced idx to store an intermediate value
 	unfold acc(RawInvariant(s), 1/100)
@@ -271,7 +278,7 @@ requires idx >= 0
 preserves RawInvariant(s) 
 preserves hop != nil ==> acc(path.HopFieldInv(hop), 1/100)
 // preserves hop != nil && forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i], 1/100)
-// (joao) verified but commented for performance reasons
+decreases *
 func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
 	unfold RawInvariant(s)
 	unfold acc(BaseInvariant(&s.Base), 1/2) 
