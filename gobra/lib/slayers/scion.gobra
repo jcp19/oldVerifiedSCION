@@ -16,11 +16,14 @@ package slayers
 
 import (
 	"encoding/binary"
-	// "fmt" // (joao) fmt will be supported when variadic functions are merged in Gobra's main branch
+	// (joao) "fmt" package not supported yet
+	// "fmt"
 	"net"
 
 	//"github.com/google/gopacket"
+	"gobra/dependencies/gopacket"
 	//"github.com/google/gopacket/layers"
+	"gobra/dependencies/gopacket/layers"
 
 	"gobra/lib/addr"
 	"gobra/lib/common"
@@ -28,7 +31,11 @@ import (
 	//"github.com/scionproto/scion/go/lib/slayers/path/empty"
 	"gobra/lib/slayers/path/empty"
 	//"github.com/scionproto/scion/go/lib/slayers/path/onehop"
+	"gobra/lib/slayers/path/onehop"
 	//"github.com/scionproto/scion/go/lib/slayers/path/scion"
+	"gobra/lib/slayers/path/scion"
+
+	"gobra/verifyutils"
 )
 
 const (
@@ -44,6 +51,7 @@ const (
 // PathType indicates the type of the path contained in the SCION header.
 type PathType uint8
 
+/*
 func (t PathType) String() string {
 	switch t {
 	case PathTypeEmpty:
@@ -57,8 +65,11 @@ func (t PathType) String() string {
 	case PathTypeCOLIBRI:
 		return "COLIBRI (4)"
 	}
+	// (joao) fmt.Sprintf not supported
 	// return fmt.Sprintf("UNKNOWN (%d)", t)
+	return verifyutils.HavocString()
 }
+*/
 
 // PathType constants
 // (joao) used to be defined in terms of iota
@@ -114,22 +125,83 @@ const (
 // Path is the path contained in the SCION header.
 // TODO: (joao) implement all paths as subtypes of Path; must reflect all perms required in their specs
 type Path interface {
-	pred mem()
+	// (joao) must hold for every receiver in the call of DecodeFromBytes. Represents
+	//        permission to (possibly non initialized) memory that stores a Path
+	pred UninitializedMem()
+	// (joao) must hold in every valid instance of a Path
+	pred Mem()
+	// (joao) it should be possible to retrieve UninitializedMem() from Mem().
+	//        this should be a ghost operation but ghost interface methods are currently not supported.
+	requires Mem()
+	ensures UninitializedMem()
+	ExchangePerms()
 	// SerializeTo serializes the path into the provided buffer.
+	requires Mem() // (joao) there are implementations of this interface that modify the Path structure when serializing (e.g. scion.Raw)
+	requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	ensures  Mem()
+	ensures  forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 	SerializeTo(b []byte) error
 	// DecodesFromBytes decodes the path from the provided buffer.
-	DecodeFromBytes(b []byte) error
+	requires UninitializedMem()
+ 	// (joao) there are implementations of this interface (e.g. scion.Raw) that store b and use it as internal data
+	requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i]) 
+	ensures  res == nil ==> Mem()
+	DecodeFromBytes(b []byte) (res error)
 	// Reverse reverses a path such that it can be used in the reversed direction.
 	//
 	// XXX(shitz): This method should possibly be moved to a higher-level path manipulation package.
-	Reverse() error
+	requires Mem()
+	ensures res == nil ==> Mem()
+	Reverse() (res error)
 	// Len returns the length of a path in bytes.
+	requires acc(Mem(), _)
 	Len() int
 }
 
+/*
+// (joao) TODO: do the same for scion.Raw and onehop.Path after fixing interface issues
+pred EmptyMem(o empty.Path) {
+	true
+}
+
+pred EmptyUninitializedMem(o empty.Path) {
+	true
+}
+
+
+(empty.Path) implements Path {
+	pred Mem := EmptyMem
+
+	pred UninitializedMem := EmptyUninitializedMem
+
+	(x empty.Path) SerializeTo(b []byte) error {
+		return x.SerializeTo(b)
+	}
+
+	(x empty.Path) DecodeFromBytes(b []byte) error {
+		return x.DecodeFromBytes(b)
+	}
+
+	(x empty.Path) Reverse() error {
+		return x.Reverse()
+	}
+
+	(x empty.Path) Len() int {
+		return x.Len()
+	}
+
+	(x empty.Path) ExchangePerms() {
+		x.ExchangePerms()
+	}
+}
+*/
+
 // SCION is the header of a SCION packet.
 type SCION struct {
-	// layers.BaseLayer // (joao) No support for embedded fields
+	// (joao) No support for embedded fields, added field EmbeddedBaseLayer instead
+	// layers.BaseLayer
+	EmbeddedBaseLayer layers.BaseLayer
+
 	// Common Header fields
 
 	// Version is version of the SCION Header. Currently, only 0 is supported.
@@ -171,7 +243,7 @@ type SCION struct {
 	// Address header fields.
 
 	// DstIA is the destination ISD-AS.
-	DstIA addr.IA
+//	DstIA addr.IA
 	// SrcIA is the source ISD-AS.
 	SrcIA addr.IA
 	// RawDstAddr is the destination address.
@@ -183,8 +255,8 @@ type SCION struct {
 	Path Path
 }
 
-ensures res == (int(addrLen) + 1) * LineLen
-pure func addrBytes(addrLen AddrLen) (res int) {
+/*
+pure func addrBytes(addrLen AddrLen) int {
 	return (int(addrLen) + 1) * LineLen
 }
 
@@ -193,6 +265,7 @@ pred InvariantSCION(s *SCION) {
 	(s.RawSrcAddr != nil ==> (validAddrLen(s.SrcAddrLen) && lengthToAddrLen(len(s.RawSrcAddr)) == s.SrcAddrLen && forall i int :: 0 <= i && i < len(s.RawSrcAddr) ==> acc(&(s.RawSrcAddr)[i]))) &&
 	(s.RawDstAddr != nil ==> (validAddrLen(s.DstAddrLen) && lengthToAddrLen(len(s.RawDstAddr)) == s.DstAddrLen && forall i int :: 0 <= i && i < len(s.RawDstAddr) ==> acc(&(s.RawDstAddr)[i])))
 }
+*/
 
 /*
 ghost
@@ -220,8 +293,8 @@ func soundInvariantSCION() (s *SCION) {
 
 // (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`
 // (joao) `layers.BaseLayer` is implemented in a third party package
-requires acc(s, _)
-func (s *SCION) LayerPayload() []byte
+// requires acc(s, _)
+// func (s *SCION) LayerPayload() []byte
 //{
 //	return s.Payload
 //}
@@ -382,11 +455,12 @@ func (s *SCION) LayerPayload() []byte
 // from the underlaying layer data. Changing the net.Addr object might lead to inconsistent layer
 // information and thus should be treated read-only. Instead, SetDstAddr should be used to update
 // the destination address.
+/*
 requires p > 0
 requires acc(InvariantSCION(s), p)
 ensures acc(InvariantSCION(s), p)
 //(joao) commented to save CI time
-func (s *SCION) DstAddr(ghost p perm) (net.Addr, error) /*{
+func (s *SCION) DstAddr(ghost p perm) (net.Addr, error) {
 	unfold acc(InvariantSCION(s), p)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr, p)
@@ -398,11 +472,12 @@ func (s *SCION) DstAddr(ghost p perm) (net.Addr, error) /*{
 // underlaying layer data. Changing the net.Addr object might lead to inconsistent layer information
 // and thus should be treated read-only. Instead, SetDstAddr should be used to update the source
 // address.
+/*
 requires p > 0
 requires acc(InvariantSCION(s), p)
 ensures acc(InvariantSCION(s), p)
 //(joao) commented to save CI time
-func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) /*{
+func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) {
 	unfold acc(InvariantSCION(s), p)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr, p)
@@ -414,10 +489,11 @@ func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) /*{
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
 // SetDstAddr takes ownership of dst and callers should not write to it after calling SetDstAddr.
 // Changes to dst might leave the layer in an inconsistent state.
+/*
 requires InvariantSCION(s) && dst.mem()
 ensures InvariantSCION(s)
 //(joao) commented to save CI time
-func (s *SCION) SetDstAddr(dst net.Addr) (ret error) /*{
+func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	unfold InvariantSCION(s)
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
@@ -429,22 +505,24 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) /*{
 // SetSrcAddr sets the source address and updates the DstAddrLen/Type fields accordingly.
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
 // Changes to src might leave the layer in an inconsistent state.
+/*
 requires InvariantSCION(s) && src.mem()
 ensures InvariantSCION(s)
 //(joao) commented to save CI time
-func (s *SCION) SetSrcAddr(src net.Addr) (ret error) /*{
+func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	var err error
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)
 	return err
 }
 */
 
+/*
 requires p > 0
 requires lengthToAddrLen(len(raw)) == addrLen
 requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
 ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
 // (joao) commented to save CI time
-func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (net.Addr, error) /*{
+func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (net.Addr, error) {
 	switch addrLen {
 	case AddrLen4:
 		switch addrType {
@@ -463,6 +541,7 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (ne
 		"type", addrType, "len", addrLen)
 }*/
 
+/*
 requires hostAddr.mem()
 ensures err == nil ==> validAddrLen(addrLen)
 ensures err == nil ==> lengthToAddrLen(len(s)) == addrLen
@@ -481,12 +560,14 @@ func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, 
 // (joao) node not in tree: Network
 //	return 0, 0, nil, serrors.New("unsupported address", "addr", hostAddr)
 //}
+*/
 
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
+/*
 requires acc(InvariantSCION(s), _)
 ensures unfolding acc(InvariantSCION(s), _) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
-pure func (s *SCION) AddrHdrLen() (res int) /*{
+pure func (s *SCION) AddrHdrLen() (res int) {
 	return unfolding InvariantSCION(s) in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 }
 */
@@ -495,11 +576,12 @@ pure func (s *SCION) AddrHdrLen() (res int) /*{
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
 // (joao) no support for the copy function
+/*
 requires p > 0
 requires acc(InvariantSCION(s), p)
 // ensures InvariantSCION(s)
 // (joao) commented to save CI time
-func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) error /*{
+func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) error {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(buf))
@@ -519,6 +601,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) error /*{
 	return nil
 }*/
 
+/*
 // DecodeAddrHdr decodes the destination and source ISD-AS-Host address triples from the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
@@ -548,13 +631,14 @@ func (s *SCION) DecodeAddrHdr(data []byte, ghost p perm) error // {
 //	// fold InvariantSCION(s)
 //	return nil
 //}
+*/
 
-
+/*
 // computeChecksum computes the checksum with the SCION pseudo header.
 requires p > 0
 requires s != nil ==> acc(InvariantSCION(s), p)
 ensures s != nil ==> acc(InvariantSCION(s), p)
-func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8, ghost p perm) (uint16, error) /*{
+func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8, ghost p perm) (uint16, error) {
 //(joao) Commented out to save CI time
 	if s == nil {
 		return 0, serrors.New("SCION header missing")
@@ -569,11 +653,12 @@ func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8, ghost p perm)
 }
 */
 
+/*
 requires p > 0
 requires acc(InvariantSCION(s), p)
 requires acc(InvariantSCION(s), p)
 // ensures (len(s.RawSrcAddr) > 0 && len(s.RawDstAddr) > 0) ==> resErr == nil
-func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8, ghost p perm) (resUint uint32, resErr error) /* {
+func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8, ghost p perm) (resUint uint32, resErr error) {
 	unfold acc(InvariantSCION(s), p)
 	if len(s.RawDstAddr) == 0 {
 		fold acc(InvariantSCION(s), p)

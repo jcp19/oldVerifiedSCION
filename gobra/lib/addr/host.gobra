@@ -355,12 +355,12 @@ pred (h HostSVC) mem() {
 }
 
 (HostSVC) implements net.Addr {
-	(e HostSVC) Network(ghost p perm) string {
-		return e.Network(p)
+	(e HostSVC) Network() string {
+		return e.Network()
 	}
 
-	(e HostSVC) String(ghost p perm) string {
-		return e.String(p)
+	(e HostSVC) String() string {
+		return e.String()
 	}
 }
 
@@ -449,7 +449,7 @@ func (h HostSVC) Equal(o HostAddr) bool {
 
 // (joao) Trusted function
 // (joao) no support for rune literals
-func (h HostSVC) String(ghost p perm) string // {
+func (h HostSVC) String() string // {
 //	name := h.BaseString()
 //	cast := 'A'
 //	if h.IsMulticast() {
@@ -477,7 +477,7 @@ func (h HostSVC) BaseString() string {
 	}
 }
 
-func (h HostSVC) Network(ghost p perm) string {
+func (h HostSVC) Network() string {
 	return ""
 }
 
