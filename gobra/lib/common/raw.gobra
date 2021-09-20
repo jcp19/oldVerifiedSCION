@@ -31,7 +31,9 @@ func (r RawBytes) String() string //{
 //  return fmt.Sprintf("%x", []byte(r))
 //}
 
-pure func (r RawBytes) Len() int {
+pure
+ensures ret == len(r)
+func (r RawBytes) Len() (ret int) {
 	return len(r)
 }
 

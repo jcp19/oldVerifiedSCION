@@ -1,0 +1,26 @@
+package layers
+
+import (
+	"gobra/dependencies/gopacket"
+)
+
+type BaseLayer struct {
+	Contents []byte
+	Payload []byte
+}
+
+requires 0 < p && p <= 1
+requires acc(&b.Contents, p)
+requires acc(gopacket.bytesAcc(b.Contents), p)
+ensures acc(&b.Contents, p)
+ensures acc(gopacket.bytesAcc(b.Contents), p/2)
+ensures acc(gopacket.bytesAcc(data), p/2)
+func (b *BaseLayer) LayerContents(ghost p perm) (data []byte) // { return b.Contents }
+
+requires 0 < p && p <= 1
+requires acc(&b.Payload, p)
+requires acc(gopacket.bytesAcc(b.Payload), p)
+ensures acc(&b.Payload, p)
+ensures acc(gopacket.bytesAcc(b.Payload), p/2)
+ensures acc(gopacket.bytesAcc(data), p/2)
+func (b *BaseLayer) LayerPayload(ghost p perm) (data []byte) // { return b.Payload }

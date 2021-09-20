@@ -15,7 +15,8 @@
 package common
 
 import (
-//	"fmt"
+	// "fmt"
+	"gobra/verifyutils"
 )
 
 type L4ProtocolType uint8
@@ -51,6 +52,7 @@ func (p L4ProtocolType) String() string {
 	case End2EndClass:
 		return "End2End"
 	}
-// (joao) no support for fmt
-//	return fmt.Sprintf("UNKNOWN (%d)", p)
+	// (joao) fmt.Sprintf not supported
+	// return fmt.Sprintf("UNKNOWN (%d)", p)
+	return verifyutils.HavocString()
 }
