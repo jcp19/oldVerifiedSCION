@@ -830,6 +830,7 @@ type processResult struct {
 	OutPkt   []byte
 }
 
+// (joao) THIS(1)
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte /*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
 
@@ -930,6 +931,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 	return noBFDSessionFound()
 }
 
+// (joao) THIS(2)
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
 
@@ -978,6 +980,7 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
 }
 
+//THIS(4)
 //func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 //	cause error) (processResult, error) {
 //
@@ -1045,6 +1048,7 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 //	return processResult{OutPkt: rawSCMP}, err
 //}
 
+// THIS(4)
 func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	var ok bool
 //	p.path, ok = p.scionLayer.Path.(*scion.Raw)
@@ -1110,6 +1114,7 @@ func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
 	return processResult{}, nil
 }
 
+// THIS(4)
 func (p *scionPacketProcessor) validateEgressID() (processResult, error) {
 	;
 //	pktEgressID := p.egressInterface()
@@ -1156,6 +1161,7 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) {
 //	}
 }
 
+// THIS(4)
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error // {
 //	// against construction dir the ingress router updates the SegID, ifID == 0
 //	// means this comes from this AS itself, so nothing has to be done.
@@ -1183,6 +1189,7 @@ func (p *scionPacketProcessor) currentHopPointer() uint16 // {
 //		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
 //}
 
+// THIS(4)
 func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) // {
 //	if err := path.VerifyMAC(p.d.macFactory(), p.infoField, p.hopField); err != nil {
 //		return p.packSCMP(
@@ -1198,6 +1205,7 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) // {
 //	return processResult{}, nil
 //}
 
+// THIS(4)
 func (p *scionPacketProcessor) resolveInbound() (net.Addr, processResult, error) // {
 //	a, err := p.d.resolveLocalDst(p.scionLayer)
 //	switch {
@@ -1262,6 +1270,7 @@ func (p *scionPacketProcessor) doXover() (processResult, error) // {
 //	return processResult{}, nil
 //}
 
+//THIS(4)
 // (joao) being able to write sequences of pure statements inside
 // pure functions would be helpful here
 requires pm > 0
@@ -1278,6 +1287,7 @@ func (p *scionPacketProcessor) egressInterface(ghost pm perm) uint16 {
 	return p.hopField.ConsIngress
 }
 
+//THIS(4)
 func (p *scionPacketProcessor) validateEgressUp() (processResult, error) {
 //	egressID := p.egressInterface()
 //	if v, ok := p.d.bfdSessions[egressID]; ok {
@@ -1304,6 +1314,7 @@ func (p *scionPacketProcessor) validateEgressUp() (processResult, error) {
 	return processResult{}, nil
 }
 
+// THIS(4)
 requires acc(&p.ingressID)
 requires p.ingressID != 0 ==>
 	acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert) &&
@@ -1321,6 +1332,7 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error)
 	return p.handleSCMPTraceRouteRequest(p.ingressID)
 }
 
+// THIS(4)
 // (joao) TODO: clean-up, minimize permissions, write postconditions
 requires acc(&p.infoField) && acc(&p.infoField.ConsDir)
 requires acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert)
@@ -1372,6 +1384,7 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 //	return p.packSCMP(&scmpH, &scmpP, nil)
 //}
 
+// THIS(4)
 func (p *scionPacketProcessor) validatePktLen() (processResult, error) // {
 //	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
 //		return processResult{}, nil
@@ -1387,6 +1400,8 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) // {
 //	)
 //}
 //
+
+// THIS(3)
 func (p *scionPacketProcessor) process() (processResult, error) {
 
 	if r, err := p.parsePath(); err != nil {

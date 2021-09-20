@@ -1,5 +1,6 @@
 package gopacket
 
+// (joao) TODO: change bytesAcc to BytesAcc
 type Layer interface {
 	pred ContentsMem()
 	pred PayloadMem()
@@ -7,19 +8,18 @@ type Layer interface {
 	// (lhalm) returns a global constant, no need for memory permissions
 	pure LayerType() LayerType
 
-	requires 0 < p && p <= 1
-	requires acc(ContentsMem(), p)
-	ensures acc(ContentsMem(), p/2)
-	ensures acc(bytesAcc(data), p/2)
-	LayerContents(ghost p perm) (data []byte)
+	requires acc(ContentsMem(), 1/1000)
+	ensures acc(ContentsMem(), 1/2000)
+	ensures acc(bytesAcc(data), 1/2000)
+	LayerContents() (data []byte)
 
-	requires 0 < p && p <= 1
-	requires acc(PayloadMem(), p)
-	ensures acc(PayloadMem(), p/2)
-	ensures acc(bytesAcc(data), p/2)
-	LayerPayload(ghost p perm) (data []byte)
+	requires acc(PayloadMem(), 1/1000)
+	ensures acc(PayloadMem(), 1/2000)
+	ensures acc(bytesAcc(data), 1/2000)
+	LayerPayload() (data []byte)
 }
 
+// (joao) don't understand this one right now
 type NetworkLayer interface {
 	pred Mem()
 	pred ContentsMem()

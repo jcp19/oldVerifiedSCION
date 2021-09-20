@@ -23,6 +23,8 @@ import (
 
 	"gobra/lib/common"
 	"gobra/lib/serrors"
+
+	"gobra/verifyutils"
 )
 
 type HostAddrType uint8
@@ -49,6 +51,7 @@ func (t HostAddrType) String() string {
 	}
     // (joao) fmt.Sptrintf still not supported
 	// return fmt.Sprintf("UNKNOWN (%d)", t)
+	return verifyutils.HavocString()
 }
 
 const (
