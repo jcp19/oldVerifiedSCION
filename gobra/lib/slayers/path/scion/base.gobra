@@ -124,6 +124,7 @@ func (s *Base) IsXover() bool {
 // https://ethz.ch/content/dam/ethz/special-interest/infk/chair-program-method/pm/documents/Education/Theses/Sascha_Forster_BA_report(3).pdf
 requires acc(BaseInvariant(s), _)
 ensures res >= 0 && res <= 3
+decreases
 pure func getNumINF(s *Base) (res int) {
 	return unfolding acc(BaseInvariant(s), _) in s.NumINF
 }
@@ -131,12 +132,14 @@ pure func getNumINF(s *Base) (res int) {
 // (joao) introduced to reduce verification time
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
+decreases
 pure func getNumHops(s *Base) (res int) {
 	return unfolding acc(BaseInvariant(s), _) in s.NumHops
 }
 
 // (joao) introduced to reduce verification time
 requires acc(BaseInvariant(s), _)
+decreases
 pure func getCurrHF(s *Base) (res uint8) {
 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
 }
@@ -215,7 +218,7 @@ preserves acc(m, 1/100)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures len(b) >= MetaLen ==> res == nil
 ensures len(b) < MetaLen ==> res != nil
-decreases _
+decreases
 func (m *MetaHdr) SerializeTo(b []byte) (res error) {
 	if len(b) < MetaLen {
 		return serrors.New("buffer for MetaHdr too short", "expected", MetaLen, "actual", len(b))
@@ -236,6 +239,7 @@ preserves acc(BaseInvariant(s), 1/100)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures len(b) >= MetaLen ==> res == nil
 ensures len(b) < MetaLen ==> res != nil
+decreases
 func (s *Base) SerializePathMetaTo(b []byte) (res error) {
 	unfold acc(BaseInvariant(s), 1/100)
 	res = s.PathMeta.SerializeTo(b)
@@ -244,7 +248,7 @@ func (s *Base) SerializePathMetaTo(b []byte) (res error) {
 }
 
 // (joao) fmt still not supported
-decreases
+decreases *
 func (m MetaHdr) String() string // {
 //	return fmt.Sprintf("{CurrInf: %d, CurrHF: %d, SegLen: %v}", m.CurrINF, m.CurrHF, m.SegLen)
 // }

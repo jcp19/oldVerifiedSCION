@@ -73,7 +73,7 @@ func (s *Raw) DecodeFromBytes(data []byte) (res error) {
 //        it modifies the underlying buffer
 preserves RawInvariant(s)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-decreases _
+decreases
 func (s *Raw) SerializeTo(b []byte) error {
 	unfold RawInvariant(s)
 	if s.Raw == nil {
@@ -106,6 +106,7 @@ func (s *Raw) SerializeTo(b []byte) error {
 // Reverse reverses the path such that it can be used in the reverse direction.
 requires RawInvariant(s)
 ensures res == nil ==> RawInvariant(s)
+decreases
 func (s *Raw) Reverse() (res error) {
 	// XXX(shitz): The current implementation is not the most performant, since it parses the entire
 	// path first. If this becomes a performance bottleneck, the implementation should be changed to
@@ -129,6 +130,7 @@ func (s *Raw) Reverse() (res error) {
 // ToDecoded transforms a scion.Raw to a scion.Decoded.
 preserves RawInvariant(s)
 ensures resErr == nil ==> DecodedInvariant(resDecoded)
+decreases
 func (s *Raw) ToDecoded() (resDecoded *Decoded, resErr error) {
 	unfold RawInvariant(s)
 	assert forall i int :: 0 <= i && i < MetaLen ==> &(s.Raw)[:MetaLen][i] == &(s.Raw)[i]
@@ -278,7 +280,7 @@ requires idx >= 0
 preserves RawInvariant(s) 
 preserves hop != nil ==> acc(path.HopFieldInv(hop), 1/100)
 // preserves hop != nil && forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i], 1/100)
-decreases *
+decreases
 func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
 	unfold RawInvariant(s)
 	unfold acc(BaseInvariant(&s.Base), 1/2) 

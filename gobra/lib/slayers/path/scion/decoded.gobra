@@ -53,21 +53,25 @@ type Decoded struct {
 }
 
 requires acc(DecodedInvariant(s), _)
+decreases
 pure func getInfoFields(s *Decoded) []*path.InfoField {
 	return unfolding acc(DecodedInvariant(s), _) in s.InfoFields
 }
 
 requires acc(DecodedInvariant(s), 1/10000000)
+decreases
 pure func getLenInfoFields(s *Decoded) int {
 	return unfolding acc(DecodedInvariant(s), 1/10000000) in len(s.InfoFields)
 }
 
 requires acc(DecodedInvariant(s), _)
+decreases
 pure func getHopFields(s *Decoded) []*path.HopField {
 	return unfolding acc(DecodedInvariant(s), _) in s.HopFields
 }
 
 requires acc(DecodedInvariant(s),  1/10000000)
+decreases
 pure func getLenHopFields(s *Decoded) int {
 	return unfolding acc(DecodedInvariant(s), 1/10000000) in len(s.HopFields)
 }
@@ -94,7 +98,8 @@ pure func getLenHopFields(s *Decoded) int {
 // DecodeFromBytes fully decodes the SCION path into the corresponding fields.
 requires acc(s)
 preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
-ensures res == nil ==> DecodedInvariant(s) 
+ensures res == nil ==> DecodedInvariant(s)
+decreases
 func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
 	if err := s.Base.DecodeFromBytes(data); err != nil {
 		return err
@@ -119,6 +124,7 @@ func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
 	invariant forall j int :: 0 <= j && j < i ==> acc((s.InfoFields)[j])
 	invariant len(data) >= MetaLen + getNumINF(&s.Base) * path.InfoLen + getNumHops(&s.Base) * path.HopLen
 	invariant offset == MetaLen + i * path.InfoLen
+    decreases getNumINF(&s.Base) - i
 	// (joao) changed to getNumINF() to avoid unfoldings
 	// for i := 0; i < int(s.NumINF); i++ {
 	for i := 0; i < getNumINF(&s.Base); i++ {
@@ -147,6 +153,7 @@ func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
 	invariant forall j int :: 0 <= j && j < i ==> path.HopFieldInv((s.HopFields)[j])
 	invariant len(data) >= MetaLen + getNumINF(&s.Base) * path.InfoLen + getNumHops(&s.Base) * path.HopLen
 	invariant offset == MetaLen + getNumINF(&s.Base) * path.InfoLen + i * path.HopLen
+    decreases getNumHops(&s.Base) - i
 	// (joao) changed to getNumHops() to avoid unfoldings
 	// for i := 0; i < int(s.NumHops); i++ {
 	for i := 0; i < getNumHops(&s.Base); i++ {
@@ -173,6 +180,7 @@ func (s *Decoded) DecodeFromBytes(data []byte) (res error) {
 // (joao) not present in the original code. Extract unfolding to a pure function
 //        as sugested in Sascha's thesis
 requires acc(DecodedInvariant(s), _)
+decreases
 pure func DecodedLen(s *Decoded) int {
 	return unfolding acc(DecodedInvariant(s), _) in s.Len()
 } 
@@ -303,6 +311,7 @@ func outlineSndRangeSerializeTo(s *Decoded, b []byte) (newOffset int, err error)
 // Reverse reverses a SCION path.
 requires DecodedInvariant(s)
 ensures DecodedInvariant(s)
+decreases
 func (s *Decoded) Reverse() error {
 	unfold DecodedInvariant(s)
 	// (joao) use getNumINF to avoid unfolding here
@@ -322,6 +331,7 @@ func (s *Decoded) Reverse() error {
 	invariant getNumHops(&s.Base) == len(s.HopFields)
 	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
 	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i])
+    decreases j - i
 	// (joao) use getNumINF to avoid unfolding here
 	// for i, j := 0, s.NumINF-1; i < j; i, j = i+1, j-1 {
 	for i, j := 0, getNumINF(&s.Base)-1; i < j; i, j = i+1, j-1 {
@@ -338,6 +348,7 @@ func (s *Decoded) Reverse() error {
 	invariant getNumINF(&s.Base) == len(s.InfoFields)
 	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc(&(s.InfoFields)[i])
 	invariant forall i int :: 0 <= i && i < len(s.InfoFields) ==> acc((s.InfoFields)[i])
+    decreases getNumINF(&s.Base) - i
 	// (joao) use getNumINF to avoid unfolding here
 	//	for i := 0; i < s.NumINF; i++ {
 	for i := 0; i < getNumINF(&s.Base); i++ {
@@ -354,6 +365,7 @@ func (s *Decoded) Reverse() error {
 	invariant getNumINF(&s.Base) == len(s.InfoFields)
 	invariant getNumHops(&s.Base) == len(s.HopFields)
 	invariant forall i int :: 0 <= i && i < len(s.HopFields) ==> acc(&(s.HopFields)[i]) && path.HopFieldInv((s.HopFields)[i])
+    decreases j - i
 	// (joao) use getNumHops to avoid unfolding here
 	//	for i, j := 0, s.NumHops-1; i < j; i, j = i+1, j-1 {
 	for i, j := 0, getNumHops(&s.Base)-1; i < j; i, j = i+1, j-1 {
@@ -374,6 +386,7 @@ func (s *Decoded) Reverse() error {
 requires acc(DecodedInvariant(s), 1/10)
 ensures acc(DecodedInvariant(s), 1/10)
 ensures err == nil ==> RawInvariant(raw)
+decreases
 func (s *Decoded) ToRaw() (raw *Raw, err error) {
 	unfold acc(DecodedInvariant(s), 1/100)
 	b := make([]byte, s.Len())

@@ -3,6 +3,7 @@ package verifyutils
 // Version of copy used to prove memory safety only
 preserves forall i int :: (0 <= i && i < len(dst)) ==> acc(&dst[i])
 preserves forall i int :: (0 <= i && i < len(src)) ==> acc(&src[i], 1/100000)
+decreases
 func OutlineMemorySafeCopy(dst, src []byte) {
 	copy(dst, src, perm(1/1000000))
 }
