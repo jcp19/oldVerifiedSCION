@@ -332,15 +332,14 @@ pred InvariantSCION(s *SCION) {
 	acc(s) &&
 	verifyutils.BytesAcc(s.RawSrcAddr) &&
 	verifyutils.BytesAcc(s.RawDstAddr) &&
-	(/*s.RawSrcAddr != nil ==>*/ validSrcAddr(s)) &&
-	(/*s.RawDstAddr != nil ==>*/ validDstAddr(s)) &&
-	((/*s.RawSrcAddr != nil &&*/ s.SrcAddrLen == AddrLen4)  ==> (s.SrcAddrType == T4Ip || s.SrcAddrType == T4Svc)) &&
-	((/*s.RawSrcAddr != nil &&*/ s.SrcAddrLen == AddrLen16) ==> s.SrcAddrType == T16Ip) &&
-	((/*s.RawDstAddr != nil &&*/ s.DstAddrLen == AddrLen4)  ==> (s.DstAddrType == T4Ip || s.DstAddrType == T4Svc)) &&
-	((/*s.RawDstAddr != nil &&*/ s.DstAddrLen == AddrLen16) ==> s.DstAddrType == T16Ip) &&
-	true
+	validSrcAddr(s) &&
+	validDstAddr(s) &&
+	(s.SrcAddrLen == AddrLen4  ==> (s.SrcAddrType == T4Ip || s.SrcAddrType == T4Svc)) &&
+	(s.SrcAddrLen == AddrLen16 ==> s.SrcAddrType == T16Ip) &&
+	(s.DstAddrLen == AddrLen4  ==> (s.DstAddrType == T4Ip || s.DstAddrType == T4Svc)) &&
+	(s.DstAddrLen == AddrLen16 ==> s.DstAddrType == T16Ip) &&
+	s.Path.Mem()
 	// TODO:
-	// s.Path.Mem()
 	// length of raw addresses should be even
 }
 
@@ -396,7 +395,8 @@ func (s *SCION) NextLayerType() gopacket.LayerType // {
 //}
 
 // (joao) no support for gopacket
-//func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
+requires acc(InvariantSCION(s), 1/10)
+func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error // {
 //	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
 //	buf, err := b.PrependBytes(scnLen)
 //	if err != nil {
