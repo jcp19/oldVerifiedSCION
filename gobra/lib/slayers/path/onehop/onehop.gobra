@@ -180,6 +180,7 @@ func (o *Path) Reverse() error {
 	return serrors.New("OneHop path cannot be reversed")
 }
 
+pure
 func (o *Path) Len() int {
 	return PathLen
 }

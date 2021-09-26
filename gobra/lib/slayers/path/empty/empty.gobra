@@ -50,6 +50,7 @@ func (o Path) Reverse() error {
 	return nil
 }
 
+pure
 func (o Path) Len() int {
 	return PathLen
 }
