@@ -1,0 +1,100 @@
+package gopacket
+
+type DecodeFeedback interface {
+	pred Mem()
+
+	requires Mem()
+	ensures Mem()
+	SetTruncated()
+}
+
+type PacketBuilder interface {
+	pred Mem()
+
+	// (lhalm) interface composition not supported, add method manually
+	// DecodeFeedback
+
+	requires Mem()
+	ensures Mem()
+	SetTruncated()
+
+	// (lhalm) done with DecodeFeedback methods
+
+	requires 0 < p && p <= 1
+	requires Mem()
+	requires acc(l.ContentsMem(), p)
+	requires acc(l.PayloadMem(), p)
+	ensures Mem()
+	ensures acc(l.ContentsMem(), p/2)
+	ensures acc(l.PayloadMem(), p/2)
+	AddLayer(l Layer, ghost p perm)
+
+	// SetLinkLayer(LinkLayer)
+
+	requires 0 < p && p <= 1
+	requires Mem()
+	requires acc(l.Mem(), p)
+	requires acc(l.ContentsMem(), p)
+	requires acc(l.PayloadMem(), p)
+	ensures Mem()
+	ensures acc(l.Mem(), p/2)
+	ensures acc(l.ContentsMem(), p/2)
+	ensures acc(l.PayloadMem(), p/2)
+	SetNetworkLayer(l NetworkLayer, ghost p perm)
+
+	// SetTransportLayer(TransportLayer)
+	// SetApplicationLayer(ApplicationLayer)
+	// SetErrorLayer(ErrorLayer)
+
+	requires Mem() && next.Mem()
+	ensures Mem()
+	NextDecoder(next Decoder) error
+
+	// DumpPacketData()
+	// DecodeOptions() *DecodeOptions
+}
+
+type Decoder interface {
+	pred Mem()
+
+	requires 0 < p && p <= 1
+	requires Mem()
+	requires acc(bytesAcc(data), p)
+	requires pb.Mem()
+	ensures Mem()
+	ensures acc(bytesAcc(data), p/2)
+	ensures pb.Mem()
+	Decode(data []byte, pb PacketBuilder, ghost p perm) error
+}
+
+// type DecodeFunc func([]byte, PacketBuilder) error
+
+// func (d DecodeFunc) Decode(data []byte, p PacketBuilder) error
+
+// (lhalm) added to mimic the DecodeFunc functionality since function types are not yet supported
+
+type DecodeFunc DecodeFuncInterface
+
+type DecodeFuncInterface interface {
+
+	requires (forall i int :: i >= 0 && i < len(data) ==> acc(&data[i])) && p.Mem()
+	ensures (forall i int :: i >= 0 && i < len(data) ==> acc(&data[i])) && p.Mem()
+	Decode(data []byte, p PacketBuilder) error
+}
+
+(NilDecodeFeedback) implements DecodeFeedback {
+
+	(n NilDecodeFeedback) SetTruncated() {
+		n.SetTruncated()
+	}
+}
+
+pred (n NilDecodeFeedback) Mem() {true}
+
+// (lhalm) make global since the actual global variable is not supported
+type NilDecodeFeedback struct{}
+
+func (n NilDecodeFeedback) SetTruncated() {}
+
+// (lhalm) doesn't work
+// var NilDecodeFeedback DecodeFeedback = nilDecodeFeedback{}

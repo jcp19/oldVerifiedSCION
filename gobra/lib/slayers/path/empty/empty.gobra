@@ -21,6 +21,21 @@ const PathLen = 0
 // bytes on the wire and is used for AS internal communication.
 type Path struct{}
 
+// (joao) required to make empty.Path an instance of Path, as defined in the file `../../scion.gobra`
+pred (o Path) Mem() {
+	true
+}
+
+pred (o Path) UninitializedMem() {
+	true
+}
+
+requires o.Mem()
+ensures  o.UninitializedMem()
+func (o Path) ExchangePerms() {
+	fold o.UninitializedMem()
+}
+
 // (joao) `_` cannot be used as an argument identifier
 // func (o Path) DecodeFromBytes(_ []byte) error {
 func (o Path) DecodeFromBytes(b []byte) error {
@@ -35,6 +50,7 @@ func (o Path) Reverse() error {
 	return nil
 }
 
+pure
 func (o Path) Len() int {
 	return PathLen
 }

@@ -24,6 +24,8 @@ import (
 	"strings"
 
 	"gobra/lib/common"
+
+	"gobra/verifyutils"
 )
 
 const (
@@ -173,15 +175,12 @@ func (as AS) FileFmt() string //{
 //	return as.fmt('_')
 //}
 
-pure
-func havocString() string
-
 func (as AS) fmt(sep byte) string {
 	if !as.inRange() {
 		// (joao) fmt not currently supported
 		// return fmt.Sprintf("%d [Illegal AS: larger than %d]", as, MaxAS)
 		// (joao) added to mimic the correct control flow of the program
-		return havocString();
+		return verifyutils.HavocString()
 	}
 	// Format BGP ASes as decimal
 	if as <= MaxBGPAS {
