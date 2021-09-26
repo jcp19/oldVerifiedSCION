@@ -327,17 +327,21 @@ pure func minAddrLen(l AddrLen) int {
 	return l == AddrLen4? 4: (l == AddrLen8? 8: (l == AddrLen12? 12 : (l == AddrLen16? 16: bogusIntMinAddrLen())))
 }
 
+// (joao) TODO: make this an MPredicate
 pred InvariantSCION(s *SCION) {
 	acc(s) &&
 	verifyutils.BytesAcc(s.RawSrcAddr) &&
 	verifyutils.BytesAcc(s.RawDstAddr) &&
-	(s.RawSrcAddr != nil ==> validSrcAddr(s)) &&
-	(s.RawDstAddr != nil ==> validDstAddr(s)) &&
+	(/*s.RawSrcAddr != nil ==>*/ validSrcAddr(s)) &&
+	(/*s.RawDstAddr != nil ==>*/ validDstAddr(s)) &&
+	((/*s.RawSrcAddr != nil &&*/ s.SrcAddrLen == AddrLen4)  ==> (s.SrcAddrType == T4Ip || s.SrcAddrType == T4Svc)) &&
+	((/*s.RawSrcAddr != nil &&*/ s.SrcAddrLen == AddrLen16) ==> s.SrcAddrType == T16Ip) &&
+	((/*s.RawDstAddr != nil &&*/ s.DstAddrLen == AddrLen4)  ==> (s.DstAddrType == T4Ip || s.DstAddrType == T4Svc)) &&
+	((/*s.RawDstAddr != nil &&*/ s.DstAddrLen == AddrLen16) ==> s.DstAddrType == T16Ip) &&
 	true
 	// TODO:
 	// s.Path.Mem()
-	// - be more specific about the relation between addrtype and addrlen?
-	// - length of raw addresses should be even
+	// length of raw addresses should be even
 }
 
 ghost
@@ -539,45 +543,64 @@ func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType // {
 //	}
 //}
 
+// (joao) The following predicate and ghost function would not be necessary
+//        if Gobra had support for magic wands 
+pred (s *SCION) ReadDstAddr(addr net.Addr)
+
+ghost
+requires acc(InvariantSCION(s), 1/200) && acc(addr.mem(), 1/200)
+requires s.ReadDstAddr(addr)
+ensures acc(InvariantSCION(s), 1/100)
+func (s *SCION) AddReadDstAddr(addr net.Addr)
+
+// (joao) Verified
 // DstAddr parses the destination address into a net.Addr. The returned net.Addr references data
 // from the underlaying layer data. Changing the net.Addr object might lead to inconsistent layer
 // information and thus should be treated read-only. Instead, SetDstAddr should be used to update
 // the destination address.
-/*
-requires p > 0
-requires acc(InvariantSCION(s), p)
-ensures acc(InvariantSCION(s), p)
-func (s *SCION) DstAddr(ghost p perm) (net.Addr, error) {
-	unfold acc(InvariantSCION(s), p)
+requires acc(InvariantSCION(s), 1/200)
+ensures resErr == nil ==> acc(resAddr.mem(), 1/200) && s.ReadDstAddr(resAddr)
+func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
+	unfold acc(InvariantSCION(s), 1/200)
 	// (joao) this call used to be part of the return statement
-	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr, p)
-	fold acc(InvariantSCION(s), p)
+	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
+	assert acc(res.mem(), 1/200)
+	assume s.ReadSrcAddr(res)
 	return res, err
-}*/
+}
 
+// (joao) The following predicate and ghost function would not be necessary
+//        if Gobra had support for magic wands 
+pred (s *SCION) ReadSrcAddr(addr net.Addr)
+
+ghost
+requires acc(InvariantSCION(s), 1/200) && acc(addr.mem(), 1/200)
+requires s.ReadSrcAddr(addr)
+ensures acc(InvariantSCION(s), 1/100)
+func (s *SCION) AddReadSrcAddr(addr net.Addr)
+
+// (joao) Verified
 // SrcAddr parses the source address into a net.Addr. The returned net.Addr references data from the
 // underlaying layer data. Changing the net.Addr object might lead to inconsistent layer information
 // and thus should be treated read-only. Instead, SetDstAddr should be used to update the source
 // address.
-/*
-requires p > 0
-requires acc(InvariantSCION(s), p)
-ensures acc(InvariantSCION(s), p)
-func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) {
-	unfold acc(InvariantSCION(s), p)
+requires acc(InvariantSCION(s), 1/200)
+ensures resErr == nil ==> acc(resAddr.mem(), 1/200) && s.ReadSrcAddr(resAddr)
+func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
+	unfold acc(InvariantSCION(s), 1/200)
 	// (joao) this call used to be part of the return statement
-	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr, p)
-	fold acc(InvariantSCION(s), p)
+	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr)
+	assert acc(res.mem(), 1/200)
+	assume s.ReadSrcAddr(res)
 	return res, err
 }
-*/
 
+// (joao) Verified
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
 // SetDstAddr takes ownership of dst and callers should not write to it after calling SetDstAddr.
 // Changes to dst might leave the layer in an inconsistent state.
-// (joao) Verified
 requires InvariantSCION(s) && dst.mem()
-ensures InvariantSCION(s)
+ensures ret == nil ==> InvariantSCION(s)
 func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	unfold InvariantSCION(s)
 	var err error
@@ -586,13 +609,6 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 		assert validDstAddr(s) && len(s.RawDstAddr) >= minAddrLen(s.DstAddrLen)
 		assert (s.RawSrcAddr != nil ==> validSrcAddr(s))
 		assert verifyutils.BytesAcc(s.RawSrcAddr) 
-		assert verifyutils.BytesAcc(s.RawDstAddr) 
-		fold InvariantSCION(s)
-	} else {
-		assert s.DstAddrLen  == 0
-		assert s.DstAddrType == 0
-		assert s.RawDstAddr  == nil
-		assert verifyutils.BytesAcc(s.RawSrcAddr)
 		assert verifyutils.BytesAcc(s.RawDstAddr) 
 		fold InvariantSCION(s)
 	}
@@ -604,7 +620,7 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 // Changes to src might leave the layer in an inconsistent state.
 // (joao) Verified
 requires InvariantSCION(s) && src.mem()
-ensures  InvariantSCION(s)
+ensures ret == nil ==> InvariantSCION(s)
 func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	var err error
 	unfold InvariantSCION(s)
@@ -613,13 +629,6 @@ func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 		assert validSrcAddr(s) && len(s.RawSrcAddr) >= minAddrLen(s.SrcAddrLen)
 		assert (s.RawDstAddr != nil ==> validDstAddr(s))
 		assert verifyutils.BytesAcc(s.RawSrcAddr) 
-		assert verifyutils.BytesAcc(s.RawDstAddr) 
-		fold InvariantSCION(s)
-	} else {
-		assert s.SrcAddrLen  == 0
-		assert s.SrcAddrType == 0
-		assert s.RawSrcAddr  == nil
-		assert verifyutils.BytesAcc(s.RawSrcAddr)
 		assert verifyutils.BytesAcc(s.RawDstAddr) 
 		fold InvariantSCION(s)
 	}
@@ -631,9 +640,10 @@ requires addrLen == AddrLen4  ==> (addrType == T4Ip || addrType == T4Svc)
 requires addrLen == AddrLen16 ==> addrType == T16Ip
 requires addrLen == AddrLen4 ==> len(raw) >= 4
 requires addrLen == AddrLen16 ==> len(raw) >= 16
-requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i])
+requires acc(verifyutils.BytesAcc(raw), 1/200)
 ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
-ensures resAddr.mem()
+ensures (addrLen == AddrLen4 || addrLen == AddrLen16) ==> resErr == nil
+ensures acc(resAddr.mem(), 1/200)
 func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) //{
 //	switch addrLen {
 //	case AddrLen4:
@@ -656,10 +666,10 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr
 // (joao) requires implementation proof that IPAddr implements Addr to verify the body
 requires hostAddr.mem()
 ensures verifyutils.BytesAcc(s)
-// the LHS of this implication is necessary, because AddrLen4 is 0 and 0 is the value returned for addrLen
-// in case of error
-ensures err == nil ==> addrLen == AddrLen4 ==> (addrType == T4Svc || addrType == T4Ip)
-ensures err == nil ==> addrLen == AddrLen16 ==> addrType == T16Ip
+// (joao) the LHS of this implication is necessary, because AddrLen4 is 0 and 0 is the value returned for addrLen
+//        in case of error
+ensures (err == nil && addrLen == AddrLen4)  ==> (addrType == T4Svc || addrType == T4Ip)
+ensures (err == nil && addrLen == AddrLen16) ==> addrType == T16Ip
 ensures err == nil ==> validAddrLen(addrLen) && len(s) >= minAddrLen(addrLen)
 ensures err != nil ==> addrLen == 0 && addrType == 0 && s == nil
 func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) // {
