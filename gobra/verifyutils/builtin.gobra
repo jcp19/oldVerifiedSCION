@@ -14,3 +14,10 @@ func HavocString() string
 pred BytesAcc(b []byte) {
 	forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 }
+
+requires acc(BytesAcc(b), _)
+requires 0 <= i && i < len(b)
+ensures v == unfolding acc(BytesAcc(b), _) in b[i]
+pure func BytesIndex(b []byte, i int) (v byte) {
+	return unfolding acc(BytesAcc(b), _) in b[i]
+}
