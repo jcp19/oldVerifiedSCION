@@ -254,6 +254,7 @@ type SCION struct {
 	Path Path
 }
 
+/** Getters **/
 pure
 requires acc(s.MemSCION(), _)
 func (s *SCION) getRawSrcAddr() []byte {
@@ -275,6 +276,18 @@ ensures acc(s.MemSCION(), 1/1000)
 func (s *SCION) getRawDstAddrIdx(i int) (res byte) // {
 // 	res = verifyutils.BytesIndex(unfolding acc(s.MemSCION(), 1/10000) in s.RawDstAddr, i)
 // }
+
+pure
+requires acc(s.MemSCION(), _)
+func (s *SCION) getDstAddrLen() AddrLen {
+	return unfolding acc(s.MemSCION(), _) in s.DstAddrLen
+}
+
+pure
+requires acc(s.MemSCION(), _)
+func (s *SCION) getSrcAddrLen() AddrLen {
+	return unfolding acc(s.MemSCION(), _) in s.SrcAddrLen
+}
 
 pure
 requires acc(s.MemSCION(), _)
@@ -312,8 +325,13 @@ requires acc(s.MemSCION(), _)
 func (s *SCION) getSrcIA() addr.IA {
 	return unfolding acc(s.MemSCION(), _) in s.SrcIA
 }
+/** End of Getters **/
 
 ensures res == (int(addrLen) + 1) * LineLen
+ensures addrLen == AddrLen4 ==> res == 4
+ensures addrLen == AddrLen8 ==> res == 8
+ensures addrLen == AddrLen12 ==> res == 12
+ensures addrLen == AddrLen16 ==> res == 16
 pure func addrBytes(addrLen AddrLen) (res int) {
 	return (int(addrLen) + 1) * LineLen
 }
@@ -339,7 +357,8 @@ pred (s *SCION) MemSCION() {
 	(s.DstAddrLen == AddrLen16 ==> s.DstAddrType == T16Ip) &&
 	s.Path.Mem()
 	// TODO:
-	// length of raw addresses should be even
+	// - length of raw addresses should be even
+	// - Relation between PathType and Path
 }
 
 ghost
@@ -380,7 +399,6 @@ func (s *SCION) NextLayerType() gopacket.LayerType // {
 //}
 
 //(joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`
-//(joao) `layers.BaseLayer` is implemented in a third party package
 //requires acc(s, _)
 //func (s *SCION) LayerPayload() []byte
 //{
@@ -393,14 +411,13 @@ func (s *SCION) NextLayerType() gopacket.LayerType // {
 //	return gopacket.Flow{}
 //}
 
-// (joao) no support for gopacket
-requires s.MemSCION()
-func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error // {
-//	scnLen := CmnHdrLen + s.AddrHdrLen() + (unfolding acc(s.MemSCION(), 1/100) in s.Path.Len())
-//	buf, err := b.PrependBytes(scnLen)
-//	if err != nil {
-//		return err
-//	}
+preserves s.MemSCION() && b.Mem()
+func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error /* {
+	scnLen := CmnHdrLen + s.AddrHdrLen() + (unfolding acc(s.MemSCION(), 1/100) in s.Path.Len())
+	buf, err := b.PrependBytes(scnLen)
+	if err != nil {
+		return err
+	}
 //	if opts.FixLengths {
 //		s.HdrLen = uint8(scnLen / LineLen)
 //		s.PayloadLen = uint16(len(b.Bytes()) - int(scnLen))
@@ -424,7 +441,8 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 //
 //	// Serialize path header.
 //	return s.Path.SerializeTo(buf[offset:])
-//}
+}
+*/
 
 // THIS(2)
 // DecodeFromBytes decodes the SCION layer. DecodeFromBytes resets the internal state of this layer
@@ -698,46 +716,78 @@ pure func (s *SCION) AddrHdrLen() (res int) // {
 //	return unfolding s.MemSCION() in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 //}
 
+// (joao) Verified
 // SerializeAddrHdr serializes destination and source ISD-AS-Host address triples into the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
-/* TODO: is causing Gobra to take a long time
 preserves acc(s.MemSCION(), 1/100)
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
-func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) (err error) {
+func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(buf))
 	}
-	assert unfolding acc(s.MemSCION(), _) in len(buf) >= 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
-	unfold acc(s.MemSCION(), 1/100)
-	dstAddrBytes := addrBytes(s.DstAddrLen)
-	srcAddrBytes := addrBytes(s.SrcAddrLen)
+	// (joao) rewrote the following
+	// dstAddrBytes := addrBytes(s.DstAddrLen)
+	// srcAddrBytes := addrBytes(s.SrcAddrLen)
+	dstAddrBytes := addrBytes(s.getDstAddrLen())
+	srcAddrBytes := addrBytes(s.getSrcAddrLen())
 	offset := 0
 	assert len(buf) == len(buf[offset:])
 	assert forall i int :: 0 <= i && i < len(buf) ==> &buf[i] == &(buf[offset:][i])
-	s.DstIA.Write(buf[offset:])
+	// (joao) rewrote the following
+	// s.DstIA.Write(buf[offset:])
+	(s.getDstIA()).Write(buf[offset:])
 	offset += addr.IABytes
 	assert len(buf) == len(buf[offset:]) + offset
 	assert forall i int :: 0 <= i && i < len(buf[offset:]) ==> &buf[i + offset] == &(buf[offset:][i])
-	s.SrcIA.Write(buf[offset:])
+	// (joao) rewrote the following
+	// s.SrcIA.Write(buf[offset:])
+	(s.getSrcIA()).Write(buf[offset:])
 	offset += addr.IABytes
-	// (joao) Outlined call to copy
-	// copy(buf[offset:offset+dstAddrBytes], s.RawDstAddr)
 	assert offset <= len(buf)
 	assert offset + dstAddrBytes <= len(buf)
-//	assert forall i int :: 0 <= i && i < len(buf[offset:offset+dstAddrBytes]) ==> &buf[i + offset] == &(buf[offset:offset+dstAddrBytes][i])
-//	verifyutils.OutlineMemorySafeCopy(buf[offset:offset+dstAddrBytes], s.RawDstAddr)
-//	offset += dstAddrBytes
-//	copy(buf[offset:offset+srcAddrBytes], s.RawSrcAddr)
-	assume false
-	fold acc(s.MemSCION(), 1/100)
+	assert forall i int :: 0 <= i && i < len(buf[offset:offset+dstAddrBytes]) ==> &buf[i + offset] == &(buf[offset:offset+dstAddrBytes][i])
+	// (joao) Outlined call to copy
+	// copy(buf[offset:offset+dstAddrBytes], s.RawDstAddr)
+	copyRawDstAddr(s, buf[offset:offset+dstAddrBytes])
+	offset += dstAddrBytes
+	assert offset <= len(buf)
+	assert offset + srcAddrBytes <= len(buf)
+	assert forall i int :: 0 <= i && i < len(buf[offset:offset+srcAddrBytes]) ==> &buf[i + offset] == &(buf[offset:offset+srcAddrBytes][i])
+	// (joao) Outlined call to copy
+	// copy(buf[offset:offset+srcAddrBytes], s.RawSrcAddr)
+	copyRawSrcAddr(s, buf[offset:offset+srcAddrBytes])
 	return nil
 }
-*/
+
+// (joao) function not present in the original code
+// (joao) uncommenting the body causes verification to not terminate
+preserves acc(s.MemSCION(), 1/1000)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func copyRawDstAddr(s *SCION, b []byte) // {
+//	unfold acc(s.MemSCION(), 1/1000)
+//	unfold acc(verifyutils.BytesAcc(s.RawDstAddr), 1/10000)
+//	verifyutils.OutlineMemorySafeCopy(b, s.RawDstAddr)
+//	assume false
+//	fold acc(verifyutils.BytesAcc(s.RawDstAddr), 1/10000)
+//	fold acc(s.MemSCION(), 1/1000)
+//}
+
+// (joao) function not present in the original code
+// (joao) uncommenting the body causes verification to not terminate
+preserves acc(s.MemSCION(), 1/1000)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func copyRawSrcAddr(s *SCION, b []byte) // {
+//	unfold acc(s.MemSCION(), 1/1000)
+//	unfold acc(verifyutils.BytesAcc(s.RawSrcAddr), 1/10000)
+//	verifyutils.OutlineMemorySafeCopy(b, s.RawSrcAddr)
+//	fold acc(verifyutils.BytesAcc(s.RawSrcAddr), 1/10000)
+//	fold acc(s.MemSCION(), 1/1000)
+//}
 
 /*
-// (joao) Unverified -> outline!
+// (joao) TODO: Unverified -> outline!
 // DecodeAddrHdr decodes the destination and source ISD-AS-Host address triples from the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
