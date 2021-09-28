@@ -15,47 +15,50 @@
 package router
 
 import (
-//	"bytes"
-//	"crypto/rand"
-//	"errors"
-//	"fmt"
-//	"hash"
-//	"math/big"
+	// "bytes"
+	// "crypto/rand"
+	// "errors"
+	// "fmt"
+	// "hash"
+	// "math/big"
 	"net"
 	"strconv"
 	"sync"
 	"time"
 
-//	"github.com/google/gopacket"
-//	"github.com/google/gopacket/layers"
-//	"github.com/prometheus/client_golang/prometheus"
-//	"golang.org/x/net/ipv4"
+	// "github.com/google/gopacket"
+	// "github.com/google/gopacket/layers"
+	// "github.com/prometheus/client_golang/prometheus"
+	// "golang.org/x/net/ipv4"
 
-	//	"github.com/scionproto/scion/go/lib/addr"
+	// "github.com/scionproto/scion/go/lib/addr"
 	"gobra/lib/addr"
-	//	"github.com/scionproto/scion/go/lib/common"
+	// "github.com/scionproto/scion/go/lib/common"
 	"gobra/lib/common"
-//	"github.com/scionproto/scion/go/lib/log"
-//	"github.com/scionproto/scion/go/lib/metrics"
-//	"github.com/scionproto/scion/go/lib/scrypto"
-	//	"github.com/scionproto/scion/go/lib/serrors"
+	// "github.com/scionproto/scion/go/lib/log"
+	// "github.com/scionproto/scion/go/lib/metrics"
+	// "github.com/scionproto/scion/go/lib/scrypto"
+	// "github.com/scionproto/scion/go/lib/serrors"
 	"gobra/lib/serrors"
-	//	"github.com/scionproto/scion/go/lib/slayers"
+	// "github.com/scionproto/scion/go/lib/slayers"
 	"gobra/lib/slayers"
-	//	"github.com/scionproto/scion/go/lib/slayers/path"
+	// "github.com/scionproto/scion/go/lib/slayers/path"
 	"gobra/lib/slayers/path"
-//	"github.com/scionproto/scion/go/lib/slayers/path/empty"
-//	"github.com/scionproto/scion/go/lib/slayers/path/onehop"
-//	"github.com/scionproto/scion/go/lib/slayers/path/scion"
-	//	"github.com/scionproto/scion/go/lib/topology"
+	// "github.com/scionproto/scion/go/lib/slayers/path/empty"
+	"gobra/lib/slayers/path/empty"
+	// "github.com/scionproto/scion/go/lib/slayers/path/onehop"
+	"gobra/lib/slayers/path/onehop"
+	// "github.com/scionproto/scion/go/lib/slayers/path/scion"
+	"gobra/lib/slayers/path/scion"
+	// "github.com/scionproto/scion/go/lib/topology"
 	"gobra/lib/topology"
-//	"github.com/scionproto/scion/go/lib/underlay/conn"
+	// "github.com/scionproto/scion/go/lib/underlay/conn"
 	"gobra/lib/underlay/conn"
-//	underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
+	// underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
 	underlayconn "gobra/lib/underlay/conn"
-//	"github.com/scionproto/scion/go/lib/util"
-//	"github.com/scionproto/scion/go/pkg/router/bfd"
-//	"github.com/scionproto/scion/go/pkg/router/control"
+	// "github.com/scionproto/scion/go/lib/util"
+	// "github.com/scionproto/scion/go/pkg/router/bfd"
+	// "github.com/scionproto/scion/go/pkg/router/control"
 	"gobra/pkg/router/control"
 )
 
@@ -260,6 +263,7 @@ func (d *DataPlane) SetKey(key []byte) error {
 //		return emptyValue
 		return emptyValue()
 	}
+// (joao) macFactory still not supported
 //	if d.macFactory != nil {
 //		return alreadySet
 //	}
@@ -884,7 +888,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
-func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
+func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 	unfold DataPlaneMutexInvariant(d)
 	if len(d.bfdSessions) == 0 {
 		fold DataPlaneMutexInvariant(d)
@@ -930,19 +934,20 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 //	return noBFDSessionFound
 	return noBFDSessionFound()
 }
+*/
 
 // (joao) THIS(2)
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
-	origPacket []byte/*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
+	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
 
-// (joao) added `&` before `scionPacketProcessor` to make this type check
+	// (joao) added `&` before `scionPacketProcessor` to make this type check
 	p := &scionPacketProcessor{
 		d:          d,
 		ingressID:  ingressID,
 		rawPkt:     rawPkt,
 		scionLayer: s,
 		origPacket: origPacket,
-//		buffer:     buffer,
+		buffer:     buffer,
 	}
 	return p.process()
 }
@@ -961,10 +966,10 @@ type scionPacketProcessor struct {
 	// origPacket is the raw original packet, must not be modified.
 	origPacket []byte
 	// buffer is the buffer that can be used to serialize gopacket layers.
-//	buffer gopacket.SerializeBuffer
+	buffer gopacket.SerializeBuffer
 
 	// path is the raw SCION path. Will be set during processing.
-//	path *scion.Raw
+	path *scion.Raw
 	// hopField is the current hopField field, is updated during processing.
 	hopField *path.HopField
 	// infoField is the current infoField field, is updated during processing.
@@ -1402,7 +1407,7 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) // {
 //
 
 // THIS(3)
-func (p *scionPacketProcessor) process() (processResult, error) {
+func (p *scionPacketProcessor) process() (processResult, error) /*{
 
 	if r, err := p.parsePath(); err != nil {
 		return r, err
@@ -1474,7 +1479,7 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 //		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
 //		cannotRoute,
 //	)
-}
+}*/
 
 //func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
@@ -1552,13 +1557,15 @@ func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 //	return addEndhostPort(dst), nil
 //}
 
-func addEndhostPort(dst net.Addr) net.Addr {
-//	if ip, ok := dst.(*net.IPAddr); ok {
-// (joao) IP IP field not supported
-//		return &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
-//	}
+requires dst.Mem()
+ensures  ret.Mem()
+func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
+	if ip, ok := dst.(*net.IPAddr); ok {
+		return &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
+	}
 	return dst
 }
+*/
 
 //func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 //	if err := buffer.Clear(); err != nil {
