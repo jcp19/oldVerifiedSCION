@@ -1,11 +1,14 @@
 package gopacket
 
+import "gobra/verifyutils"
+
 type SerializableLayer interface {
 	pred Mem()
 
 	requires Mem() && b.Mem()
-	ensures Mem() && b.Mem()
-	SerializeTo(b SerializeBuffer, opts SerializeOptions) error
+	ensures  Mem()
+	ensures  err == nil ==> b.Mem()
+	SerializeTo(b SerializeBuffer, opts SerializeOptions) (err error)
 
 	pure LayerType() LayerType
 }
@@ -18,20 +21,45 @@ type SerializeOptions struct {
 type SerializeBuffer interface {
 	pred Mem()
 
+	/* Ghost Operations */
+	/* */
+	pred PrependBytesMem(data []byte)
+
+	/* ghost */
+	requires PrependBytesMem(data) && verifyutils.BytesAcc(data)
+	ensures  Mem()
+	CombinePrependBytesMem(data []byte)
+
+	/* */
+	pred AppendBytesMem(data []byte)
+
+	/* ghost */
+	requires AppendBytesMem(data) && verifyutils.BytesAcc(data)
+	ensures  Mem()
+	CombineAppendBytesMem(data []byte)
+
+	/* */
+	pred BytesMem(data []byte)
+
+	/* ghost */
+	requires BytesMem(data) && verifyutils.BytesAcc(data)
+	ensures  Mem()
+	CombineBytesMem(data []byte)
+	/* End of Ghost Operations */
+
 	requires Mem()
-	ensures Mem()
-	ensures bytesAcc(data)
+	ensures BytesMem(data) && verifyutils.BytesAcc(data)
 	Bytes() (data []byte)
 
 	requires Mem()
-	ensures Mem()
-	ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-	PrependBytes(num int) (data []byte, error)
+	ensures err == nil ==> PrependBytesMem(data) && verifyutils.BytesAcc(data)
+	ensures err == nil ==> len(data) == num
+	PrependBytes(num int) (data []byte, err error)
 
 	requires Mem()
-	ensures Mem()
-	ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-	AppendBytes(num int) (data []byte, error)
+	ensures err == nil ==> AppendBytesMem(data) && verifyutils.BytesAcc(data)
+	ensures err == nil ==> len(data) == num
+	AppendBytes(num int) (data []byte, err error)
 
 	requires Mem()
 	ensures Mem()
@@ -47,8 +75,6 @@ type SerializeBuffer interface {
 	PushLayer(LayerType)
 }
 
-requires forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
-requires w.Mem()
-ensures forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
-ensures w.Mem()
+preserves w.Mem()
+preserves forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
 func SerializeLayers(w SerializeBuffer, opts SerializeOptions, layers ...SerializableLayer) error 

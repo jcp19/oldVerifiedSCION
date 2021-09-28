@@ -12,7 +12,7 @@ func OutlineMemorySafeCopy(dst, src []byte) {
 func HavocString() string
 
 pred BytesAcc(b []byte) {
-	forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	forall i int :: { b[i] } 0 <= i && i < len(b) ==> acc(&b[i])
 }
 
 requires acc(BytesAcc(b), _)
