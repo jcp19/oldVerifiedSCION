@@ -27,7 +27,9 @@ import (
 	"time"
 
 	// "github.com/google/gopacket"
+	"gobra/dependencies/gopacket"
 	// "github.com/google/gopacket/layers"
+	"gobra/dependencies/gopacket/layers"
 	// "github.com/prometheus/client_golang/prometheus"
 	// "golang.org/x/net/ipv4"
 
@@ -836,7 +838,7 @@ type processResult struct {
 
 // (joao) THIS(1)
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte /*, buffer gopacket.SerializeBuffer*/) (processResult, error) {
+	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
 
 //	if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
 //		return processResult{}, err
@@ -1659,7 +1661,7 @@ type scmpPacker struct {
 	ingressID  uint16
 
 	scionL *slayers.SCION
-//	buffer gopacket.SerializeBuffer
+	buffer gopacket.SerializeBuffer
 	quote  []byte
 }
 
