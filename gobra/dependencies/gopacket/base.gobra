@@ -1,5 +1,7 @@
 package gopacket
 
+import "gobra/verifyutils"
+
 // (joao) TODO: change bytesAcc to BytesAcc
 type Layer interface {
 	pred ContentsMem()

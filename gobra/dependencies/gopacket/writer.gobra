@@ -2,13 +2,13 @@ package gopacket
 
 import "gobra/verifyutils"
 
-// (joao) TODO
 type SerializableLayer interface {
 	pred Mem()
 
 	requires Mem() && b.Mem()
-	ensures Mem() && b.Mem()
-	SerializeTo(b SerializeBuffer, opts SerializeOptions) error
+	ensures  Mem()
+	ensures  err == nil ==> b.Mem()
+	SerializeTo(b SerializeBuffer, opts SerializeOptions) (err error)
 
 	pure LayerType() LayerType
 }
@@ -18,7 +18,6 @@ type SerializeOptions struct {
 	ComputeChecksums bool
 }
 
-// (joao) Checked
 type SerializeBuffer interface {
 	pred Mem()
 
@@ -76,9 +75,6 @@ type SerializeBuffer interface {
 	PushLayer(LayerType)
 }
 
-// (joao) TODO
-requires forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
-requires w.Mem()
-ensures forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
-ensures w.Mem()
+preserves w.Mem()
+preserves forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
 func SerializeLayers(w SerializeBuffer, opts SerializeOptions, layers ...SerializableLayer) error 
