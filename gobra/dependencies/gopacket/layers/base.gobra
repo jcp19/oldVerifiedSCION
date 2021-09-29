@@ -2,6 +2,8 @@ package layers
 
 import (
 	"gobra/dependencies/gopacket"
+
+	"gobra/verifyutils"
 )
 
 type BaseLayer struct {
@@ -9,18 +11,20 @@ type BaseLayer struct {
 	Payload []byte
 }
 
-requires 0 < p && p <= 1
-requires acc(&b.Contents, p)
-requires acc(gopacket.bytesAcc(b.Contents), p)
-ensures acc(&b.Contents, p)
-ensures acc(gopacket.bytesAcc(b.Contents), p/2)
-ensures acc(gopacket.bytesAcc(data), p/2)
-func (b *BaseLayer) LayerContents(ghost p perm) (data []byte) // { return b.Contents }
+pred (b *BaseLayer) IsLayerContents(data []byte)
 
-requires 0 < p && p <= 1
-requires acc(&b.Payload, p)
-requires acc(gopacket.bytesAcc(b.Payload), p)
-ensures acc(&b.Payload, p)
-ensures acc(gopacket.bytesAcc(b.Payload), p/2)
-ensures acc(gopacket.bytesAcc(data), p/2)
-func (b *BaseLayer) LayerPayload(ghost p perm) (data []byte) // { return b.Payload }
+// Returns a slice for which we have write permissions.
+// Obtaining read permissions to the slice should be accomplished with a new function.
+preserves acc(&b.Contents, 1/1000)
+requires  verifyutils.BytesAcc(b.Contents)
+ensures   verifyutils.BytesAcc(data) && b.IsLayerContents(data)
+func (b *BaseLayer) LayerContents() (data []byte) { return b.Contents }
+
+pred (b *BaseLayer) IsLayerPayload(data []byte)
+
+// Returns a slice for which we have write permissions.
+// Obtaining read permissions to the slice should be accomplished with a new function.
+preserves acc(&b.Payload, 1/1000)
+requires  verifyutils.BytesAcc(b.Payload)
+ensures   verifyutils.BytesAcc(data) && b.IsLayerPayload(data)
+func (b *BaseLayer) LayerPayload(ghost p perm) (data []byte) { return b.Payload }
