@@ -454,12 +454,16 @@ func (s *SCION) NextLayerType() gopacket.LayerType // {
 //	return scionNextLayerType(s.NextHdr)
 //}
 
-//(joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`
-//requires acc(s, _)
-//func (s *SCION) LayerPayload() []byte
-//{
-//	return s.Payload
-//}
+// (joao) This does not grant permissions to the returned slice.
+//        This is useful if one only wants to compute the length of the returned slice.
+pure
+requires acc(s, _)
+func (s *SCION) LayerPayload() []byte {
+	// (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`.
+	// (joao) embedded fields are broken.
+	// return s.Payload
+	return (s.EmbeddedBaseLayer).Payload
+}
 
 // (joao) Flow not implemented
 //func (s *SCION) NetworkFlow() gopacket.Flow {
@@ -511,8 +515,9 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 // data, so care should be taken to copy it first should later modification of data be required
 // before the SCION layer is discarded.
 requires acc(s) && df.Mem()
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures  df.Mem()
-ensures  errRes == nil ==> s.MemSCION() 
+ensures  errRes == nil ==> s.MemSCION() // (joao) this assumption may be optimistic
 func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes error) /* {
 	// Decode common header.
 	if len(data) < CmnHdrLen {
