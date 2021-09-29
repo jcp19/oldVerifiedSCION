@@ -260,10 +260,11 @@ pred (s *SCION) MemSCION() {
 	verifyutils.BytesAcc(s.RawDstAddr) &&
 	validSrcAddr(s) &&
 	validDstAddr(s) &&
-	(s.SrcAddrLen == AddrLen4  ==> (s.SrcAddrType == T4Ip || s.SrcAddrType == T4Svc)) &&
-	(s.SrcAddrLen == AddrLen16 ==> s.SrcAddrType == T16Ip) &&
-	(s.DstAddrLen == AddrLen4  ==> (s.DstAddrType == T4Ip || s.DstAddrType == T4Svc)) &&
-	(s.DstAddrLen == AddrLen16 ==> s.DstAddrType == T16Ip) &&
+	// The commented properties here are not enforced by the DecodeFromBytes function
+	// (s.SrcAddrLen == AddrLen4  ==> (s.SrcAddrType == T4Ip || s.SrcAddrType == T4Svc)) &&
+	// (s.SrcAddrLen == AddrLen16 ==> s.SrcAddrType == T16Ip) &&
+	// (s.DstAddrLen == AddrLen4  ==> (s.DstAddrType == T4Ip || s.DstAddrType == T4Svc)) &&
+	// (s.DstAddrLen == AddrLen16 ==> s.DstAddrType == T16Ip) &&
 	s.Path.Mem()
 	// TODO:
 	// - length of raw addresses should be even
@@ -517,7 +518,7 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 requires acc(s) && df.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures  df.Mem()
-ensures  errRes == nil ==> s.MemSCION() // (joao) this assumption may be optimistic
+ensures  errRes == nil ==> s.MemSCION()
 func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes error) /* {
 	// Decode common header.
 	if len(data) < CmnHdrLen {
@@ -652,8 +653,7 @@ func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.MemSCION(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
-	assert acc(res.mem(), 1/200)
-	assume s.ReadSrcAddr(res)
+	assume err == nil ==> s.ReadDstAddr(res)
 	return res, err
 }
 
@@ -678,8 +678,7 @@ func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.MemSCION(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr)
-	assert acc(res.mem(), 1/200)
-	assume s.ReadSrcAddr(res)
+	assume err == nil ==> s.ReadSrcAddr(res)
 	return res, err
 }
 
@@ -725,14 +724,17 @@ func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 
 // (joao) Assumed
 // (joao) requires implementation proof that IPAddr implements Addr to verify the body
+/*
 requires addrLen == AddrLen4  ==> (addrType == T4Ip || addrType == T4Svc)
 requires addrLen == AddrLen16 ==> addrType == T16Ip
+*/
 requires addrLen == AddrLen4 ==> len(raw) >= 4
 requires addrLen == AddrLen16 ==> len(raw) >= 16
 requires acc(verifyutils.BytesAcc(raw), 1/200)
 ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
-ensures (addrLen == AddrLen4 || addrLen == AddrLen16) ==> resErr == nil
-ensures acc(resAddr.mem(), 1/200)
+ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
+ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
+ensures resErr == nil ==> acc(resAddr.mem(), 1/200)
 func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) /* {
 	switch addrLen {
 	case AddrLen4:
@@ -761,6 +763,7 @@ ensures verifyutils.BytesAcc(s)
 //        in case of error
 ensures (err == nil && addrLen == AddrLen4)  ==> (addrType == T4Svc || addrType == T4Ip)
 ensures (err == nil && addrLen == AddrLen16) ==> addrType == T16Ip
+// (joao) This post-condition may require additional-checks to hold 
 ensures err == nil ==> validAddrLen(addrLen) && len(s) >= minAddrLen(addrLen)
 ensures err != nil ==> addrLen == 0 && addrType == 0 && s == nil
 func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) /* {
