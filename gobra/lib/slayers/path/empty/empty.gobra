@@ -50,7 +50,7 @@ func (o Path) Reverse() error {
 	return nil
 }
 
-pure
-func (o Path) Len() int {
+ensures ret >= 0
+pure func (o Path) Len() (ret int) {
 	return PathLen
 }
