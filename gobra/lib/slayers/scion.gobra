@@ -497,10 +497,12 @@ pure func validDstAddr(s *SCION) bool {
 }
 
 /* pure */
-func (s *SCION) LayerType() gopacket.LayerType // {
-// (joao) slayers.LayerTypeSCION not defined yet
-//	return LayerTypeSCION
-// }
+pure
+func (s *SCION) LayerType() gopacket.LayerType {
+	// (joao) slayers.LayerTypeSCION is currently implemented as a pure function due to the lack of support for global variables
+	// return LayerTypeSCION
+	return LayerTypeSCION()
+}
 
 /* pure */
 // (joao) LayerClass not implemented
@@ -509,9 +511,10 @@ func (s *SCION) LayerType() gopacket.LayerType // {
 //}
 
 requires acc(s.MemSCION(), 1/100)
-func (s *SCION) NextLayerType() gopacket.LayerType // {
-//	return scionNextLayerType(s.NextHdr)
-//}
+func (s *SCION) NextLayerType() gopacket.LayerType {
+	// return scionNextLayerType(s.NextHdr)
+	return scionNextLayerType(s.getNextHdr())
+}
 
 // (joao) This does not grant permissions to the returned slice.
 //        This is useful if one only wants to compute the length of the returned slice.
@@ -714,23 +717,28 @@ func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes
 */
 
 // (joao) global variables still not supported
-func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType /* {
+func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
 	switch t {
 	case common.L4UDP:
-		return LayerTypeSCIONUDP
+		// return LayerTypeSCIONUDP
+		return LayerTypeSCIONUDP()
 	case common.L4SCMP:
-		return LayerTypeSCMP
+		// return LayerTypeSCMP
+		return LayerTypeSCMP()
 	case common.L4BFD:
-		return layers.LayerTypeBFD
+		// return layers.LayerTypeBFD
+		return layers.LayerTypeBFD()
 	case common.HopByHopClass:
-		return LayerTypeHopByHopExtn
+		// return LayerTypeHopByHopExtn
+		return LayerTypeHopByHopExtn()
 	case common.End2EndClass:
-		return LayerTypeEndToEndExtn
+		// return LayerTypeEndToEndExtn
+		return LayerTypeEndToEndExtn()
 	default:
-		return gopacket.LayerTypePayload
+		// return gopacket.LayerTypePayload
+		return gopacket.LayerTypePayload()
 	}
 }
-*/
 
 // (joao) The following predicate and ghost function would not be necessary
 //        if Gobra had support for magic wands 

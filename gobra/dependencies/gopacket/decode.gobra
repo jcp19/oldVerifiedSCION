@@ -102,3 +102,9 @@ func (n NilDecodeFeedback) SetTruncated() {}
 
 // (lhalm) doesn't work
 // var NilDecodeFeedback DecodeFeedback = nilDecodeFeedback{}
+
+// (joao) global variables not supported, use a pure function instead
+// LayerTypePayload is the layer type for a payload that we don't try to decode
+// but treat as a success, IE: an application-level payload.
+// var LayerTypePayload = RegisterLayerType(2, LayerTypeMetadata{Name: "Payload", Decoder: DecodePayload})
+pure func LayerTypePayload() LayerType
