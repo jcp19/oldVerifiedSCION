@@ -19,7 +19,7 @@ requires acc(&b.Contents, 1/1000)
 requires verifyutils.BytesAcc(b.Contents)
 ensures  acc(&b.Contents, 1/1000)
 ensures  verifyutils.BytesAcc(data) && b.IsLayerContents(data)
-func (b *BaseLayer) LayerContents() (data []byte) { return b.Contents }
+func (b *BaseLayer) LayerContents() (data []byte) // { return b.Contents }
 
 pred (b *BaseLayer) IsLayerPayload(data []byte)
 
@@ -29,4 +29,4 @@ requires acc(&b.Payload, 1/1000)
 requires verifyutils.BytesAcc(b.Payload)
 ensures  acc(&b.Payload, 1/1000)
 ensures  verifyutils.BytesAcc(data) && b.IsLayerPayload(data)
-func (b *BaseLayer) LayerPayload() (data []byte) { return b.Payload }
+func (b *BaseLayer) LayerPayload() (data []byte) // { return b.Payload }

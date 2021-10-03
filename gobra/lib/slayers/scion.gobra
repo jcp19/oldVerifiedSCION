@@ -199,12 +199,12 @@ type Path interface {
 	}
 }
 
-/*
-// Causes exception: "node not in tree: Base"
 pred UninitializedRaw(x *scion.Raw) {
 	acc(&x.Base) && acc(&x.Raw)
 }
 
+// Causes exception: "None.get"
+/*
 (*scion.Raw) implements Path {
 
 	pred UninitializedMem := UninitializedRaw
