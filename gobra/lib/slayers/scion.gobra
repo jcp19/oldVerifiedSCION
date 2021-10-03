@@ -117,7 +117,6 @@ const (
 )
 
 // Path is the path contained in the SCION header.
-// TODO: (joao) implement all paths as subtypes of Path; must reflect all perms required in their specs
 type Path interface {
 	// (joao) must hold for every receiver in the call of DecodeFromBytes. Represents
 	//        permission to (possibly non initialized) memory that stores a Path
@@ -203,8 +202,6 @@ pred UninitializedRaw(x *scion.Raw) {
 	acc(&x.Base) && acc(&x.Raw)
 }
 
-// Causes exception: "None.get"
-/*
 (*scion.Raw) implements Path {
 
 	pred UninitializedMem := UninitializedRaw
@@ -218,12 +215,12 @@ pred UninitializedRaw(x *scion.Raw) {
 		err = x.DecodeFromBytes(b)
 	}
 
-	(x *scion.Raw) Reverse() error {
-		return x.Reverse()
+	(x *scion.Raw) Reverse() (err error) {
+		err = x.Reverse()
 	}
 
 	pure (x *scion.Raw) Len() int {
-		return x.Len()
+		return unfolding acc(x.Mem(), _) in x.Len()
 	}
 
 	(x *scion.Raw) ExchangePerms() {
@@ -231,7 +228,6 @@ pred UninitializedRaw(x *scion.Raw) {
 		fold UninitializedRaw(x)
 	}
 }
-*/
 
 // SCION is the header of a SCION packet.
 type SCION struct {

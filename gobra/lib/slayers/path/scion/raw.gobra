@@ -306,3 +306,10 @@ func (r *Raw) ExchangePerms() {
 	unfold r.Mem()
 	unfold BaseInvariant(&r.Base)
 }
+
+// (joao) this method did not exist before but it is required to handle
+// with Gobra's bugs with embedded fields + interfaces 
+requires acc(BaseInvariant(&r.Base), _)
+pure func (r*Raw) Len() int {
+	return (&r.Base).Len()
+}
