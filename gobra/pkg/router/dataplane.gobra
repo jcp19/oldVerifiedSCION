@@ -965,6 +965,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 //	return noBFDSessionFound
 //}
 
+// (joao) THIS(2)
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
@@ -1072,7 +1073,7 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
 }
 
-// TODO: next
+// TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, slayers.SCMP
 //THIS(4)
 //func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 //	cause error) (processResult, error) {
@@ -1141,15 +1142,20 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 //	return processResult{OutPkt: rawSCMP}, err
 //}
 
-// THIS(4)
-requires acc(&p.scionLayer, 1/1000) && acc(&p.path) && acc(&p.infoField) && acc(&p.hopField)
+ensures ok ==> s.Mem()
+func havocRaw() (s *scion.Raw, ok bool)
+
+requires acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
 requires (p.scionLayer).MemSCION()
+ensures  (p.scionLayer).MemSCION()
 ensures  acc(&p.scionLayer, 1/1000) && acc(&p.path) && acc(&p.infoField) && acc(&p.hopField)
 ensures  errRet == nil ==> (acc(p.infoField) && path.HopFieldInv(p.hopField))
 func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) {
 	var ok bool
+	// (joao) this line depends on the proof that *scion.Raw implements Path. However, adding that to the code
+	//        causes verification to take a very long time. Nonetheless, should be uncommented on the final version of this
 	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
-	p.path, ok = (p.scionLayer.Path).(*scion.Raw)
+	p.path, ok = havocRaw()
 	if !ok {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		// return processResult{}, malformedPath
@@ -1175,8 +1181,12 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 	return processResult{}, nil
 }
 
-// TODO: next
+// TODO: next. add "util" and "slayers.scmp" and "packSCMP"
 // THIS(5)
+requires acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
+requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
+ensures  acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
+ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
 func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) // {
 //	expiration := util.SecsToTime(p.infoField.Timestamp).
 //		Add(path.ExpTimeToDuration(p.hopField.ExpTime))
@@ -1194,8 +1204,12 @@ func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) // {
 //	)
 //}
 
-// TODO: next
+// TODO: next. "slayers.SCMP", packSCMP
 // THIS(5)
+requires acc(p, 1/1000)
+requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
+ensures  acc(p, 1/1000)
+ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
 func (p *scionPacketProcessor) validateIngressID() (processResult, error) /*{
 //	pktIngressID := p.hopField.ConsIngress
 //	errCode := slayers.SCMPCodeUnknownHopFieldIngress
@@ -1487,7 +1501,10 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 //	return p.packSCMP(&scmpH, &scmpP, nil)
 //}
 
+// next: packSCMP, SCMP, getPayload
 // THIS(4)
+requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
+ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
 func (p *scionPacketProcessor) validatePktLen() (processResult, error) // {
 //	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
 //		return processResult{}, nil
@@ -1510,10 +1527,12 @@ requires acc(DataPlaneMutexInvariant(p.d), _)
 requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
 requires (p.buffer).Mem()
 requires (p.scionLayer).MemSCION()
-func (p *scionPacketProcessor) process() (processResult, error) /*{
+func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
 	}
+	assert false
+	/*
 	if r, err := p.validatePktLen(); err != nil {
 		return r, err
 	}
@@ -1581,8 +1600,10 @@ func (p *scionPacketProcessor) process() (processResult, error) /*{
 		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
 		cannotRoute,
 	)
-}*/
+	*/
+}
 
+// (joao) THIS(2)
 //func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
 //
