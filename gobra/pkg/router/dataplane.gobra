@@ -1147,8 +1147,8 @@ func havocRaw() (s *scion.Raw, ok bool)
 
 requires acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
 requires (p.scionLayer).MemSCION()
+ensures  acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
 ensures  (p.scionLayer).MemSCION()
-ensures  acc(&p.scionLayer, 1/1000) && acc(&p.path) && acc(&p.infoField) && acc(&p.hopField)
 ensures  errRet == nil ==> (acc(p.infoField) && path.HopFieldInv(p.hopField))
 func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) {
 	var ok bool
@@ -1278,6 +1278,7 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 }
 */
 
+// (joao) next: updateSCIONLayer
 // THIS(4)
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error // {
 //	// against construction dir the ingress router updates the SegID, ifID == 0
@@ -1505,21 +1506,21 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 // THIS(4)
 requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
 ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
-func (p *scionPacketProcessor) validatePktLen() (processResult, error) // {
-//	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
-//		return processResult{}, nil
-//	}
-//	return p.packSCMP(
-//		&slayers.SCMP{
-//			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
-//				slayers.SCMPCodeInvalidPacketSize),
-//		},
-//		&slayers.SCMPParameterProblem{Pointer: 0},
-//		serrors.New("bad packet size",
-//			"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
-//	)
-//}
-//
+func (p *scionPacketProcessor) validatePktLen() (processResult, error) /* {
+	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
+		return processResult{}, nil
+	}
+	return p.packSCMP(
+		&slayers.SCMP{
+			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+				slayers.SCMPCodeInvalidPacketSize),
+		},
+		&slayers.SCMPParameterProblem{Pointer: 0},
+		serrors.New("bad packet size",
+			"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
+	)
+}
+*/
 
 // THIS(3)
 requires acc(p)
@@ -1531,11 +1532,10 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
 	}
-	assert false
-	/*
 	if r, err := p.validatePktLen(); err != nil {
 		return r, err
 	}
+	/*
 	if err := p.updateNonConsDirIngressSegID(); err != nil {
 		return processResult{}, err
 	}
@@ -1690,6 +1690,7 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 }
 */
 
+// (joao) THIS(5)
 //func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 //	if err := buffer.Clear(); err != nil {
 //		return err
