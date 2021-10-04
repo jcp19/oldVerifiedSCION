@@ -1161,6 +1161,8 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 		// return processResult{}, malformedPath
 		return processResult{}, malformedPath()
 	}
+	// (joao) here, p.path.Mem() holds without unfolding (p.scionLayer).MemSCION() because we use havocRaw. We would need to convert (p.scionLayer).MemSCION() into
+	// (p.scionLayer).MemSCIONWithoutPath() && p.path.Len() or else, remove path.Len() from MemSCION
 	var err error
 	p.hopField, err = p.path.GetCurrentHopField()
 	if err != nil {
@@ -1280,22 +1282,24 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 
 // (joao) next: updateSCIONLayer
 // THIS(4)
-func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error // {
-//	// against construction dir the ingress router updates the SegID, ifID == 0
-//	// means this comes from this AS itself, so nothing has to be done.
-//	// TODO(lukedirtwalker): For packets destined to peer links this shouldn't
-//	// be updated.
-//	if !p.infoField.ConsDir && p.ingressID != 0 {
-//		p.infoField.UpdateSegID(p.hopField.Mac)
-//		if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
-//			return serrors.WrapStr("update info field", err)
-//		}
-//		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
-//			return err
-//		}
-//	}
-//	return nil
-//}
+preserves acc(p, 1/100) && p.path.Mem() && acc(p.infoField, 1/100)
+func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error /* {
+	// against construction dir the ingress router updates the SegID, ifID == 0
+	// means this comes from this AS itself, so nothing has to be done.
+	// TODO(lukedirtwalker): For packets destined to peer links this shouldn't
+	// be updated.
+	if !p.infoField.ConsDir && p.ingressID != 0 {
+		p.infoField.UpdateSegID(p.hopField.Mac)
+		if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+			return serrors.WrapStr("update info field", err)
+		}
+		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+*/
 
 func (p *scionPacketProcessor) currentInfoPointer() uint16 // {
 //	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
@@ -1307,21 +1311,22 @@ func (p *scionPacketProcessor) currentHopPointer() uint16 // {
 //		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
 //}
 
-// THIS(4)
-func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) // {
-//	if err := path.VerifyMAC(p.d.macFactory(), p.infoField, p.hopField); err != nil {
-//		return p.packSCMP(
-//			&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
-//				slayers.SCMPCodeInvalidHopFieldMAC),
-//			},
-//			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-//			serrors.WithCtx(err, "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
-//				"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF,
-//				"seg_id", p.infoField.SegID),
-//		)
-//	}
-//	return processResult{}, nil
-//}
+/* (joao) currently not supported
+func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) {
+	if err := path.VerifyMAC(p.d.macFactory(), p.infoField, p.hopField); err != nil {
+		return p.packSCMP(
+			&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+				slayers.SCMPCodeInvalidHopFieldMAC),
+			},
+			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+			serrors.WithCtx(err, "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
+				"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF,
+				"seg_id", p.infoField.SegID),
+		)
+	}
+	return processResult{}, nil
+}
+*/
 
 // THIS(4)
 func (p *scionPacketProcessor) resolveInbound() (net.Addr, processResult, error) // {
@@ -1465,7 +1470,6 @@ func (p *scionPacketProcessor) handleEgressRouterAlert() (processResult, error) 
 	}
 	egressID := p.egressInterface(1/2)
 	// (joao) put parentheses surrounding p.d.external to make it parse
-	// (joao) Gobra requires maps to be non-null to check if they contain some value (bug)
 	if _, ok := (p.d.external)[egressID]; !ok {
 		return processResult{}, nil
 	}
@@ -1535,10 +1539,10 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.validatePktLen(); err != nil {
 		return r, err
 	}
-	/*
 	if err := p.updateNonConsDirIngressSegID(); err != nil {
 		return processResult{}, err
 	}
+	/*
 	if r, err := p.verifyCurrentMAC(); err != nil {
 		return r, err
 	}
@@ -1690,8 +1694,9 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 }
 */
 
+// (joao) next: check how to avoid needing permission to rawPkt and s.MemSCION by stating that rawPkt is the packet in s.path
 // (joao) THIS(5)
-//func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
+//func updateSCIONLayeupdateSCIONLayerr(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 //	if err := buffer.Clear(); err != nil {
 //		return err
 //	}
