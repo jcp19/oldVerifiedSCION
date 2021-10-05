@@ -61,6 +61,7 @@ import (
 	// "github.com/scionproto/scion/go/lib/util"
 	"gobra/lib/util"
 	// "github.com/scionproto/scion/go/pkg/router/bfd"
+	"gobra/pkg/router/bfd"
 	// "github.com/scionproto/scion/go/pkg/router/control"
 	"gobra/pkg/router/control"
 )
@@ -948,6 +949,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 }
 
 // (joao) THIS(2)
+// next: layers.BFD, v.Messages()
 //func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
 //	if len(d.bfdSessions) == 0 {
 //		return noBFDSessionConfigured
@@ -967,8 +969,8 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 //}
 
 // (joao) THIS(2)
-requires DataPlaneMutexInvariant(d)
-ensures DataPlaneMutexInvariant(d)
+// depends on issue #341 and on layers.BFD
+requires acc(DataPlaneMutexInvariant(d), _)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 	unfold DataPlaneMutexInvariant(d)
 	if len(d.bfdSessions) == 0 {
@@ -1049,7 +1051,7 @@ type scionPacketProcessor struct {
 	// message to send out.
 	rawPkt []byte
 	// scionLayer is the SCION gopacket layer.
-	// (joao) addapted to make this type check in Gobra
+	// (joao) adapted to make this type check in Gobra
 	// scionLayer slayers.SCION
 	scionLayer *slayers.SCION
 	// origPacket is the raw original packet, must not be modified.
@@ -1074,7 +1076,7 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
 }
 
-// TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, slayers.SCMPMsg
+// TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn,
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 	cause error) (processResult, error) /* {
 
@@ -1154,7 +1156,7 @@ ensures  errRet == nil ==> (acc(p.infoField) && path.HopFieldInv(p.hopField))
 func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) {
 	var ok bool
 	// (joao) this line depends on the proof that *scion.Raw implements Path. However, adding that to the code
-	//        causes verification to take a very long time. Nonetheless, should be uncommented on the final version of this
+	//        causes verification to take a very long time. Nonetheless, should be uncommented on the final version of this. Also, we should use a smart way to avoid unfolding MemSCION
 	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
 	p.path, ok = havocRaw()
 	if !ok {
@@ -1184,7 +1186,7 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 	return processResult{}, nil
 }
 
-// TODO: next. add "util" and "slayers.scmp" and "packSCMP"
+// TODO: next. add "slayers.scmp" and "packSCMP"
 // THIS(5)
 requires acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
 requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
@@ -1211,32 +1213,34 @@ func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) {
 //	)
 }
 
-// TODO: next. "slayers.SCMP", packSCMP
+// TODO: next. packSCMP
 // THIS(5)
 requires acc(p, 1/1000)
 requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
 ensures  acc(p, 1/1000)
 ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
-func (p *scionPacketProcessor) validateIngressID() (processResult, error) /*{
-//	pktIngressID := p.hopField.ConsIngress
-//	errCode := slayers.SCMPCodeUnknownHopFieldIngress
-//	if !p.infoField.ConsDir {
-//		pktIngressID = p.hopField.ConsEgress
-//		errCode = slayers.SCMPCodeUnknownHopFieldEgress
-//	}
-//	if p.ingressID != 0 && p.ingressID != pktIngressID {
-//		return p.packSCMP(
-//			&slayers.SCMP{
-//				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
-//			},
-//			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-//			serrors.New("ingress interface invalid",
-//				"pkt_ingress", pktIngressID, "router_ingress", p.ingressID),
-//		)
-//	}
+func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
+	pktIngressID := unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ConsIngress
+	errCode := slayers.SCMPCodeUnknownHopFieldIngress
+	if !p.infoField.ConsDir {
+		pktIngressID = unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ConsEgress
+		errCode = slayers.SCMPCodeUnknownHopFieldEgress
+	}
+	if p.ingressID != 0 && p.ingressID != pktIngressID {
+		assume false
+		/*
+		return p.packSCMP(
+			&slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+			},
+			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+			serrors.New("ingress interface invalid",
+				"pkt_ingress", pktIngressID, "router_ingress", p.ingressID),
+		)
+		*/
+	}
 	return processResult{}, nil
 }
-*/
 
 // THIS(4)
 func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
@@ -1306,12 +1310,14 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error /* {
 }
 */
 
-func (p *scionPacketProcessor) currentInfoPointer() uint16 // {
-//	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
-//		scion.MetaLen + path.InfoLen*int(p.path.PathMeta.CurrINF))
-//}
+requires acc(&p.scionLayer, 1/1000) && acc(p.scionLayer.MemSCION(), 1/1000)
+pure func (p *scionPacketProcessor) currentInfoPointer() uint16 /* {
+	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
+		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.MemSCION(), 1/1000) in p.path.PathMeta.CurrINF))
+}
+*/
 
-func (p *scionPacketProcessor) currentHopPointer() uint16 // {
+pure func (p *scionPacketProcessor) currentHopPointer() uint16 // {
 //	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
 //		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
 //}
@@ -1511,14 +1517,18 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 //	return p.packSCMP(&scmpH, &scmpP, nil)
 //}
 
-// next: packSCMP, SCMP, getPayload
+// next: packSCMP, 
 // THIS(4)
 requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
 ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
-func (p *scionPacketProcessor) validatePktLen() (processResult, error) /* {
-	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
+func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
+	// (joao) adapted to avoid unfolding predicates
+	// if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
+	if int(p.scionLayer.getPayloadLen()) == len(p.scionLayer.LayerPayload()) {
 		return processResult{}, nil
 	}
+	assume false
+	/*
 	return p.packSCMP(
 		&slayers.SCMP{
 			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
@@ -1528,8 +1538,8 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) /* {
 		serrors.New("bad packet size",
 			"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
 	)
+	*/
 }
-*/
 
 // THIS(3)
 requires acc(p)
@@ -1690,6 +1700,7 @@ func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 //	return addEndhostPort(dst), nil
 //}
 
+// (joao) depends on issue #341
 requires dst.mem()
 ensures  ret.mem()
 func addEndhostPort(dst net.Addr) (ret net.Addr) /* {

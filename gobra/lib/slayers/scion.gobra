@@ -532,12 +532,12 @@ func (s *SCION) NextLayerType() gopacket.LayerType {
 // (joao) This does not grant permissions to the returned slice.
 //        This is useful if one only wants to compute the length of the returned slice.
 pure
-requires acc(s, _)
+requires acc(s.MemSCION(), 1/10000)
 func (s *SCION) LayerPayload() []byte {
 	// (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`.
 	// (joao) embedded fields are broken.
 	// return s.Payload
-	return (s.EmbeddedBaseLayer).Payload
+	return unfolding acc(s.MemSCION(), 1/10000) in (s.EmbeddedBaseLayer).Payload
 }
 
 // (joao) Flow not implemented
