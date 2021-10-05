@@ -319,6 +319,20 @@ func soundInvariantSCION1(s *SCION) {
 }
 */
 
+/*
+(*SCION) implements gopacket.SerializableLayer {
+	pred Mem := MemSCION
+
+	pure (s *SCION) LayerType() gopacket.LayerType {
+		return s.LayerType()
+	} 
+
+	(s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = s.SerializeTo(b, opts)
+	}
+}
+*/
+
 /** Getters **/
 // (joao) As suggested in Sascha's thesis, we extracted getters that require unfoldings to
 //        occur in their own pure functions.
@@ -549,10 +563,15 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 	if err != nil {
 		return err
 	}
-//	if opts.FixLengths {
-//		s.HdrLen = uint8(scnLen / LineLen)
-//		s.PayloadLen = uint16(len(b.Bytes()) - int(scnLen))
-//	}
+	// (joao) this is safe but not proved atm. Verifying this requires introducing
+	//        a new pure function that returns the value of Bytes() and then proving that
+	//        Bytes() returns that value and permissions to the elements, and introduce a new variant
+	//        that does not give access to the elements of the slice and can be called when there is permission to b.PrependBytesMem()
+	// if opts.FixLengths {
+	// 	s.HdrLen = uint8(scnLen / LineLen)
+	// 	s.PayloadLen = uint16(len(b.Bytes()) - int(scnLen))
+	// }
+
 	// Serialize common header.
 	// (joao) rewrote the following
 	// firstLine := uint32(s.Version&0xF)<<28 | uint32(s.TrafficClass)<<20 | s.FlowID&0xFFFFF

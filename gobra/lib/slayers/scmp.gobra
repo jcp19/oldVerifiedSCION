@@ -1,0 +1,231 @@
+// Copyright 2020 Anapaya Systems
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package slayers
+
+import (
+	"encoding/binary"
+	// "fmt"
+
+	// "github.com/google/gopacket"
+	"gobra/dependencies/gopacket"
+	// "github.com/google/gopacket/layers"
+	"gobra/dependencies/gopacket/layers"
+
+	// "github.com/scionproto/scion/go/lib/common"
+	"gobra/lib/common"
+	// "github.com/scionproto/scion/go/lib/serrors"
+	"gobra/lib/serrors"
+
+	"gobra/verifyutils"
+)
+
+// MaxSCMPPacketLen the maximum length a SCION packet including SCMP quote can
+// have. This length includes the SCION, and SCMP header of the packet.
+//
+//  +-------------------------+
+//  |        Underlay         |
+//  +-------------------------+
+//  |          SCION          |  \
+//  |          SCMP           |   \
+//  +-------------------------+    \_ MaxSCMPPacketLen
+//  |          Quote:         |    /
+//  |        SCION Orig       |   /
+//  |         L4 Orig         |  /
+//  +-------------------------+
+const MaxSCMPPacketLen = 1232
+
+// SCMP is the SCMP header on top of SCION header.
+//
+//   0                   1                   2                   3
+//   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+//  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//  |     Type      |     Code      |           Checksum            |
+//  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//  |                            InfoBlock                          |
+//  +                                                               +
+//  |                         (variable length)                     |
+//  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//  |                            DataBlock                          |
+//  +                                                               +
+//  |                         (variable length)                     |
+//  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//
+type SCMP struct {
+	// (joao) used to be an embedded field
+	// layers.BaseLayer
+	BaseLayerEmbedded layers.BaseLayer
+	TypeCode SCMPTypeCode
+	Checksum uint16
+
+	scn *SCION
+}
+
+pred (s *SCMP) Mem() {
+	acc(s) &&
+	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Contents) ==> acc(&(s.BaseLayerEmbedded.Contents)[i])) &&
+	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i])) &&
+	(s.scn != nil ==> scn.MemSCION())
+}
+
+// LayerType returns LayerTypeSCMP.
+func (s *SCMP) LayerType() gopacket.LayerType {
+	// return LayerTypeSCMP
+	return LayerTypeSCMP()
+}
+
+// CanDecode returns the set of layer types that this DecodingLayer can decode.
+/*
+func (s *SCMP) CanDecode() gopacket.LayerClass {
+	// return LayerTypeSCMP
+	return LayerTypeSCMP()
+}
+*/
+
+// NextLayerType use the typecode to select the right next decoder.
+// If the SCMP type is unknown, the next layer is gopacket.LayerTypePayload.
+preserves acc(s)
+func (s *SCMP) NextLayerType() gopacket.LayerType {
+	switch s.TypeCode.Type() {
+	case SCMPTypeDestinationUnreachable:
+		// return LayerTypeSCMPDestinationUnreachable
+		return LayerTypeSCMPDestinationUnreachable()
+	case SCMPTypeParameterProblem:
+		// return LayerTypeSCMPParameterProblem
+		return LayerTypeSCMPParameterProblem()
+	case SCMPTypeExternalInterfaceDown:
+		// return LayerTypeSCMPExternalInterfaceDown
+		return LayerTypeSCMPExternalInterfaceDown()
+	case SCMPTypeInternalConnectivityDown:
+		// return LayerTypeSCMPInternalConnectivityDown
+		return LayerTypeSCMPInternalConnectivityDown()
+	case SCMPTypeEchoRequest, SCMPTypeEchoReply:
+		// return LayerTypeSCMPEcho
+		return LayerTypeSCMPEcho()
+	case SCMPTypeTracerouteRequest, SCMPTypeTracerouteReply:
+		// return LayerTypeSCMPTraceroute
+		return LayerTypeSCMPTraceroute()
+	}
+	// (joao)
+	// return gopacket.LayerTypePayload
+	return gopacket.LayerTypePayload()
+}
+
+// SerializeTo writes the serialized form of this layer into the
+// SerializationBuffer, implementing gopacket.SerializableLayer.
+requires acc(s) && (s.scn != nil ==> (s.scn).MemSCION())
+requires b.Mem()
+ensures  acc(s) && (s.scn != nil ==> (s.scn).MemSCION())
+ensures  ret == nil ==> b.Mem()
+func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (ret error) {
+	bytes, err := b.PrependBytes(4)
+	if err != nil {
+		return err
+	}
+	unfold verifyutils.BytesAcc(bytes)
+	s.TypeCode.SerializeTo(bytes)
+
+	if opts.ComputeChecksums {
+		if s.scn == nil {
+			return serrors.New("can not calculate checksum without SCION header")
+		}
+		// zero out checksum bytes
+		bytes[2] = 0
+		bytes[3] = 0
+		fold verifyutils.BytesAcc(bytes)
+		/*ghost*/ b.CombinePrependBytesMem(bytes)
+		// (joao) separated call to Bytes and computeChecksum
+		// s.Checksum, err = s.scn.computeChecksum(b.Bytes(), uint8(common.L4SCMP))
+		bBytes := b.Bytes()
+		unfold verifyutils.BytesAcc(bBytes)
+		s.Checksum, err = s.scn.computeChecksum(bBytes, uint8(common.L4SCMP))
+		if err != nil {
+			return err
+		}
+		// (joao) (1) the following code, until the end of the if-true block did not exist
+		assume len(bBytes) >= 4 // we know that Bytes() must have length at least 4 due to the call to PrependBytes
+		assert &(bBytes[2:])[0] == &bBytes[2]
+		assert &(bBytes[2:])[1] == &bBytes[3]
+		binary.BigEndian.PutUint16(bBytes[2:], s.Checksum)
+		fold verifyutils.BytesAcc(bBytes)
+		/*ghost*/ b.CombineBytesMem(bBytes)
+		return nil
+	} else {
+		// (joao) (2) else branch did not exist before
+		assert forall i int :: 0 <= i && i < len(bytes) ==> &(bytes[2:])[i] == &bytes[2 + i] 
+		binary.BigEndian.PutUint16(bytes[2:], s.Checksum)
+		fold verifyutils.BytesAcc(bytes)
+		/*ghost*/ b.CombinePrependBytesMem(bytes)
+		return nil
+	}
+	// (joao) moved the following code to the two branches (1) and (2)
+	// binary.BigEndian.PutUint16(bytes[2:], s.Checksum)
+	// return nil
+}
+
+// DecodeFromBytes decodes the given bytes into this layer.
+requires acc(s) && df.Mem() && (forall i int :: 0 <= i && i < len(data) ==> acc(&data[i]))
+ensures  acc(s) && df.Mem()
+ensures  ret == nil ==> forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Contents) ==> acc(&(s.BaseLayerEmbedded.Contents)[i])
+ensures  ret == nil ==> forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i])
+func (s *SCMP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (ret error) {
+	if size := len(data); size < 4 {
+		df.SetTruncated()
+		return serrors.New("SCMP layer length is less then 4 bytes", "minimum", 4, "actual", size)
+	}
+	s.TypeCode = CreateSCMPTypeCode(SCMPType(data[0]), SCMPCode(data[1]))
+	assert &(data[2:4])[0] == &data[2]
+	assert &(data[2:4])[1] == &data[3]
+	s.Checksum = binary.BigEndian.Uint16(data[2:4])
+	assert forall i int :: 0 <= i && i < 4 ==> &(data[:4])[i] == &data[i] 
+	assert forall i int :: 4 <= i && i < len(data) ==> &(data[4:])[i] == &data[4 + i] 
+	s.BaseLayerEmbedded = layers.BaseLayer{Contents: data[:4], Payload: data[4:]}
+	return nil
+}
+
+preserves acc(s, 1/1000) && (forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i], 1/1000))
+func (s *SCMP) String() string /* {
+	return fmt.Sprintf("%s(%d)\nPayload: %s", &s.TypeCode, s.Checksum, s.Payload)
+}
+*/
+
+// SetNetworkLayerForChecksum tells this layer which network layer is wrapping it.
+// This is needed for computing the checksum when serializing,
+requires acc(s) && l.Mem()
+ensures  acc(s)
+ensures  err == nil ==> s.scn.MemSCION()
+func (s *SCMP) SetNetworkLayerForChecksum(l gopacket.NetworkLayer) (err error) /* {
+	if l == nil {
+		return serrors.New("cannot use nil layer type for scmp checksum network layer")
+	}
+	if l.LayerType() != LayerTypeSCION {
+		return serrors.New("cannot use layer type for scmp checksum network layer",
+			"type", l.LayerType())
+	}
+	s.scn = l.(*SCION)
+	return nil
+}
+*/
+
+/*
+func decodeSCMP(data []byte, pb gopacket.PacketBuilder) error {
+	scmp := &SCMP{}
+	err := scmp.DecodeFromBytes(data, pb)
+	if err != nil {
+		return err
+	}
+	pb.AddLayer(scmp)
+	return pb.NextDecoder(scmp.NextLayerType())
+}
+*/

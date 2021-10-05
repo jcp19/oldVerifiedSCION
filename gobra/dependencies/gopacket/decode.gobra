@@ -22,27 +22,15 @@ type PacketBuilder interface {
 
 	// (lhalm) done with DecodeFeedback methods
 
-	requires 0 < p && p <= 1
-	requires Mem()
-	requires acc(l.ContentsMem(), p)
-	requires acc(l.PayloadMem(), p)
+	requires Mem() && l.Mem()
 	ensures Mem()
-	ensures acc(l.ContentsMem(), p/2)
-	ensures acc(l.PayloadMem(), p/2)
-	AddLayer(l Layer, ghost p perm)
+	AddLayer(l Layer)
 
 	// SetLinkLayer(LinkLayer)
 
-	requires 0 < p && p <= 1
-	requires Mem()
-	requires acc(l.Mem(), p)
-	requires acc(l.ContentsMem(), p)
-	requires acc(l.PayloadMem(), p)
+	requires Mem() && l.Mem()
 	ensures Mem()
-	ensures acc(l.Mem(), p/2)
-	ensures acc(l.ContentsMem(), p/2)
-	ensures acc(l.PayloadMem(), p/2)
-	SetNetworkLayer(l NetworkLayer, ghost p perm)
+	SetNetworkLayer(l NetworkLayer)
 
 	// SetTransportLayer(TransportLayer)
 	// SetApplicationLayer(ApplicationLayer)
