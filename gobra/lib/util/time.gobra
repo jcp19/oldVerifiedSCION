@@ -89,7 +89,7 @@ func SecsToCompact(t uint32) string {
 // milliseconds parts if the time only has second resolution.
 func TimeToCompact(t time.Time) string {
 	if t.Nanosecond() == 0 {
-        // (joao) TimeFmtSecs not supported yet
+		// (joao) TimeFmtSecs not supported yet
 		// return (t.UTC()).Format(common.TimeFmtSecs)
         assume false
 	}

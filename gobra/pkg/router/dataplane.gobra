@@ -59,6 +59,7 @@ import (
 	// underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
 	underlayconn "gobra/lib/underlay/conn"
 	// "github.com/scionproto/scion/go/lib/util"
+	"gobra/lib/util"
 	// "github.com/scionproto/scion/go/pkg/router/bfd"
 	// "github.com/scionproto/scion/go/pkg/router/control"
 	"gobra/pkg/router/control"
@@ -1073,7 +1074,7 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
 }
 
-// TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, slayers.SCMP
+// TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, slayers.SCMPMsg
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 	cause error) (processResult, error) /* {
 
@@ -1189,13 +1190,17 @@ requires acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
 requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
 ensures  acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
 ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
-func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) // {
-//	expiration := util.SecsToTime(p.infoField.Timestamp).
-//		Add(path.ExpTimeToDuration(p.hopField.ExpTime))
-//	expired := expiration.Before(time.Now())
-//	if !expired {
-//		return processResult{}, nil
-//	}
+func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) {
+	// (joao) Add to separate this in two lines
+	// expiration := util.SecsToTime(p.infoField.Timestamp).
+	//	Add(path.ExpTimeToDuration(p.hopField.ExpTime))
+	tmp := util.SecsToTime(p.infoField.Timestamp)
+	expiration := tmp.Add(path.ExpTimeToDuration(unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ExpTime))
+	expired := expiration.Before(time.Now())
+	if !expired {
+		return processResult{}, nil
+	}
+	assume false
 //	return p.packSCMP(
 //		&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
 //			slayers.SCMPCodePathExpired),
@@ -1204,7 +1209,7 @@ func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) // {
 //		serrors.New("expired hop", "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
 //			"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF),
 //	)
-//}
+}
 
 // TODO: next. "slayers.SCMP", packSCMP
 // THIS(5)
@@ -1665,6 +1670,7 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 //	return processResult{OutConn: d.internal, OutAddr: a, OutPkt: rawPkt}, nil
 //}
 
+// THIS(3)
 func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 // (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 //	dst, err := s.DstAddr()
@@ -1696,7 +1702,7 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 
 // (joao) next: check how to avoid needing permission to rawPkt and s.MemSCION by stating that rawPkt is the packet in s.path
 // (joao) THIS(5)
-//func updateSCIONLayeupdateSCIONLayerr(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
+//func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 //	if err := buffer.Clear(); err != nil {
 //		return err
 //	}
