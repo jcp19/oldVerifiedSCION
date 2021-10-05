@@ -1074,73 +1074,73 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 }
 
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, slayers.SCMP
-//THIS(4)
-//func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-//	cause error) (processResult, error) {
-//
-//	// parse everything to see if the original packet was an SCMP error.
-//	var (
-//		scionLayer slayers.SCION
-//		udpLayer   slayers.UDP
-//		hbhExtn    slayers.HopByHopExtn
-//		e2eExtn    slayers.EndToEndExtn
-//		scmpLayer  slayers.SCMP
-//	)
-//	parser := gopacket.NewDecodingLayerParser(
-//		slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
-//	)
-//	decoded := make([]gopacket.LayerType, 5)
-//	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
-//		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
-//			return processResult{}, serrors.WrapStr("decoding packet", err)
-//		}
-//	}
-//	// in reply to an SCMP error do nothing:
-//	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
-//		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
-//	}
-//
-//	// the quoted packet is the packet in its current state
-//	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
-//		return processResult{}, serrors.WrapStr("update info field", err)
-//	}
-//	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
-//		return processResult{}, serrors.WrapStr("update hop field", err)
-//	}
-//	if err := p.buffer.Clear(); err != nil {
-//		return processResult{}, err
-//	}
-//	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
-//		return processResult{}, err
-//	}
-//	// quoteLen is used to limit the size of the quote buffer, the final quote
-//	// length is calculated inside the scmpPacker.
-//	quoteLen := len(p.origPacket)
-//	if quoteLen > slayers.MaxSCMPPacketLen {
-//		quoteLen = slayers.MaxSCMPPacketLen
-//	}
-//	quote := make([]byte, quoteLen)
-//	updated := p.buffer.Bytes()
-//	copy(quote[:len(updated)], updated)
-//	copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
-//
-//	_, external := p.d.external[p.ingressID]
-//	rawSCMP, err := scmpPacker{
-//		internalIP: p.d.internalIP,
-//		localIA:    p.d.localIA,
-//		origPacket: p.origPacket,
-//		ingressID:  p.ingressID,
-//		scionL:     &p.scionLayer,
-//		buffer:     p.buffer,
-//		quote:      quote,
-//	}.prepareSCMP(
-//		scmpH,
-//		scmpP,
-//		external,
-//		cause,
-//	)
-//	return processResult{OutPkt: rawSCMP}, err
-//}
+func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
+	cause error) (processResult, error) /* {
+
+	// parse everything to see if the original packet was an SCMP error.
+	var (
+		scionLayer slayers.SCION
+		udpLayer   slayers.UDP
+		hbhExtn    slayers.HopByHopExtn
+		e2eExtn    slayers.EndToEndExtn
+		scmpLayer  slayers.SCMP
+	)
+	parser := gopacket.NewDecodingLayerParser(
+		slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
+	)
+	decoded := make([]gopacket.LayerType, 5)
+	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
+		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
+			return processResult{}, serrors.WrapStr("decoding packet", err)
+		}
+	}
+	// in reply to an SCMP error do nothing:
+	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
+		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
+	}
+
+	// the quoted packet is the packet in its current state
+	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+		return processResult{}, serrors.WrapStr("update info field", err)
+	}
+	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
+		return processResult{}, serrors.WrapStr("update hop field", err)
+	}
+	if err := p.buffer.Clear(); err != nil {
+		return processResult{}, err
+	}
+	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
+		return processResult{}, err
+	}
+	// quoteLen is used to limit the size of the quote buffer, the final quote
+	// length is calculated inside the scmpPacker.
+	quoteLen := len(p.origPacket)
+	if quoteLen > slayers.MaxSCMPPacketLen {
+		quoteLen = slayers.MaxSCMPPacketLen
+	}
+	quote := make([]byte, quoteLen)
+	updated := p.buffer.Bytes()
+	copy(quote[:len(updated)], updated)
+	copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
+
+	_, external := p.d.external[p.ingressID]
+	rawSCMP, err := scmpPacker{
+		internalIP: p.d.internalIP,
+		localIA:    p.d.localIA,
+		origPacket: p.origPacket,
+		ingressID:  p.ingressID,
+		scionL:     &p.scionLayer,
+		buffer:     p.buffer,
+		quote:      quote,
+	}.prepareSCMP(
+		scmpH,
+		scmpP,
+		external,
+		cause,
+	)
+	return processResult{OutPkt: rawSCMP}, err
+}
+*/
 
 ensures ok ==> s.Mem()
 func havocRaw() (s *scion.Raw, ok bool)

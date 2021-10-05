@@ -86,17 +86,17 @@ const (
 type SCMPTypeCode uint16
 
 // Type returns the SCMP type field.
-func (a SCMPTypeCode) Type() SCMPType {
+pure func (a SCMPTypeCode) Type() SCMPType {
 	return SCMPType(a >> 8)
 }
 
 // Code returns the SCMP code field.
-func (a SCMPTypeCode) Code() SCMPCode {
+pure func (a SCMPTypeCode) Code() SCMPCode {
 	return SCMPCode(a)
 }
 
 // InfoMsg indicates if the SCMP message is an SCMP informational message.
-func (a SCMPTypeCode) InfoMsg() bool {
+pure func (a SCMPTypeCode) InfoMsg() bool {
 	return a.Type() > 127
 }
 

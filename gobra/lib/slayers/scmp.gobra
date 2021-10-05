@@ -76,11 +76,11 @@ pred (s *SCMP) Mem() {
 	acc(s) &&
 	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Contents) ==> acc(&(s.BaseLayerEmbedded.Contents)[i])) &&
 	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i])) &&
-	(s.scn != nil ==> scn.MemSCION())
+	(s.scn != nil ==> s.scn.MemSCION())
 }
 
 // LayerType returns LayerTypeSCMP.
-func (s *SCMP) LayerType() gopacket.LayerType {
+pure func (s *SCMP) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMP
 	return LayerTypeSCMP()
 }
@@ -95,9 +95,9 @@ func (s *SCMP) CanDecode() gopacket.LayerClass {
 
 // NextLayerType use the typecode to select the right next decoder.
 // If the SCMP type is unknown, the next layer is gopacket.LayerTypePayload.
-preserves acc(s)
+preserves s.Mem()
 func (s *SCMP) NextLayerType() gopacket.LayerType {
-	switch s.TypeCode.Type() {
+	switch unfolding s.Mem() in s.TypeCode.Type() {
 	case SCMPTypeDestinationUnreachable:
 		// return LayerTypeSCMPDestinationUnreachable
 		return LayerTypeSCMPDestinationUnreachable()
@@ -124,13 +124,15 @@ func (s *SCMP) NextLayerType() gopacket.LayerType {
 
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-requires acc(s) && (s.scn != nil ==> (s.scn).MemSCION())
+requires s.Mem()
 requires b.Mem()
-ensures  acc(s) && (s.scn != nil ==> (s.scn).MemSCION())
+ensures  s.Mem()
 ensures  ret == nil ==> b.Mem()
 func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (ret error) {
+	unfold s.Mem()
 	bytes, err := b.PrependBytes(4)
 	if err != nil {
+		fold s.Mem()
 		return err
 	}
 	unfold verifyutils.BytesAcc(bytes)
@@ -138,6 +140,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 
 	if opts.ComputeChecksums {
 		if s.scn == nil {
+			fold s.Mem()
 			return serrors.New("can not calculate checksum without SCION header")
 		}
 		// zero out checksum bytes
@@ -151,6 +154,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		unfold verifyutils.BytesAcc(bBytes)
 		s.Checksum, err = s.scn.computeChecksum(bBytes, uint8(common.L4SCMP))
 		if err != nil {
+			fold s.Mem()
 			return err
 		}
 		// (joao) (1) the following code, until the end of the if-true block did not exist
@@ -160,6 +164,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		binary.BigEndian.PutUint16(bBytes[2:], s.Checksum)
 		fold verifyutils.BytesAcc(bBytes)
 		/*ghost*/ b.CombineBytesMem(bBytes)
+		fold s.Mem()
 		return nil
 	} else {
 		// (joao) (2) else branch did not exist before
@@ -167,6 +172,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		binary.BigEndian.PutUint16(bytes[2:], s.Checksum)
 		fold verifyutils.BytesAcc(bytes)
 		/*ghost*/ b.CombinePrependBytesMem(bytes)
+		fold s.Mem()
 		return nil
 	}
 	// (joao) moved the following code to the two branches (1) and (2)
@@ -189,7 +195,7 @@ func (s *SCMP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (ret err
 	assert &(data[2:4])[1] == &data[3]
 	s.Checksum = binary.BigEndian.Uint16(data[2:4])
 	assert forall i int :: 0 <= i && i < 4 ==> &(data[:4])[i] == &data[i] 
-	assert forall i int :: 4 <= i && i < len(data) ==> &(data[4:])[i] == &data[4 + i] 
+	assert forall i int :: 0 <= i && i < len(data[4:]) ==> &(data[4:])[i] == &data[4 + i] 
 	s.BaseLayerEmbedded = layers.BaseLayer{Contents: data[:4], Payload: data[4:]}
 	return nil
 }
@@ -200,6 +206,7 @@ func (s *SCMP) String() string /* {
 }
 */
 
+// (joao) Assumed for now
 // SetNetworkLayerForChecksum tells this layer which network layer is wrapping it.
 // This is needed for computing the checksum when serializing,
 requires acc(s) && l.Mem()
