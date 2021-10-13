@@ -368,7 +368,7 @@ func (s *Decoded) Reverse() error {
 // ToRaw tranforms scion.Decoded into scion.Raw
 requires acc(DecodedInvariant(s), 1/10)
 ensures acc(DecodedInvariant(s), 1/10)
-ensures err == nil ==> RawInvariant(raw)
+ensures err == nil ==> raw.Mem()
 func (s *Decoded) ToRaw() (raw *Raw, err error) {
 	unfold acc(DecodedInvariant(s), 1/100)
 	b := make([]byte, s.Len())

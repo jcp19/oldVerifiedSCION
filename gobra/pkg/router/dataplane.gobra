@@ -59,7 +59,9 @@ import (
 	// underlayconn "github.com/scionproto/scion/go/lib/underlay/conn"
 	underlayconn "gobra/lib/underlay/conn"
 	// "github.com/scionproto/scion/go/lib/util"
+	"gobra/lib/util"
 	// "github.com/scionproto/scion/go/pkg/router/bfd"
+	"gobra/pkg/router/bfd"
 	// "github.com/scionproto/scion/go/pkg/router/control"
 	"gobra/pkg/router/control"
 )
@@ -87,8 +89,11 @@ type bfdSession interface {
 
 // BatchConn is a connection that supports batch reads and writes.
 type BatchConn interface {
+	pred Mem()
 //	ReadBatch(underlayconn.Messages, []underlayconn.ReadMeta) (int, error)
 //	WriteBatch(underlayconn.Messages) (int, error)
+
+	requires Mem()
 	Close() error
 }
 
@@ -155,6 +160,7 @@ func soundDataPlaneMutexInvariant() (res *DataPlane) {
 //	errBFDDisabled                = serrors.New("BFD is disabled")
 //)
 
+/** Globals **/
 // (joao): begin alternative to final global variables defined in the previous var block
 ensures e != nil
 func alreadySet() (e error) { return serrors.New("already set") }
@@ -188,7 +194,7 @@ func noBFDSessionConfigured() (e error) { return serrors.New("no BFD sessions ha
 
 ensures e != nil
 func errBFDDisabled() (e error) { return serrors.New("BFD is disabled") }
-// (joao): end alternative to final global variables
+/** End of Globals **/
 
 type scmpError struct {
 //	TypeCode slayers.SCMPTypeCode
@@ -199,91 +205,95 @@ func (e scmpError) Error() string // {
 //	return serrors.New("scmp", "typecode", e.TypeCode, "cause", e.Cause).Error()
 //}
 
+// (joao) Verified
 // SetIA sets the local IA for the dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) SetIA(ia addr.IA) error {
+func (d *DataPlane) SetIA(ia addr.IA) error /* {
 	d.mtx.Lock()
-// (joao) no support for defer
-//	defer d.mtx.Unlock()
+	// (joao) no support for defer
+	// defer d.mtx.Unlock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	if d.running {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return modifyExisting
+		// (joao) no support for global variables
+		// return modifyExisting
 		return modifyExisting()
 	}
 	if ia.IsZero() {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return emptyValue
+		// (joao) no support for global variables
+		// return emptyValue
 		return emptyValue()
 	}
 	if !d.localIA.IsZero() {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return alreadySet
+		// (joao) no support for global variables
+		// return alreadySet
 		return alreadySet()
 	}
 	d.localIA = ia
-// (joao) no support for defer
+	// (joao) no support for defer
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
-}
+} */
 
+// (joao) Partially Verified
 // SetKey sets the key used for MAC verification. The key provided here should
 // already be derived as in scrypto.HFMacFactory.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) SetKey(key []byte) error {
+func (d *DataPlane) SetKey(key []byte) error /* {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
-// (joao) no support for defer
-//	defer d.mtx.Unlock()
+	// (joao) no support for defer
+	// defer d.mtx.Unlock()
 	if d.running {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return modifyExisting
+		// (joao) no support for global variables
+		// return modifyExisting
 		return modifyExisting()
 	}
 	if len(key) == 0 {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return emptyValue
+		// (joao) no support for global variables
+		// return emptyValue
 		return emptyValue()
 	}
-// (joao) macFactory still not supported
-//	if d.macFactory != nil {
-//		return alreadySet
-//	}
-//	// First check for MAC creation errors.
-//	if _, err := scrypto.InitMac(key); err != nil {
-//		return err
-//	}
-//	d.macFactory = func() hash.Hash {
-//		mac, _ := scrypto.InitMac(key)
-//		return mac
-//	}
+	// (joao) macFactory still not supported
+	// if d.macFactory != nil {
+	// 	return alreadySet
+	// }
+	// // First check for MAC creation errors.
+	// if _, err := scrypto.InitMac(key); err != nil {
+	// 	return err
+	// }
+	// d.macFactory = func() hash.Hash {
+	// 	mac, _ := scrypto.InitMac(key)
+	// return mac
+	// }
 
-// (joao) no support for defer
+	// (joao) no support for defer
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
 }
+*/
 
+// (joao) Verified
 // AddInternalInterface sets the interface the data-plane will use to
 // send/receive traffic in the local AS. This can only be called once; future
 // calls will return an error. This can only be called on a not yet running
@@ -291,75 +301,77 @@ func (d *DataPlane) SetKey(key []byte) error {
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error {
+func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error /* {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
-// (joao) no support for defer
-//	defer d.mtx.Unlock()
+	// (joao) no support for defer
+	// defer d.mtx.Unlock()
 	if d.running {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return modifyExisting
+		// (joao) no support for global variables
+		// return modifyExisting
 		return modifyExisting()
 	}
 	if conn == nil {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return emptyValue
+		// (joao) no support for global variables
+		// return emptyValue
 		return emptyValue()
 	}
 	if d.internal != nil {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return alreadySet
+		// (joao) no support for global variables
+		// return alreadySet
 		return alreadySet()
 	}
 	d.internal = conn
 	d.internalIP = ip
-// (joao) no support for defer
+	// (joao) no support for defer
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
 }
+*/
 
+// (joao) Verified
 // AddExternalInterface adds the inter AS connection for the given interface ID.
 // If a connection for the given ID is already set this method will return an
 // error. This can only be called on a not yet running dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
+func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error /* {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
-// (joao) no support for defer
-//	defer d.mtx.Unlock()
+	// (joao) no support for defer
+	// defer d.mtx.Unlock()
 	if d.running {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return modifyExisting
+		// (joao) no support for global variables
+		// return modifyExisting
 		return modifyExisting()
 	}
 	if conn == nil {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return emptyValue
+		// (joao) no support for global variables
+		// return emptyValue
 		return emptyValue()
 	}
-// (joao) original code:
-//	if _, exists := d.external[ifID]; exists {
-//		return serrors.WithCtx(alreadySet, "ifID", ifID)
+	// (joao) original code:
+	// if _, exists := d.external[ifID]; exists {
+	// 		return serrors.WithCtx(alreadySet, "ifID", ifID)
 	if _, exists := (d.external)[ifID]; exists {
-// (joao) no support for defer
+		// (joao) no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
 		return serrors.WithCtx(alreadySet(), "ifID", ifID)
@@ -367,45 +379,47 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 	if d.external == nil {
 		d.external = make(map[uint16]BatchConn)
 	}
-// (joao) add parentheses surrounding `d.external` to make it parse
+	// (joao) add parentheses surrounding `d.external` to make it parse
  	(d.external)[ifID] = conn
-// (joao) no support for defer
+	// (joao) no support for defer
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
 }
+*/
 
+// (joao) Verified
 // AddNeighborIA adds the neighboring IA for a given interface ID. If an IA for
 // the given ID is already set, this method will return an error. This can only
 // be called on a yet running dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
+func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error /*{
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
-// (joao) defer not supported
-//	defer d.mtx.Unlock()
+	// (joao) defer not supported
+	// defer d.mtx.Unlock()
 	if d.running {
 		// (joao) Unlock explictly added, no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return modifyExisting
+		// (joao) no support for global variables
+		// return modifyExisting
 		return modifyExisting()
 	}
 	if remote.IsZero() {
 		// (joao) Unlock explictly added, no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return emptyValue
+		// (joao) no support for global variables
+		// return emptyValue
 		return emptyValue()
 	}
-// (joao) original code (changed below):
-//	if _, exists := d.neighborIAs[ifID]; exists {
-//		return serrors.WithCtx(alreadySet, "ifID", ifID)
-//	}
+	// (joao) original code (changed below):
+	// if _, exists := d.neighborIAs[ifID]; exists {
+	// 	return serrors.WithCtx(alreadySet, "ifID", ifID)
+	// }
 	if _, exists := (d.neighborIAs)[ifID]; exists {
 		// (joao) Unlock explictly added, no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
@@ -415,24 +429,26 @@ func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
 	if d.neighborIAs == nil {
 		d.neighborIAs = make(map[uint16]addr.IA)
 	}
-// (joao) add parentheses surrounding `d.neighborIAs` to make it parse
+	// (joao) add parentheses surrounding `d.neighborIAs` to make it parse
 	(d.neighborIAs)[ifID] = remote
-// (joao) Unlock explictly added, no support for defer
+	// (joao) Unlock explictly added, no support for defer
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
 }
+*/
 
+// (joao) Verified
 // AddLinkType adds the link type for a given interface ID. If a link type for
 // the given ID is already set, this method will return an error. This can only
 // be called on a not yet running dataplane.
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
-func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
-// (joao) original code (changed below):
-//	if _, exists := d.linkTypes[ifID]; exists {
-//		return serrors.WithCtx(alreadySet, "ifID", ifID)
-//	}
+func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error /* {
+	// (joao) original code (changed below):
+	// if _, exists := d.linkTypes[ifID]; exists {
+	// 	return serrors.WithCtx(alreadySet, "ifID", ifID)
+	// }
 	unfold DataPlaneMutexInvariant(d)
 	if _, exists := (d.linkTypes)[ifID]; exists {
 		fold DataPlaneMutexInvariant(d)
@@ -446,184 +462,194 @@ func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 	fold DataPlaneMutexInvariant(d)
 	return nil
 }
+*/
 
+// (joao) Partially Verified
 // AddExternalInterfaceBFD adds the inter AS connection BFD session.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
-	src, dst control.LinkEnd, cfg control.BFD) error {
+	src, dst control.LinkEnd, cfg control.BFD) error /* {
 	d.mtx.Lock()
-//	defer d.mtx.Unlock()
+	// defer d.mtx.Unlock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	if d.running {
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-//		return modifyExisting
+		// return modifyExisting
 		return modifyExisting()
 	}
 	if conn == nil {
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-//		return emptyValue
+		// return emptyValue
 		return emptyValue()
 	}
-//	var m bfd.Metrics
-//	if d.Metrics != nil {
-//		labels := []string{
-//			"interface", fmt.Sprint(ifID),
-//			"isd_as", d.localIA.String(),
-//			"neighbor_isd_as", dst.IA.String(),
-//		}
-//		m = bfd.Metrics{
-//			Up: metrics.NewPromGauge(d.Metrics.InterfaceUp).
-//				With(labels...),
-//			StateChanges: metrics.NewPromCounter(d.Metrics.BFDInterfaceStateChanges).
-//				With(labels...),
-//			PacketsSent: metrics.NewPromCounter(d.Metrics.BFDPacketsSent).
-//				With(labels...),
-//			PacketsReceived: metrics.NewPromCounter(d.Metrics.BFDPacketsReceived).
-//				With(labels...),
-//		}
-//	}
+	// var m bfd.Metrics
+	// if d.Metrics != nil {
+	// 	labels := []string{
+	//		"interface", fmt.Sprint(ifID),
+	//		"isd_as", d.localIA.String(),
+	//		"neighbor_isd_as", dst.IA.String(),
+	// 	}
+	//	m = bfd.Metrics{
+	//		Up: metrics.NewPromGauge(d.Metrics.InterfaceUp).
+	//			With(labels...),
+	//		StateChanges: metrics.NewPromCounter(d.Metrics.BFDInterfaceStateChanges).
+	//			With(labels...),
+	//		PacketsSent: metrics.NewPromCounter(d.Metrics.BFDPacketsSent).
+	//			With(labels...),
+	//		PacketsReceived: metrics.NewPromCounter(d.Metrics.BFDPacketsReceived).
+	//			With(labels...),
+	//	}
+	// }
 	s := &bfdSend{
 		conn:       conn,
-//		srcAddr:    src.Addr,
-//		dstAddr:    dst.Addr,
+		// srcAddr:    src.Addr,
+		// dstAddr:    dst.Addr,
 		srcIA:      src.IA,
 		dstIA:      dst.IA,
 		ifID:       ifID,
-//		macFactory: d.macFactory,
+		// macFactory: d.macFactory,
 	}
 	// (joao) rewrote to unfold before returning. Original code:
-	// return d.addBFDController(ifID, s, cfg, /* m */)
+	// return d.addBFDController(ifID, s, cfg, m)
 	// changed code:
 	fold DataPlaneMutexInvariant(d)
-	res := d.addBFDController(ifID, s, cfg, /* m */)
+	res := d.addBFDController(ifID, s, cfg, /* m *//*)
 	unfold DataPlaneMutexInvariant(d)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return res
 }
+*/
 
+// (joao) Partially Verified
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
-	/* metrics bfd.Metrics */) error {
+	/* metrics bfd.Metrics */) error /* {
 	unfold DataPlaneMutexInvariant(d)
 	if cfg.Disable {
 		fold DataPlaneMutexInvariant(d)
-//		return errBFDDisabled
+		// return errBFDDisabled
 		return errBFDDisabled()
 	}
 	if d.bfdSessions == nil {
 		d.bfdSessions = make(map[uint16]bfdSession)
 	}
 
-//	// Generate random discriminator. It can't be zero.
-//	discInt, err := rand.Int(rand.Reader, big.NewInt(0xfffffffe))
-//	if err != nil {
-//		return err
-//	}
-//	disc := layers.BFDDiscriminator(uint32(discInt.Uint64()) + 1)
-//	d.bfdSessions[ifID] = &bfd.Session{
-//		Sender:                s,
-//		DetectMult:            layers.BFDDetectMultiplier(cfg.DetectMult),
-//		Logger:                log.New("component", "BFD"),
-//		DesiredMinTxInterval:  cfg.DesiredMinTxInterval,
-//		RequiredMinRxInterval: cfg.RequiredMinRxInterval,
-//		LocalDiscriminator:    disc,
-//		ReceiveQueueSize:      10,
-//		Metrics:               metrics,
-//	}
+	// // Generate random discriminator. It can't be zero.
+	// discInt, err := rand.Int(rand.Reader, big.NewInt(0xfffffffe))
+	// if err != nil {
+	// 	return err
+	// }
+	// disc := layers.BFDDiscriminator(uint32(discInt.Uint64()) + 1)
+	// d.bfdSessions[ifID] = &bfd.Session{
+	// 	Sender:                s,
+	// 	DetectMult:            layers.BFDDetectMultiplier(cfg.DetectMult),
+	// 	Logger:                log.New("component", "BFD"),
+	// 	DesiredMinTxInterval:  cfg.DesiredMinTxInterval,
+	// 	RequiredMinRxInterval: cfg.RequiredMinRxInterval,
+	// 	LocalDiscriminator:    disc,
+	// 	ReceiveQueueSize:      10,
+	// 	Metrics:               metrics,
+	// }
 	fold DataPlaneMutexInvariant(d)
 	return nil
 }
+*/
 
+// (joao) Partially Verified
 // AddSvc adds the address for the given service. This can be called multiple
 // times for the same service, with the address added to the list of addresses
 // that provide the service.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
+func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error /* {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
-//	defer d.mtx.Unlock()
+	// defer d.mtx.Unlock()
 	if a == nil {
-//		return emptyValue
+		// return emptyValue
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
 		return emptyValue()
 	}
-//	if d.svc == nil {
-//		d.svc = newServices()
-//	}
-//	d.svc.AddSvc(svc, a)
-//	if d.Metrics != nil {
-//		labels := serviceMetricLabels(d.localIA, svc)
-//		d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
-//		d.Metrics.ServiceInstanceCount.With(labels).Add(1)
-//	}
+	// if d.svc == nil {
+	// 	d.svc = newServices()
+	// }
+	// d.svc.AddSvc(svc, a)
+	// if d.Metrics != nil {
+	// 	labels := serviceMetricLabels(d.localIA, svc)
+	// 	d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
+	// 	d.Metrics.ServiceInstanceCount.With(labels).Add(1)
+	// }
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
 }
+*/
 
+// (joao) Partially Verified
 // DelSvc deletes the address for the given service.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
+func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error /* {
 	d.mtx.Lock()
-//	defer d.mtx.Unlock()
+	// defer d.mtx.Unlock()
 	if a == nil {
-//		return emptyValue
+		// return emptyValue
 		return emptyValue()
 	}
-//	if d.svc == nil {
-//		return nil
-//	}
-//	d.svc.DelSvc(svc, a)
-//	if d.Metrics != nil {
-//		labels := serviceMetricLabels(d.localIA, svc)
-//		d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
-//		d.Metrics.ServiceInstanceCount.With(labels).Add(-1)
-//	}
+	// if d.svc == nil {
+	// 	return nil
+	// }
+	// d.svc.DelSvc(svc, a)
+	// if d.Metrics != nil {
+	// 	labels := serviceMetricLabels(d.localIA, svc)
+	// 	d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
+	// 	d.Metrics.ServiceInstanceCount.With(labels).Add(-1)
+	// }
 	return nil
 }
+*/
 
+// (joao) Verified
 // AddNextHop sets the next hop address for the given interface ID. If the
 // interface ID already has an address associated this operation fails. This can
 // only be called on a not yet running dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
+func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error /*{
 	d.mtx.Lock()
-// (joao) defer not supported
-//	defer d.mtx.Unlock()
+	// (joao) defer not supported
+	// defer d.mtx.Unlock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	if d.running {
-// (joao) Unlock explictly added, no support for defer
+		// (joao) Unlock explictly added, no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-//		return modifyExisting
+		// return modifyExisting
 		return modifyExisting()
 	}
 	if a == nil {
-// (joao) Unlock explictly added, no support for defer
+		// (joao) Unlock explictly added, no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
-//		return emptyValue
+		// return emptyValue
 		return emptyValue()
 	}
-// (joao) original code (changed below):
-//	if _, exists := d.internalNextHops[ifID]; exists {
-//		return serrors.WithCtx(alreadySet, "ifID", ifID)
-//	}
+	// (joao) original code (changed below):
+	// if _, exists := d.internalNextHops[ifID]; exists {
+	//	 return serrors.WithCtx(alreadySet, "ifID", ifID)
+	// }
 	if _, exists := (d.internalNextHops)[ifID]; exists {
-// (joao) Unlock explictly added, no support for defer
+		// (joao) Unlock explictly added, no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
 		return serrors.WithCtx(alreadySet(), "ifID", ifID)
@@ -631,13 +657,14 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	if d.internalNextHops == nil {
 		d.internalNextHops = make(map[uint16]net.Addr)
 	}
-//	d.internalNextHops[ifID] = a
+	// d.internalNextHops[ifID] = a
 	(d.internalNextHops)[ifID] = a
-// (joao) Unlock explictly added, no support for defer
+	// (joao) Unlock explictly added, no support for defer
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
 }
+*/
 
 // AddNextHopBFD adds the BFD session for the next hop address.
 // If the remote ifID belongs to an existing address, the existing
@@ -646,188 +673,193 @@ requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg control.BFD,
-	sibling string) error {
-
+	sibling string) error /* {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
-//	defer d.mtx.Unlock()
+	// defer d.mtx.Unlock()
 	if d.running {
-//		return modifyExisting
+		// return modifyExisting
 		return modifyExisting()
 	}
-//
+
 	if dst == nil {
-//		return emptyValue
+		// return emptyValue
 		return emptyValue()
 	}
 
-//	for k, v := range d.internalNextHops {
-//		if v.String() == dst.String() {
-//			if c, ok := d.bfdSessions[k]; ok {
-//				d.bfdSessions[ifID] = c
-//				return nil
-//			}
-//		}
-//	}
-//	var m bfd.Metrics
-//	if d.Metrics != nil {
-//		labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
-//		m = bfd.Metrics{
-//			Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
-//				With(labels...),
-//			StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
-//				With(labels...),
-//			PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
-//				With(labels...),
-//			PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
-//				With(labels...),
-//		}
-//	}
-//	s := &bfdSend{
-//		conn:       d.internal,
-//		srcAddr:    src,
-//		dstAddr:    dst,
-//		srcIA:      d.localIA,
-//		dstIA:      d.localIA,
-//		ifID:       0,
-//		macFactory: d.macFactory,
-//	}
-//	return d.addBFDController(ifID, s, cfg, m)
+	// for k, v := range d.internalNextHops {
+	// 	if v.String() == dst.String() {
+	//		if c, ok := d.bfdSessions[k]; ok {
+	//			d.bfdSessions[ifID] = c
+	//			return nil
+	//		}
+	//	}
+	// }
+	// var m bfd.Metrics
+	// if d.Metrics != nil {
+	// 	labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
+	// 	m = bfd.Metrics{
+	// 		Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
+	// 			With(labels...),
+	// 		StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
+	// 			With(labels...),
+	// 		PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
+	// 			With(labels...),
+	// 		PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
+	// 			With(labels...),
+	// 	}
+	// }
+	// s := &bfdSend{
+	// 	conn:       d.internal,
+	// 	srcAddr:    src,
+	// 	dstAddr:    dst,
+	// 	srcIA:      d.localIA,
+	// 	dstIA:      d.localIA,
+	// 	ifID:       0,
+	// 	macFactory: d.macFactory,
+	// }
+	// return d.addBFDController(ifID, s, cfg, m)
 }
+*/
 
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-func (d *DataPlane) Run() error {
+func (d *DataPlane) Run() error /* {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	d.running = true
 
 	d.initMetrics()
 
-// (joao) At this point, there used to be a closure definition, saved in a variable called "read"
+	// (joao) At this point, there used to be a closure definition, saved in a variable called "read"
 
-//	for k, v := range d.bfdSessions {
-//		go func(ifID uint16, c bfdSession) {
-//			defer log.HandlePanic()
-//			if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
-//				log.Error("BFD session failed to start", "ifID", ifID, "err", err)
-//			}
-//		}(k, v)
-//	}
-//	for ifID, v := range d.external {
-//		go func(i uint16, c BatchConn) {
-//			defer log.HandlePanic()
-//			read(i, c)
-//		}(ifID, v)
-//	}
-//	go func(c BatchConn) {
-//		defer log.HandlePanic()
-//		read(0, c)
-//	}(d.internal)
-//
-//	d.mtx.Unlock()
-//	for d.running {
-//		time.Sleep(time.Second)
-//	}
+	// for k, v := range d.bfdSessions {
+	// 	go func(ifID uint16, c bfdSession) {
+	// 		defer log.HandlePanic()
+	// 		if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
+	// 			log.Error("BFD session failed to start", "ifID", ifID, "err", err)
+	// 		}
+	// 	}(k, v)
+	// }
+	// for ifID, v := range d.external {
+	// 	go func(i uint16, c BatchConn) {
+	// 		defer log.HandlePanic()
+	// 		read(i, c)
+	// 	}(ifID, v)
+	// }
+	// go func(c BatchConn) {
+	// 	defer log.HandlePanic()
+	// 	read(0, c)
+	// }(d.internal)
+	//
+ 	// // (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
+	// //        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
+	// //        the lock invariant.
+	// d.mtx.Unlock()
+	// for d.running {
+	// 	time.Sleep(time.Second)
+	// }
 	return nil
 }
+*/
 
 // (joao) Closure extracted from the body of the Run function
-func RunReadClosure(ingressID uint16, rd BatchConn) // {
-//		msgs := conn.NewReadMessages(inputBatchCnt)
-//		for _, msg := range msgs {
-//			msg.Buffers[0] = make([]byte, bufSize)
-//		}
-//
-//		var scmpErr scmpError
-//		metas := make([]conn.ReadMeta, inputBatchCnt)
-//		spkt := slayers.SCION{}
-//		buffer := gopacket.NewSerializeBuffer()
-//		origPacket := make([]byte, bufSize)
-//		for d.running {
-//			pkts, err := rd.ReadBatch(msgs, metas)
-//			if err != nil {
-//				log.Debug("Failed to read batch", "err", err)
-//				// error metric
-//				continue
-//			}
-//			if pkts == 0 {
-//				continue
-//			}
-//			for _, p := range msgs[:pkts] {
-//				origPacket = origPacket[:p.N]
-//				// TODO(karampok). Use meta for sanity checks.
-//				p.Buffers[0] = p.Buffers[0][:p.N]
-//				copy(origPacket[:p.N], p.Buffers[0])
-//
-//				// input metric
-//				inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
-//				d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
-//				d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
-//
-//				result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
-//					buffer)
-//
-//				switch {
-//				case err == nil:
-//				case errors.As(err, &scmpErr):
-//					if !scmpErr.TypeCode.InfoMsg() {
-//						log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
-//					}
-//					// SCMP go back the way they came.
-//					result.OutAddr = p.Addr
-//					result.OutConn = rd
-//				default:
-//					log.Debug("Error processing packet", "err", err)
-//					d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
-//					continue
-//				}
-//				if result.OutConn == nil { // e.g. BFD case no message is forwarded
-//					continue
-//				}
-//				_, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
-//					Buffers: [][]byte{result.OutPkt},
-//					Addr:    result.OutAddr,
-//				}}))
-//				if err != nil {
-//					log.Debug("Error writing packet", "err", err)
-//					// error metric
-//					continue
-//				}
-//				// ok metric
-//				outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-//				d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
-//				d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-//			}
-//
-//			// Reset buffers to original capacity.
-//			for _, p := range msgs[:pkts] {
-//				p.Buffers[0] = p.Buffers[0][:bufSize]
-//			}
-//		}
-//	}
+func RunReadClosure(ingressID uint16, rd BatchConn) /* {
+	msgs := conn.NewReadMessages(inputBatchCnt)
+	for _, msg := range msgs {
+			msg.Buffers[0] = make([]byte, bufSize)
+	}
 
-func (d *DataPlane) initMetrics() {
-//	labels := interfaceToMetricLabels(0, d.localIA, d.neighborIAs)
-//	d.Metrics.InputBytesTotal.With(labels).Add(0)
-//	d.Metrics.InputPacketsTotal.With(labels).Add(0)
-//	d.Metrics.OutputBytesTotal.With(labels).Add(0)
-//	d.Metrics.OutputPacketsTotal.With(labels).Add(0)
-//	d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
-//	for id := range d.neighborIAs {
-//		if _, notOwned := d.internalNextHops[id]; notOwned {
-//			continue
-//		}
-//		labels = interfaceToMetricLabels(id, d.localIA, d.neighborIAs)
-//		d.Metrics.InputBytesTotal.With(labels).Add(0)
-//		d.Metrics.InputPacketsTotal.With(labels).Add(0)
-//		d.Metrics.OutputBytesTotal.With(labels).Add(0)
-//		d.Metrics.OutputPacketsTotal.With(labels).Add(0)
-//		d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
-//	}
+	var scmpErr scmpError
+	metas := make([]conn.ReadMeta, inputBatchCnt)
+	spkt := slayers.SCION{}
+	buffer := gopacket.NewSerializeBuffer()
+	origPacket := make([]byte, bufSize)
+	for d.running {
+		pkts, err := rd.ReadBatch(msgs, metas)
+		if err != nil {
+			log.Debug("Failed to read batch", "err", err)
+			// error metric
+			continue
+		}
+		if pkts == 0 {
+			continue
+		}
+		for _, p := range msgs[:pkts] {
+			origPacket = origPacket[:p.N]
+			// TODO(karampok). Use meta for sanity checks.
+			p.Buffers[0] = p.Buffers[0][:p.N]
+			copy(origPacket[:p.N], p.Buffers[0])
+
+			// input metric
+			inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
+			d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
+			d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
+
+			result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
+				buffer)
+
+			switch {
+			case err == nil:
+			case errors.As(err, &scmpErr):
+				if !scmpErr.TypeCode.InfoMsg() {
+					log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
+				}
+				// SCMP go back the way they came.
+				result.OutAddr = p.Addr
+				result.OutConn = rd
+			default:
+				log.Debug("Error processing packet", "err", err)
+				d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
+				continue
+			}
+			if result.OutConn == nil { // e.g. BFD case no message is forwarded
+				continue
+			}
+			_, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
+				Buffers: [][]byte{result.OutPkt},
+				Addr:    result.OutAddr,
+			}}))
+			if err != nil {
+				log.Debug("Error writing packet", "err", err)
+				// error metric
+				continue
+			}
+			// ok metric
+			outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+			d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
+			d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+		}
+
+		// Reset buffers to original capacity.
+		for _, p := range msgs[:pkts] {
+			p.Buffers[0] = p.Buffers[0][:bufSize]
+		}
+	}
 }
+*/
+
+func (d *DataPlane) initMetrics() /* {
+	labels := interfaceToMetricLabels(0, d.localIA, d.neighborIAs)
+	d.Metrics.InputBytesTotal.With(labels).Add(0)
+	d.Metrics.InputPacketsTotal.With(labels).Add(0)
+	d.Metrics.OutputBytesTotal.With(labels).Add(0)
+	d.Metrics.OutputPacketsTotal.With(labels).Add(0)
+	d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
+	for id := range d.neighborIAs {
+		if _, notOwned := d.internalNextHops[id]; notOwned {
+			continue
+		}
+		labels = interfaceToMetricLabels(id, d.localIA, d.neighborIAs)
+		d.Metrics.InputBytesTotal.With(labels).Add(0)
+		d.Metrics.InputPacketsTotal.With(labels).Add(0)
+		d.Metrics.OutputBytesTotal.With(labels).Add(0)
+		d.Metrics.OutputPacketsTotal.With(labels).Add(0)
+		d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
+	}
+} */
 
 type processResult struct {
 	EgressID uint16
@@ -836,40 +868,88 @@ type processResult struct {
 	OutPkt   []byte
 }
 
-// (joao) THIS(1)
-func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
-
-//	if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
-//		return processResult{}, err
-//	}
-//	if err := buffer.Clear(); err != nil {
-//		return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
-//	}
-
-//	switch s.PathType {
-//	case slayers.PathTypeEmpty:
-//		if s.NextHdr == common.L4BFD {
-//			return processResult{}, d.processIntraBFD(srcAddr, s.Payload)
-//		}
-//		return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader,
-//			"type", s.PathType, "header", s.NextHdr)
-//	case slayers.PathTypeOneHop:
-//		if s.NextHdr == common.L4BFD {
-//			ohp, ok := s.Path.(*onehop.Path)
-//			if !ok {
-//				return processResult{}, malformedPath
-//			}
-//			return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
-//		}
-//		return d.processOHP(ingressID, rawPkt, s, buffer)
-//	case slayers.PathTypeSCION:
-//		return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
-//	default:
-//		return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
-//	}
+pure func isZeroSCION(s slayers.SCION) bool {
+	return s.EmbeddedBaseLayer.Contents == nil &&
+		s.EmbeddedBaseLayer.Payload == nil &&
+		s.Version == 0 &&
+		s.TrafficClass == 0 &&
+		s.FlowID == 0 &&
+		s.NextHdr == 0 &&
+		s.HdrLen == 0 &&
+		s.PayloadLen == 0 &&
+		s.PathType == 0 &&
+		s.DstAddrType == 0 &&
+		s.DstAddrLen == 0 &&
+		s.SrcAddrType == 0 &&
+		s.SrcAddrLen == 0 &&
+		s.DstIA.I == 0 &&
+		s.DstIA.A == 0 &&
+		s.SrcIA.I == 0 &&
+		s.SrcIA.A == 0 &&
+		s.RawDstAddr == nil &&
+		s.RawSrcAddr  == nil &&
+		s.Path == nil
 }
 
+// (joao) THIS(1)
+requires acc(DataPlaneMutexInvariant(d), _)
+requires isZeroSCION(s)
+requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+requires srcAddr.mem()
+requires buffer.Mem()
+func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
+	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
+	// (joao) `s` should always have the zero value of slayers.SCION;
+	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
+	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
+	//        that gets mutated
+	sNew := &slayers.SCION{}
+
+	fold (gopacket.NilDecodeFeedback{}).Mem()
+	// (joao) Adapted to conform to changes in gopacket and sNew
+	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
+	if err := sNew.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback{}); err != nil {
+		return processResult{}, err
+	}
+	// (joao) already lost access to rawPkt here
+	if err := buffer.Clear(); err != nil {
+		return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
+	}
+
+	switch s.PathType {
+	case slayers.PathTypeEmpty:
+		assume false
+		// if s.NextHdr == common.L4BFD {
+		//	return processResult{}, d.processIntraBFD(srcAddr, s.Payload)
+		// }
+		// return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader,
+		//	"type", s.PathType, "header", s.NextHdr)
+	case slayers.PathTypeOneHop:
+		assume false
+		// if s.NextHdr == common.L4BFD {
+		//	ohp, ok := s.Path.(*onehop.Path)
+		//	if !ok {
+		//		return processResult{}, malformedPath
+		//	}
+		//	return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
+		//}
+		// return d.processOHP(ingressID, rawPkt, s, buffer)
+	case slayers.PathTypeSCION:
+		assert acc(DataPlaneMutexInvariant(d), _)
+		assert forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+		assert buffer.Mem()
+		assert sNew.MemSCION()
+		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
+		return d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
+	default:
+		// return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
+		return processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
+	}
+}
+
+// (joao) THIS(2)
+// next: layers.BFD, v.Messages()
 //func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
 //	if len(d.bfdSessions) == 0 {
 //		return noBFDSessionConfigured
@@ -888,8 +968,9 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 //	return noBFDSessionFound
 //}
 
-requires DataPlaneMutexInvariant(d)
-ensures DataPlaneMutexInvariant(d)
+// (joao) THIS(2)
+// depends on issue #341 and on layers.BFD
+requires acc(DataPlaneMutexInvariant(d), _)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 	unfold DataPlaneMutexInvariant(d)
 	if len(d.bfdSessions) == 0 {
@@ -939,7 +1020,13 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 */
 
 // (joao) THIS(2)
-func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
+requires acc(DataPlaneMutexInvariant(d), _)
+requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+requires buffer.Mem()
+requires s.MemSCION()
+// (joao) s is now a *slayers.SCION
+// func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
+func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
 
 	// (joao) added `&` before `scionPacketProcessor` to make this type check
@@ -964,7 +1051,9 @@ type scionPacketProcessor struct {
 	// message to send out.
 	rawPkt []byte
 	// scionLayer is the SCION gopacket layer.
-	scionLayer slayers.SCION
+	// (joao) adapted to make this type check in Gobra
+	// scionLayer slayers.SCION
+	scionLayer *slayers.SCION
 	// origPacket is the raw original packet, must not be modified.
 	origPacket []byte
 	// buffer is the buffer that can be used to serialize gopacket layers.
@@ -987,90 +1076,103 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
 }
 
-//THIS(4)
-//func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-//	cause error) (processResult, error) {
-//
-//	// parse everything to see if the original packet was an SCMP error.
-//	var (
-//		scionLayer slayers.SCION
-//		udpLayer   slayers.UDP
-//		hbhExtn    slayers.HopByHopExtn
-//		e2eExtn    slayers.EndToEndExtn
-//		scmpLayer  slayers.SCMP
-//	)
-//	parser := gopacket.NewDecodingLayerParser(
-//		slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
-//	)
-//	decoded := make([]gopacket.LayerType, 5)
-//	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
-//		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
-//			return processResult{}, serrors.WrapStr("decoding packet", err)
-//		}
-//	}
-//	// in reply to an SCMP error do nothing:
-//	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
-//		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
-//	}
-//
-//	// the quoted packet is the packet in its current state
-//	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
-//		return processResult{}, serrors.WrapStr("update info field", err)
-//	}
-//	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
-//		return processResult{}, serrors.WrapStr("update hop field", err)
-//	}
-//	if err := p.buffer.Clear(); err != nil {
-//		return processResult{}, err
-//	}
-//	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
-//		return processResult{}, err
-//	}
-//	// quoteLen is used to limit the size of the quote buffer, the final quote
-//	// length is calculated inside the scmpPacker.
-//	quoteLen := len(p.origPacket)
-//	if quoteLen > slayers.MaxSCMPPacketLen {
-//		quoteLen = slayers.MaxSCMPPacketLen
-//	}
-//	quote := make([]byte, quoteLen)
-//	updated := p.buffer.Bytes()
-//	copy(quote[:len(updated)], updated)
-//	copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
-//
-//	_, external := p.d.external[p.ingressID]
-//	rawSCMP, err := scmpPacker{
-//		internalIP: p.d.internalIP,
-//		localIA:    p.d.localIA,
-//		origPacket: p.origPacket,
-//		ingressID:  p.ingressID,
-//		scionL:     &p.scionLayer,
-//		buffer:     p.buffer,
-//		quote:      quote,
-//	}.prepareSCMP(
-//		scmpH,
-//		scmpP,
-//		external,
-//		cause,
-//	)
-//	return processResult{OutPkt: rawSCMP}, err
-//}
+// TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn,
+func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
+	cause error) (processResult, error) /* {
 
-// THIS(4)
-func (p *scionPacketProcessor) parsePath() (processResult, error) {
+	// parse everything to see if the original packet was an SCMP error.
+	var (
+		scionLayer slayers.SCION
+		udpLayer   slayers.UDP
+		hbhExtn    slayers.HopByHopExtn
+		e2eExtn    slayers.EndToEndExtn
+		scmpLayer  slayers.SCMP
+	)
+	parser := gopacket.NewDecodingLayerParser(
+		slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
+	)
+	decoded := make([]gopacket.LayerType, 5)
+	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
+		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
+			return processResult{}, serrors.WrapStr("decoding packet", err)
+		}
+	}
+	// in reply to an SCMP error do nothing:
+	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
+		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
+	}
+
+	// the quoted packet is the packet in its current state
+	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+		return processResult{}, serrors.WrapStr("update info field", err)
+	}
+	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
+		return processResult{}, serrors.WrapStr("update hop field", err)
+	}
+	if err := p.buffer.Clear(); err != nil {
+		return processResult{}, err
+	}
+	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
+		return processResult{}, err
+	}
+	// quoteLen is used to limit the size of the quote buffer, the final quote
+	// length is calculated inside the scmpPacker.
+	quoteLen := len(p.origPacket)
+	if quoteLen > slayers.MaxSCMPPacketLen {
+		quoteLen = slayers.MaxSCMPPacketLen
+	}
+	quote := make([]byte, quoteLen)
+	updated := p.buffer.Bytes()
+	copy(quote[:len(updated)], updated)
+	copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
+
+	_, external := p.d.external[p.ingressID]
+	rawSCMP, err := scmpPacker{
+		internalIP: p.d.internalIP,
+		localIA:    p.d.localIA,
+		origPacket: p.origPacket,
+		ingressID:  p.ingressID,
+		scionL:     &p.scionLayer,
+		buffer:     p.buffer,
+		quote:      quote,
+	}.prepareSCMP(
+		scmpH,
+		scmpP,
+		external,
+		cause,
+	)
+	return processResult{OutPkt: rawSCMP}, err
+}
+*/
+
+ensures ok ==> s.Mem()
+func havocRaw() (s *scion.Raw, ok bool)
+
+requires acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
+requires (p.scionLayer).MemSCION()
+ensures  acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
+ensures  (p.scionLayer).MemSCION()
+ensures  errRet == nil ==> (acc(p.infoField) && path.HopFieldInv(p.hopField))
+func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) {
 	var ok bool
-//	p.path, ok = p.scionLayer.Path.(*scion.Raw)
+	// (joao) this line depends on the proof that *scion.Raw implements Path. However, adding that to the code
+	//        causes verification to take a very long time. Nonetheless, should be uncommented on the final version of this. Also, we should use a smart way to avoid unfolding MemSCION
+	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
+	p.path, ok = havocRaw()
 	if !ok {
 		// TODO(lukedirtwalker) parameter problem invalid path?
-//		return processResult{}, malformedPath
+		// return processResult{}, malformedPath
 		return processResult{}, malformedPath()
 	}
+	// (joao) here, p.path.Mem() holds without unfolding (p.scionLayer).MemSCION() because we use havocRaw. We would need to convert (p.scionLayer).MemSCION() into
+	// (p.scionLayer).MemSCIONWithoutPath() && p.path.Len() or else, remove path.Len() from MemSCION
 	var err error
-//	p.hopField, err = p.path.GetCurrentHopField()
+	p.hopField, err = p.path.GetCurrentHopField()
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
-//	p.infoField, err = p.path.GetCurrentInfoField()
+	p.infoField, err = p.path.GetCurrentInfoField()
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
@@ -1084,13 +1186,23 @@ func (p *scionPacketProcessor) parsePath() (processResult, error) {
 	return processResult{}, nil
 }
 
-func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) // {
-//	expiration := util.SecsToTime(p.infoField.Timestamp).
-//		Add(path.ExpTimeToDuration(p.hopField.ExpTime))
-//	expired := expiration.Before(time.Now())
-//	if !expired {
-//		return processResult{}, nil
-//	}
+// TODO: next. add "slayers.scmp" and "packSCMP"
+// THIS(5)
+requires acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
+requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
+ensures  acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
+ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
+func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) {
+	// (joao) Add to separate this in two lines
+	// expiration := util.SecsToTime(p.infoField.Timestamp).
+	//	Add(path.ExpTimeToDuration(p.hopField.ExpTime))
+	tmp := util.SecsToTime(p.infoField.Timestamp)
+	expiration := tmp.Add(path.ExpTimeToDuration(unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ExpTime))
+	expired := expiration.Before(time.Now())
+	if !expired {
+		return processResult{}, nil
+	}
+	assume false
 //	return p.packSCMP(
 //		&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
 //			slayers.SCMPCodePathExpired),
@@ -1099,31 +1211,39 @@ func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) // {
 //		serrors.New("expired hop", "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
 //			"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF),
 //	)
-//}
+}
 
+// TODO: next. packSCMP
+// THIS(5)
+requires acc(p, 1/1000)
+requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
+ensures  acc(p, 1/1000)
+ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
 func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
-//	pktIngressID := p.hopField.ConsIngress
-//	errCode := slayers.SCMPCodeUnknownHopFieldIngress
-//	if !p.infoField.ConsDir {
-//		pktIngressID = p.hopField.ConsEgress
-//		errCode = slayers.SCMPCodeUnknownHopFieldEgress
-//	}
-//	if p.ingressID != 0 && p.ingressID != pktIngressID {
-//		return p.packSCMP(
-//			&slayers.SCMP{
-//				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
-//			},
-//			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-//			serrors.New("ingress interface invalid",
-//				"pkt_ingress", pktIngressID, "router_ingress", p.ingressID),
-//		)
-//	}
+	pktIngressID := unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ConsIngress
+	errCode := slayers.SCMPCodeUnknownHopFieldIngress
+	if !p.infoField.ConsDir {
+		pktIngressID = unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ConsEgress
+		errCode = slayers.SCMPCodeUnknownHopFieldEgress
+	}
+	if p.ingressID != 0 && p.ingressID != pktIngressID {
+		assume false
+		/*
+		return p.packSCMP(
+			&slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+			},
+			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+			serrors.New("ingress interface invalid",
+				"pkt_ingress", pktIngressID, "router_ingress", p.ingressID),
+		)
+		*/
+	}
 	return processResult{}, nil
 }
 
 // THIS(4)
-func (p *scionPacketProcessor) validateEgressID() (processResult, error) {
-	;
+func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 //	pktEgressID := p.egressInterface()
 //	_, ih := p.d.internalNextHops[pktEgressID]
 //	_, eh := p.d.external[pktEgressID]
@@ -1167,50 +1287,57 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) {
 //				"egress_id", pktEgressID, "egress_type", egress))
 //	}
 }
+*/
 
+// (joao) next: updateSCIONLayer
 // THIS(4)
-func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error // {
-//	// against construction dir the ingress router updates the SegID, ifID == 0
-//	// means this comes from this AS itself, so nothing has to be done.
-//	// TODO(lukedirtwalker): For packets destined to peer links this shouldn't
-//	// be updated.
-//	if !p.infoField.ConsDir && p.ingressID != 0 {
-//		p.infoField.UpdateSegID(p.hopField.Mac)
-//		if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
-//			return serrors.WrapStr("update info field", err)
-//		}
-//		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
-//			return err
-//		}
-//	}
-//	return nil
-//}
+preserves acc(p, 1/100) && p.path.Mem() && acc(p.infoField, 1/100)
+func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error /* {
+	// against construction dir the ingress router updates the SegID, ifID == 0
+	// means this comes from this AS itself, so nothing has to be done.
+	// TODO(lukedirtwalker): For packets destined to peer links this shouldn't
+	// be updated.
+	if !p.infoField.ConsDir && p.ingressID != 0 {
+		p.infoField.UpdateSegID(p.hopField.Mac)
+		if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+			return serrors.WrapStr("update info field", err)
+		}
+		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+*/
 
-func (p *scionPacketProcessor) currentInfoPointer() uint16 // {
-//	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
-//		scion.MetaLen + path.InfoLen*int(p.path.PathMeta.CurrINF))
-//}
+requires acc(&p.scionLayer, 1/1000) && acc(p.scionLayer.MemSCION(), 1/1000)
+pure func (p *scionPacketProcessor) currentInfoPointer() uint16 /* {
+	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
+		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.MemSCION(), 1/1000) in p.path.PathMeta.CurrINF))
+}
+*/
 
-func (p *scionPacketProcessor) currentHopPointer() uint16 // {
+pure func (p *scionPacketProcessor) currentHopPointer() uint16 // {
 //	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
 //		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
 //}
 
-// THIS(4)
-func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) // {
-//	if err := path.VerifyMAC(p.d.macFactory(), p.infoField, p.hopField); err != nil {
-//		return p.packSCMP(
-//			&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
-//				slayers.SCMPCodeInvalidHopFieldMAC),
-//			},
-//			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-//			serrors.WithCtx(err, "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
-//				"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF,
-//				"seg_id", p.infoField.SegID),
-//		)
-//	}
-//	return processResult{}, nil
-//}
+/* (joao) currently not supported
+func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) {
+	if err := path.VerifyMAC(p.d.macFactory(), p.infoField, p.hopField); err != nil {
+		return p.packSCMP(
+			&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+				slayers.SCMPCodeInvalidHopFieldMAC),
+			},
+			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+			serrors.WithCtx(err, "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
+				"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF,
+				"seg_id", p.infoField.SegID),
+		)
+	}
+	return processResult{}, nil
+}
+*/
 
 // THIS(4)
 func (p *scionPacketProcessor) resolveInbound() (net.Addr, processResult, error) // {
@@ -1295,7 +1422,7 @@ func (p *scionPacketProcessor) egressInterface(ghost pm perm) uint16 {
 }
 
 //THIS(4)
-func (p *scionPacketProcessor) validateEgressUp() (processResult, error) {
+func (p *scionPacketProcessor) validateEgressUp() (processResult, error) /*{
 //	egressID := p.egressInterface()
 //	if v, ok := p.d.bfdSessions[egressID]; ok {
 //		if !v.IsUp() {
@@ -1320,6 +1447,7 @@ func (p *scionPacketProcessor) validateEgressUp() (processResult, error) {
 //	}
 	return processResult{}, nil
 }
+*/
 
 // THIS(4)
 requires acc(&p.ingressID)
@@ -1353,7 +1481,6 @@ func (p *scionPacketProcessor) handleEgressRouterAlert() (processResult, error) 
 	}
 	egressID := p.egressInterface(1/2)
 	// (joao) put parentheses surrounding p.d.external to make it parse
-	// (joao) Gobra requires maps to be non-null to check if they contain some value (bug)
 	if _, ok := (p.d.external)[egressID]; !ok {
 		return processResult{}, nil
 	}
@@ -1363,7 +1490,6 @@ func (p *scionPacketProcessor) handleEgressRouterAlert() (processResult, error) 
 
 func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 	interfaceID uint16) (processResult, error) // {
-
 //	var scmpH slayers.SCMP
 //	if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
 //		log.Debug("Parsing SCMP header of router alert", "err", err)
@@ -1391,98 +1517,112 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 //	return p.packSCMP(&scmpH, &scmpP, nil)
 //}
 
+// next: packSCMP, 
 // THIS(4)
-func (p *scionPacketProcessor) validatePktLen() (processResult, error) // {
-//	if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
-//		return processResult{}, nil
-//	}
-//	return p.packSCMP(
-//		&slayers.SCMP{
-//			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
-//				slayers.SCMPCodeInvalidPacketSize),
-//		},
-//		&slayers.SCMPParameterProblem{Pointer: 0},
-//		serrors.New("bad packet size",
-//			"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
-//	)
-//}
-//
+requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
+ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
+func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
+	// (joao) adapted to avoid unfolding predicates
+	// if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
+	if int(p.scionLayer.getPayloadLen()) == len(p.scionLayer.LayerPayload()) {
+		return processResult{}, nil
+	}
+	assume false
+	/*
+	return p.packSCMP(
+		&slayers.SCMP{
+			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+				slayers.SCMPCodeInvalidPacketSize),
+		},
+		&slayers.SCMPParameterProblem{Pointer: 0},
+		serrors.New("bad packet size",
+			"header", p.scionLayer.PayloadLen, "actual", len(p.scionLayer.Payload)),
+	)
+	*/
+}
 
 // THIS(3)
-func (p *scionPacketProcessor) process() (processResult, error) /*{
-
+requires acc(p)
+requires acc(DataPlaneMutexInvariant(p.d), _)
+requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
+requires (p.buffer).Mem()
+requires (p.scionLayer).MemSCION()
+func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
 	}
 	if r, err := p.validatePktLen(); err != nil {
 		return r, err
 	}
+	/*
 	if err := p.updateNonConsDirIngressSegID(); err != nil {
 		return processResult{}, err
 	}
 	if r, err := p.verifyCurrentMAC(); err != nil {
 		return r, err
 	}
-//	if r, err := p.handleIngressRouterAlert(); err != nil {
-//		return r, err
-//	}
+	if r, err := p.handleIngressRouterAlert(); err != nil {
+		return r, err
+	}
 
-//	// Inbound: pkts destined to the local IA.
-//	if p.scionLayer.DstIA.Equal(p.d.localIA) && int(p.path.PathMeta.CurrHF)+1 == p.path.NumHops {
-//		a, r, err := p.resolveInbound()
-//		if err != nil {
-//			return r, err
-//		}
-//		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
-//	}
+	// Inbound: pkts destined to the local IA.
+	if p.scionLayer.DstIA.Equal(p.d.localIA) && int(p.path.PathMeta.CurrHF)+1 == p.path.NumHops {
+		a, r, err := p.resolveInbound()
+		if err != nil {
+			return r, err
+		}
+		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+	}
 
 	// Outbound: pkts leaving the local IA.
 	// BRTransit: pkts leaving from the same BR different interface.
 
-// (joao) initially, we will assume that there is no crossOver
-//	if p.path.IsXover() {
-//		if r, err := p.doXover(); err != nil {
-//			return r, err
-//		}
-//	}
-//	if r, err := p.validateEgressID(); err != nil {
-//		return r, err
-//	}
-//	// handle egress router alert before we check if it's up because we want to
-//	// send the reply anyway, so that trace route can pinpoint the exact link
-//	// that failed.
-//	if r, err := p.handleEgressRouterAlert(); err != nil {
-//		return r, err
-//	}
-//	if r, err := p.validateEgressUp(); err != nil {
-//		return r, err
-//	}
-//
-//	egressID := p.egressInterface()
-//	if c, ok := p.d.external[egressID]; ok {
-//		if err := p.processEgress(); err != nil {
-//			return processResult{}, err
-//		}
-//		return processResult{EgressID: egressID, OutConn: c, OutPkt: p.rawPkt}, nil
-//	}
-//
-//	// ASTransit: pkts leaving from another AS BR.
-//	if a, ok := p.d.internalNextHops[egressID]; ok {
-//		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
-//	}
-//	errCode := slayers.SCMPCodeUnknownHopFieldEgress
-//	if !p.infoField.ConsDir {
-//		errCode = slayers.SCMPCodeUnknownHopFieldIngress
-//	}
-//	return p.packSCMP(
-//		&slayers.SCMP{
-//			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
-//		},
-//		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-//		cannotRoute,
-//	)
-}*/
+	// (joao) initially, we will assume that there is no crossOver
+	if p.path.IsXover() {
+		if r, err := p.doXover(); err != nil {
+			return r, err
+		}
+	}
+	if r, err := p.validateEgressID(); err != nil {
+		return r, err
+	}
+	// handle egress router alert before we check if it's up because we want to
+	// send the reply anyway, so that trace route can pinpoint the exact link
+	// that failed.
+	if r, err := p.handleEgressRouterAlert(); err != nil {
+		return r, err
+	}
+	if r, err := p.validateEgressUp(); err != nil {
+		return r, err
+	}
 
+	egressID := p.egressInterface()
+	if c, ok := p.d.external[egressID]; ok {
+		if err := p.processEgress(); err != nil {
+			return processResult{}, err
+		}
+		return processResult{EgressID: egressID, OutConn: c, OutPkt: p.rawPkt}, nil
+	}
+
+	// ASTransit: pkts leaving from another AS BR.
+	if a, ok := p.d.internalNextHops[egressID]; ok {
+		return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+	}
+	errCode := slayers.SCMPCodeUnknownHopFieldEgress
+	if !p.infoField.ConsDir {
+		errCode = slayers.SCMPCodeUnknownHopFieldIngress
+	}
+	return p.packSCMP(
+		&slayers.SCMP{
+			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+		},
+		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+		cannotRoute,
+	)
+	*/
+}
+
+// (joao) THIS(2)
 //func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
 //
@@ -1540,6 +1680,7 @@ func (p *scionPacketProcessor) process() (processResult, error) /*{
 //	return processResult{OutConn: d.internal, OutAddr: a, OutPkt: rawPkt}, nil
 //}
 
+// THIS(3)
 func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 // (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 //	dst, err := s.DstAddr()
@@ -1559,6 +1700,7 @@ func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 //	return addEndhostPort(dst), nil
 //}
 
+// (joao) depends on issue #341
 requires dst.mem()
 ensures  ret.mem()
 func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
@@ -1569,6 +1711,8 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 }
 */
 
+// (joao) next: check how to avoid needing permission to rawPkt and s.MemSCION by stating that rawPkt is the packet in s.path
+// (joao) THIS(5)
 //func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 //	if err := buffer.Clear(); err != nil {
 //		return err

@@ -6,8 +6,7 @@ type SerializableLayer interface {
 	pred Mem()
 
 	requires Mem() && b.Mem()
-	ensures  Mem()
-	ensures  err == nil ==> b.Mem()
+	ensures  err == nil ==> (Mem() && b.Mem())
 	SerializeTo(b SerializeBuffer, opts SerializeOptions) (err error)
 
 	pure LayerType() LayerType
