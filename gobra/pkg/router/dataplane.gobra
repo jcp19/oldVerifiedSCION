@@ -1097,75 +1097,51 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 			return processResult{}, serrors.WrapStr("decoding packet", err)
 		}
 	}
-	if conn == nil {
-// (joao) no support for defer
-		fold DataPlaneMutexInvariant!<d!>()
-		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return emptyValue
-		return emptyValue()
+	// in reply to an SCMP error do nothing:
+	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
+		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
 	}
-	if d.internal != nil {
-// (joao) no support for defer
-		fold DataPlaneMutexInvariant!<d!>()
-		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return alreadySet
-		return alreadySet()
-	}
-	d.internal = conn
-	d.internalIP = ip
-// (joao) no support for defer
-	fold DataPlaneMutexInvariant!<d!>()
-	d.mtx.Unlock()
-	return nil
-}
 
-// AddExternalInterface adds the inter AS connection for the given interface ID.
-// If a connection for the given ID is already set this method will return an
-// error. This can only be called on a not yet running dataplane.
-requires acc(&d.mtx, _) && d.mtx.LockP()
-requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
-	d.mtx.Lock()
-	unfold DataPlaneMutexInvariant!<d!>()
-// (joao) no support for defer
-//	defer d.mtx.Unlock()
-	if d.running {
-// (joao) no support for defer
-		fold DataPlaneMutexInvariant!<d!>()
-		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return modifyExisting
-		return modifyExisting()
+	// the quoted packet is the packet in its current state
+	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+		return processResult{}, serrors.WrapStr("update info field", err)
 	}
-	if conn == nil {
-// (joao) no support for defer
-		fold DataPlaneMutexInvariant!<d!>()
-		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return emptyValue
-		return emptyValue()
+	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
+		return processResult{}, serrors.WrapStr("update hop field", err)
 	}
-// (joao) original code:
-//	if _, exists := d.external[ifID]; exists {
-//		return serrors.WithCtx(alreadySet, "ifID", ifID)
-	if _, exists := (d.external)[ifID]; exists {
-// (joao) no support for defer
-		fold DataPlaneMutexInvariant!<d!>()
-		d.mtx.Unlock()
-		return serrors.WithCtx(alreadySet(), "ifID", ifID)
+	if err := p.buffer.Clear(); err != nil {
+		return processResult{}, err
 	}
-	if d.external == nil {
-		d.external = make(map[uint16]BatchConn)
+	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
+		return processResult{}, err
 	}
-// (joao) add parentheses surrounding `d.external` to make it parse
- 	(d.external)[ifID] = conn
-// (joao) no support for defer
-	fold DataPlaneMutexInvariant!<d!>()
-	d.mtx.Unlock()
-	return nil
+	// quoteLen is used to limit the size of the quote buffer, the final quote
+	// length is calculated inside the scmpPacker.
+	quoteLen := len(p.origPacket)
+	if quoteLen > slayers.MaxSCMPPacketLen {
+		quoteLen = slayers.MaxSCMPPacketLen
+	}
+	quote := make([]byte, quoteLen)
+	updated := p.buffer.Bytes()
+	copy(quote[:len(updated)], updated)
+	copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
+
+	_, external := p.d.external[p.ingressID]
+	rawSCMP, err := scmpPacker{
+		internalIP: p.d.internalIP,
+		localIA:    p.d.localIA,
+		origPacket: p.origPacket,
+		ingressID:  p.ingressID,
+		scionL:     &p.scionLayer,
+		buffer:     p.buffer,
+		quote:      quote,
+	}.prepareSCMP(
+		scmpH,
+		scmpP,
+		external,
+		cause,
+	)
+	return processResult{OutPkt: rawSCMP}, err
 }
 */
 
@@ -1196,33 +1172,18 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		return processResult{}, err
 	}
-	if remote.IsZero() {
-		// (joao) Unlock explictly added, no support for defer
-		fold DataPlaneMutexInvariant!<d!>()
-		d.mtx.Unlock()
-// (joao) no support for global variables
-//		return emptyValue
-		return emptyValue()
+	p.infoField, err = p.path.GetCurrentInfoField()
+	if err != nil {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		return processResult{}, err
 	}
-// (joao) original code (changed below):
-//	if _, exists := d.neighborIAs[ifID]; exists {
-//		return serrors.WithCtx(alreadySet, "ifID", ifID)
-//	}
-	if _, exists := (d.neighborIAs)[ifID]; exists {
-		// (joao) Unlock explictly added, no support for defer
-		fold DataPlaneMutexInvariant!<d!>()
-		d.mtx.Unlock()
-		return serrors.WithCtx(alreadySet(), "ifID", ifID)
+	if r, err := p.validateHopExpiry(); err != nil {
+		return r, err
 	}
-	if d.neighborIAs == nil {
-		d.neighborIAs = make(map[uint16]addr.IA)
+	if r, err := p.validateIngressID(); err != nil {
+		return r, err
 	}
-// (joao) add parentheses surrounding `d.neighborIAs` to make it parse
-	(d.neighborIAs)[ifID] = remote
-// (joao) Unlock explictly added, no support for defer
-	fold DataPlaneMutexInvariant!<d!>()
-	d.mtx.Unlock()
-	return nil
+	return processResult{}, nil
 }
 
 // TODO: next. add "slayers.scmp" and "packSCMP"
@@ -1278,10 +1239,7 @@ func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
 		)
 		*/
 	}
-	// (joao) added parentheses around d.linkTypes to make it parse
-	(d.linkTypes)[ifID] = linkTo
-	fold DataPlaneMutexInvariant(d)
-	return nil
+	return processResult{}, nil
 }
 
 // THIS(4)
@@ -1348,42 +1306,7 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error /* {
 			return err
 		}
 	}
-//	var m bfd.Metrics
-//	if d.Metrics != nil {
-//		labels := []string{
-//			"interface", fmt.Sprint(ifID),
-//			"isd_as", d.localIA.String(),
-//			"neighbor_isd_as", dst.IA.String(),
-//		}
-//		m = bfd.Metrics{
-//			Up: metrics.NewPromGauge(d.Metrics.InterfaceUp).
-//				With(labels...),
-//			StateChanges: metrics.NewPromCounter(d.Metrics.BFDInterfaceStateChanges).
-//				With(labels...),
-//			PacketsSent: metrics.NewPromCounter(d.Metrics.BFDPacketsSent).
-//				With(labels...),
-//			PacketsReceived: metrics.NewPromCounter(d.Metrics.BFDPacketsReceived).
-//				With(labels...),
-//		}
-//	}
-	s := &bfdSend{
-		conn:       conn,
-//		srcAddr:    src.Addr,
-//		dstAddr:    dst.Addr,
-		srcIA:      src.IA,
-		dstIA:      dst.IA,
-		ifID:       ifID,
-//		macFactory: d.macFactory,
-	}
-	// (joao) rewrote to unfold before returning. Original code:
-	// return d.addBFDController(ifID, s, cfg, /* m */)
-	// changed code:
-	fold DataPlaneMutexInvariant(d)
-	res := d.addBFDController(ifID, s, cfg, /* m */)
-	unfold DataPlaneMutexInvariant(d)
-	fold DataPlaneMutexInvariant!<d!>()
-	d.mtx.Unlock()
-	return res
+	return nil
 }
 */
 
@@ -1412,18 +1335,7 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) {
 				"seg_id", p.infoField.SegID),
 		)
 	}
-//	if d.svc == nil {
-//		d.svc = newServices()
-//	}
-//	d.svc.AddSvc(svc, a)
-//	if d.Metrics != nil {
-//		labels := serviceMetricLabels(d.localIA, svc)
-//		d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
-//		d.Metrics.ServiceInstanceCount.With(labels).Add(1)
-//	}
-	fold DataPlaneMutexInvariant!<d!>()
-	d.mtx.Unlock()
-	return nil
+	return processResult{}, nil
 }
 */
 

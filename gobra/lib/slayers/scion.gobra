@@ -99,11 +99,6 @@ pure func validAddrLen(addrLen AddrLen) bool {
 	return addrLen == AddrLen4 || addrLen == AddrLen8 || addrLen == AddrLen12 || addrLen == AddrLen16
 }
 
-ghost
-pure func lengthToAddrLen(length int) AddrLen {
-	return length == 4? AddrLen4 : (length == 8? AddrLen8 : (length == 12? AddrLen12 : (length == 16? AddrLen16 : AddrLenError)))
-}
-
 // AddrType indicates the type of a host address of a given length in the SCION header. There are
 // four possible types per address length.
 type AddrType uint8
@@ -122,7 +117,6 @@ const (
 )
 
 // Path is the path contained in the SCION header.
-// TODO: (joao) implement all paths as subtypes of Path; must reflect all perms required in their specs
 type Path interface {
 	// (joao) must hold for every receiver in the call of DecodeFromBytes. Represents
 	//        permission to (possibly non initialized) memory that stores a Path
@@ -813,7 +807,6 @@ func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 	assume err == nil ==> s.ReadSrcAddr(res)
 	return res, err
 }
-*/
 
 // (joao) Verified
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
@@ -834,7 +827,6 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	}
 	return err
 }
-*/
 
 // SetSrcAddr sets the source address and updates the DstAddrLen/Type fields accordingly.
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
@@ -855,7 +847,6 @@ func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	}
 	return err
 }
-*/
 
 // (joao) Assumed
 // (joao) requires implementation proof that IPAddr implements Addr to verify the body
@@ -974,7 +965,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 	// copy(buf[offset:offset+srcAddrBytes], s.RawSrcAddr)
 	copyRawSrcAddr(s, buf[offset:offset+srcAddrBytes])
 	return nil
-}*/
+}
 
 // (joao) Assumed
 // (joao) function not present in the original code
