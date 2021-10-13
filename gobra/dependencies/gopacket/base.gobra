@@ -1,54 +1,62 @@
 package gopacket
 
-// (joao) TODO: change bytesAcc to BytesAcc
+import "gobra/verifyutils"
+
 type Layer interface {
-	pred ContentsMem()
-	pred PayloadMem()
+	pred Mem()
+	pred IsLayerContents(data []byte)
+	pred IsLayerPayload(data []byte)
 
 	// (lhalm) returns a global constant, no need for memory permissions
 	pure LayerType() LayerType
 
-	requires acc(ContentsMem(), 1/1000)
-	ensures acc(ContentsMem(), 1/2000)
-	ensures acc(bytesAcc(data), 1/2000)
+	requires Mem()
+	ensures  verifyutils.BytesAcc(data) && IsLayerContents(data)
 	LayerContents() (data []byte)
 
-	requires acc(PayloadMem(), 1/1000)
-	ensures acc(PayloadMem(), 1/2000)
-	ensures acc(bytesAcc(data), 1/2000)
+	requires Mem()
+	ensures  verifyutils.BytesAcc(data) && IsLayerPayload(data)
 	LayerPayload() (data []byte)
+
+	/*ghost*/
+	requires IsLayerContents(data) && verifyutils.BytesAcc(data)
+	ensures  Mem()
+	CombineLayerContents(data []byte)
+
+	/*ghost*/
+	requires IsLayerPayload(data) && verifyutils.BytesAcc(data)
+	ensures  Mem()
+	CombineLayerPayload(data []byte)
 }
 
-// (joao) don't understand this one right now
 type NetworkLayer interface {
 	pred Mem()
-	pred ContentsMem()
-	pred PayloadMem()
+	pred IsLayerContents(data []byte)
+	pred IsLayerPayload(data []byte)
 
-	// (lhalm) interface composition not supported, add methods manually
-	// Layer	
-	
 	// (lhalm) returns a global constant, no need for memory permissions
 	pure LayerType() LayerType
 
-	requires 0 < p && p <= 1
-	requires acc(Mem(), p)
-	requires acc(ContentsMem(), p)
-	ensures acc(Mem(), p)
-	ensures acc(ContentsMem(), p/2)
-	ensures acc(bytesAcc(data), p/2)
-	LayerContents(ghost p perm) (data []byte)
+	requires Mem()
+	ensures  verifyutils.BytesAcc(data) && IsLayerContents(data)
+	LayerContents() (data []byte)
 
-	requires 0 < p && p <= 1
-	requires acc(Mem(), p)
-	requires acc(PayloadMem(), p)
-	ensures acc(Mem(), p)
-	ensures acc(PayloadMem(), p/2)
-	ensures acc(bytesAcc(data), p/2)
-	LayerPayload(ghost p perm) (data []byte)
+	requires Mem()
+	ensures  verifyutils.BytesAcc(data) && IsLayerPayload(data)
+	LayerPayload() (data []byte)
 
 	// (lhalm) end of Layer methods
 	// NetworkFlow() Flow
+
+	/*ghost*/
+	requires IsLayerContents(data) && verifyutils.BytesAcc(data)
+	ensures  Mem()
+	CombineLayerContents(data []byte)
+
+	/*ghost*/
+	requires IsLayerPayload(data) && verifyutils.BytesAcc(data)
+	ensures  Mem()
+	CombineLayerPayload(data []byte)
 }
 
 // pred (p Payload) Mem() { true }

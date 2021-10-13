@@ -54,7 +54,8 @@ func (o Path) Reverse() error {
 	return nil
 }
 
+ensures ret >= 0
 decreases
-func (o Path) Len() int {
+pure func (o Path) Len() (ret int) {
 	return PathLen
 }

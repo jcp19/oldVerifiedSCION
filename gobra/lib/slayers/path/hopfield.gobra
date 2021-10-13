@@ -180,7 +180,7 @@ func outlineCopy(dst, src []byte) {
 
 // ExpTimeToDuration calculates the relative expiration time in seconds.
 // Note that for a 0 value ExpTime, the minimal duration is expTimeUnit.
-decreases *
-func ExpTimeToDuration(expTime uint8) time.Duration // {
-//	return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit) * time.Second
-//}
+decreases
+func ExpTimeToDuration(expTime uint8) time.Duration {
+	return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit) * time.Second
+}

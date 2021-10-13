@@ -35,7 +35,11 @@ type Path struct {
 	SecondHop path.HopField
 }
 
-pred OneHopInv(o *Path) {
+pred (o *Path) UninitializedMem() {
+	acc(o)
+}
+
+pred (o *Path) Mem() {
 	acc(&o.Info) &&
 	path.HopFieldInv(&o.FirstHop) &&
 	path.HopFieldInv(&o.SecondHop)
@@ -54,19 +58,29 @@ pred OneHopInv(o *Path) {
 //	o.SecondHop.Mac = make([]byte, 6)
 //	fold path.HopFieldInv(&o.SecondHop)
 //
-//	fold OneHopInv(o)
+//	fold o.Mem()
 //}
 
-requires acc(o)
+requires o.Mem()
+ensures  o.UninitializedMem()
+func (o *Path) ExchangePerms() {
+	unfold o.Mem()
+	unfold path.HopFieldInv(&o.FirstHop)
+	unfold path.HopFieldInv(&o.SecondHop)
+	fold o.UninitializedMem()
+}
+
+requires o.UninitializedMem()
 preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
-ensures err == nil ==> OneHopInv(o)
-ensures err != nil ==> acc(o)
+ensures err == nil ==> o.Mem()
+// ensures err != nil ==> acc(o)
 decreases
 func (o *Path) DecodeFromBytes(data []byte) (err error) {
 	if len(data) < PathLen {
 		return serrors.New("buffer too short for OneHop path", "expected", PathLen, "actual",
 			len(data))
 	}
+	unfold o.UninitializedMem()
 	offset := 0
 	assert len(data) >= path.InfoLen
 	assert forall i int :: 0 <= i && i < path.InfoLen ==> &data[:path.InfoLen][i] == &data[i]
@@ -88,14 +102,14 @@ func (o *Path) DecodeFromBytes(data []byte) (err error) {
 	tmp := o.SecondHop.DecodeFromBytes(data[offset : offset+path.HopLen])
 
 	if tmp == nil {
-		fold OneHopInv(o)
+		fold o.Mem()
 	} else {
 		unfold path.HopFieldInv(&o.FirstHop)
 	}
 	return tmp
 }
 
-preserves acc(OneHopInv(o), 1/100)
+preserves acc(o.Mem(), 1/100)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 decreases
 func (o *Path) SerializeTo(b []byte) error {
@@ -104,39 +118,39 @@ func (o *Path) SerializeTo(b []byte) error {
 			len(b))
 	}
 	offset := 0
-	unfold acc(OneHopInv(o), 1/100)
+	unfold acc(o.Mem(), 1/100)
 	assert forall i int :: 0 <= i && i < offset+path.InfoLen ==> &b[:offset+path.InfoLen][i] == &b[i]
 	if err := o.Info.SerializeTo(b[:offset+path.InfoLen]); err != nil {
-		fold acc(OneHopInv(o), 1/100)
+		fold acc(o.Mem(), 1/100)
 		return err
 	}
 	offset += path.InfoLen
 	assert forall i int :: 0 <= i && i < offset+path.HopLen ==> &b[offset : offset+path.HopLen][i] == &b[offset+i]
 	if err := o.FirstHop.SerializeTo(b[offset : offset+path.HopLen]); err != nil {
-		fold acc(OneHopInv(o), 1/100)
+		fold acc(o.Mem(), 1/100)
 		return err
 	}
 	offset += path.HopLen
 	assert forall i int :: 0 <= i && i < offset+path.HopLen ==> &b[offset : offset+path.HopLen][i] == &b[offset+i]
 	// (joao) introduce `tmp` to fold before returning
 	tmp := o.SecondHop.SerializeTo(b[offset : offset+path.HopLen])
-	fold acc(OneHopInv(o), 1/100)
+	fold acc(o.Mem(), 1/100)
 	return tmp
 }
 
 // ToSCIONDecoded converts the one hop path in to a normal SCION path in the
 // decoded format.
 // (joao) The spec for this method is currently assumed
-requires acc(OneHopInv(o), 1/100)
-ensures acc(OneHopInv(o), 1/100)
+requires acc(o.Mem(), 1/100)
+ensures acc(o.Mem(), 1/100)
 ensures err == nil ==> scion.DecodedInvariant(dec)
 decreases
 func (o *Path) ToSCIONDecoded() (dec *scion.Decoded, err error) {
-	unfold acc(OneHopInv(o), 1/100)
+	unfold acc(o.Mem(), 1/100)
 	unfold acc(path.HopFieldInv(&o.SecondHop), 1/1000)
 	if o.SecondHop.ConsIngress == 0 {
 		fold acc(path.HopFieldInv(&o.SecondHop), 1/1000)
-		fold acc(OneHopInv(o), 1/100)
+		fold acc(o.Mem(), 1/100)
 		return nil, serrors.New("incomplete path can't be converted")
 	}
 	assume false
@@ -182,7 +196,10 @@ decreases
 func (o *Path) Reverse() error {
 	return serrors.New("OneHop path cannot be reversed")
 }
+
+pure
+ensures ret >= 0
 decreases
-func (o *Path) Len() int {
+func (o *Path) Len() (ret int) {
 	return PathLen
 }

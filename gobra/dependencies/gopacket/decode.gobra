@@ -1,13 +1,15 @@
 package gopacket
 
+// (joao) Checked
 type DecodeFeedback interface {
 	pred Mem()
 
 	requires Mem()
-	ensures Mem()
+	ensures  Mem()
 	SetTruncated()
 }
 
+// (joao) TODO
 type PacketBuilder interface {
 	pred Mem()
 
@@ -20,27 +22,15 @@ type PacketBuilder interface {
 
 	// (lhalm) done with DecodeFeedback methods
 
-	requires 0 < p && p <= 1
-	requires Mem()
-	requires acc(l.ContentsMem(), p)
-	requires acc(l.PayloadMem(), p)
+	requires Mem() && l.Mem()
 	ensures Mem()
-	ensures acc(l.ContentsMem(), p/2)
-	ensures acc(l.PayloadMem(), p/2)
-	AddLayer(l Layer, ghost p perm)
+	AddLayer(l Layer)
 
 	// SetLinkLayer(LinkLayer)
 
-	requires 0 < p && p <= 1
-	requires Mem()
-	requires acc(l.Mem(), p)
-	requires acc(l.ContentsMem(), p)
-	requires acc(l.PayloadMem(), p)
+	requires Mem() && l.Mem()
 	ensures Mem()
-	ensures acc(l.Mem(), p/2)
-	ensures acc(l.ContentsMem(), p/2)
-	ensures acc(l.PayloadMem(), p/2)
-	SetNetworkLayer(l NetworkLayer, ghost p perm)
+	SetNetworkLayer(l NetworkLayer)
 
 	// SetTransportLayer(TransportLayer)
 	// SetApplicationLayer(ApplicationLayer)
@@ -54,6 +44,7 @@ type PacketBuilder interface {
 	// DecodeOptions() *DecodeOptions
 }
 
+// (joao) TODO
 type Decoder interface {
 	pred Mem()
 
@@ -75,6 +66,7 @@ type Decoder interface {
 
 type DecodeFunc DecodeFuncInterface
 
+// (joao) TODO
 type DecodeFuncInterface interface {
 
 	requires (forall i int :: i >= 0 && i < len(data) ==> acc(&data[i])) && p.Mem()
@@ -98,3 +90,9 @@ func (n NilDecodeFeedback) SetTruncated() {}
 
 // (lhalm) doesn't work
 // var NilDecodeFeedback DecodeFeedback = nilDecodeFeedback{}
+
+// (joao) global variables not supported, use a pure function instead
+// LayerTypePayload is the layer type for a payload that we don't try to decode
+// but treat as a success, IE: an application-level payload.
+// var LayerTypePayload = RegisterLayerType(2, LayerTypeMetadata{Name: "Payload", Decoder: DecodePayload})
+pure func LayerTypePayload() LayerType

@@ -52,23 +52,23 @@ const (
 type PathType uint8
 
 // (joao) Hidden for performance
-func (t PathType) String() string // {
-//	switch t {
-//	case PathTypeEmpty:
-//		return "Empty (0)"
-//	case PathTypeSCION:
-//		return "SCION (1)"
-//	case PathTypeOneHop:
-//		return "OneHop (2)"
-//	case PathTypeEPIC:
-//		return "EPIC (3)"
-//	case PathTypeCOLIBRI:
-//		return "COLIBRI (4)"
-//	}
-//	// (joao) fmt.Sprintf not supported
-//	// return fmt.Sprintf("UNKNOWN (%d)", t)
-//	return verifyutils.HavocString()
-//}
+func (t PathType) String() string {
+	switch t {
+	case PathTypeEmpty:
+		return "Empty (0)"
+	case PathTypeSCION:
+		return "SCION (1)"
+	case PathTypeOneHop:
+		return "OneHop (2)"
+	case PathTypeEPIC:
+		return "EPIC (3)"
+	case PathTypeCOLIBRI:
+		return "COLIBRI (4)"
+	}
+	// (joao) fmt.Sprintf not supported
+	// return fmt.Sprintf("UNKNOWN (%d)", t)
+	return verifyutils.HavocString()
+}
 
 // PathType constants
 // (joao) used to be defined in terms of iota
@@ -154,47 +154,86 @@ type Path interface {
 	Reverse() (res error)
 	// Len returns the length of a path in bytes.
 	requires acc(Mem(), _)
-	Len() int
+	pure Len() (ret int)
 }
 
-pred Empty(o empty.Path) {
-	o.Mem()
-}
-
-pred EmptyUninitialized(o empty.Path) {
-	o.UninitializedMem()
-}
-
-
-/*
-// (joao) Fix when needed
-// (joao) TODO: do the same for scion.Raw and onehop.Path after fixing interface issues
 (empty.Path) implements Path {
-	pred Mem := Empty
-
-	pred UninitializedMem := EmptyUninitialized
-
-	(x empty.Path) SerializeTo(b []byte) error {
-		unfold Empty(x)
-		return x.SerializeTo(b)
+	(x empty.Path) SerializeTo(b []byte) (err error) {
+		unfold x.Mem()
+		err = x.SerializeTo(b)
+		fold x.Mem()
 	}
 
-	(x empty.Path) DecodeFromBytes(b []byte) error {
-		unfold acc(EmptyUninitialized(x))
-		res := x.DecodeFromBytes(b)
-		// (joao) syntax too restrictive, allow for if's to be able to fold stuff
+	(x empty.Path) DecodeFromBytes(b []byte) (err error) {
+		err = x.DecodeFromBytes(b)
+		fold x.Mem()
 	}
 
 	(x empty.Path) Reverse() error {
 		return x.Reverse()
 	}
 
-	(x empty.Path) Len() int {
+	pure (x empty.Path) Len() int {
 		return x.Len()
 	}
 
 	(x empty.Path) ExchangePerms() {
 		x.ExchangePerms()
+	}
+}
+
+(*onehop.Path) implements Path {
+	(x *onehop.Path) SerializeTo(b []byte) (err error) {
+		err = x.SerializeTo(b)
+	}
+
+	(x *onehop.Path) DecodeFromBytes(b []byte) (err error) {
+		err = x.DecodeFromBytes(b)
+	}
+
+	(x *onehop.Path) Reverse() error {
+		return x.Reverse()
+	}
+
+	pure (x *onehop.Path) Len() int {
+		return x.Len()
+	}
+
+	(x *onehop.Path) ExchangePerms() {
+		x.ExchangePerms()
+	}
+}
+
+pred UninitializedRaw(x *scion.Raw) {
+	acc(&x.Base) && acc(&x.Raw)
+}
+
+/*
+// (joao) uncommenting out this implementation will make it verify in 1h instead of a few minutes
+(*scion.Raw) implements Path {
+
+	pred UninitializedMem := UninitializedRaw
+
+	(x *scion.Raw) SerializeTo(b []byte) (err error) {
+		err = x.SerializeTo(b)
+	}
+
+	(x *scion.Raw) DecodeFromBytes(b []byte) (err error) {
+		unfold UninitializedRaw(x)
+		err = x.DecodeFromBytes(b)
+	}
+
+	(x *scion.Raw) Reverse() (err error) {
+		err = x.Reverse()
+	}
+
+	pure (x *scion.Raw) Len() int {
+		return unfolding acc(x.Mem(), _) in x.Len()
+	}
+
+	(x *scion.Raw) ExchangePerms() {
+		x.ExchangePerms()
+		fold UninitializedRaw(x)
 	}
 }
 */
@@ -258,103 +297,231 @@ type SCION struct {
 	Path Path
 }
 
-pure
-requires acc(InvariantSCION(s), _)
-func (s *SCION) getRawSrcAddr() []byte {
-	return unfolding acc(InvariantSCION(s), _) in s.RawSrcAddr
+pred (s *SCION) MemSCION() {
+	acc(s) &&
+	verifyutils.BytesAcc(s.RawSrcAddr) &&
+	verifyutils.BytesAcc(s.RawDstAddr) &&
+	validSrcAddr(s) &&
+	validDstAddr(s) &&
+	// The commented properties here are not enforced by the DecodeFromBytes function
+	// (s.SrcAddrLen == AddrLen4  ==> (s.SrcAddrType == T4Ip || s.SrcAddrType == T4Svc)) &&
+	// (s.SrcAddrLen == AddrLen16 ==> s.SrcAddrType == T16Ip) &&
+	// (s.DstAddrLen == AddrLen4  ==> (s.DstAddrType == T4Ip || s.DstAddrType == T4Svc)) &&
+	// (s.DstAddrLen == AddrLen16 ==> s.DstAddrType == T16Ip) &&
+	s.Path.Mem()
+	// TODO:
+	// - length of raw addresses should be even
+	// - Relation between PathType and Path
+	// - Payload
 }
 
-//(joao) Ommited for verification performance
-//ghost
-//requires acc(InvariantSCION(s), _)
-//ensures res % 2 == 0
-//func (s *SCION) proveLenRawSrcAddrHasEvenLen() (res int) {
-//	unfold acc(InvariantSCION(s), _)
-//	res = len(s.RawSrcAddr)
-//	if s.RawSrcAddr == nil {
-//		assert res == 0
-//	} else {
-//		assert validAddrLen(s.SrcAddrLen) && lengthToAddrLen(len(s.RawSrcAddr)) == s.SrcAddrLen
-//	}
-//}
+//(joao) Fails, as expected
+/*
+ghost
+requires s.MemSCION()
+func soundInvariantSCION1(s *SCION) {
+	unfold s.MemSCION()
+	assert false
+}
+*/
+
+/*
+(*SCION) implements gopacket.SerializableLayer {
+	pred Mem := MemSCION
+
+	pure (s *SCION) LayerType() gopacket.LayerType {
+		return s.LayerType()
+	} 
+
+	(s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = s.SerializeTo(b, opts)
+	}
+}
+*/
+
+/** Getters **/
+// (joao) As suggested in Sascha's thesis, we extracted getters that require unfoldings to
+//        occur in their own pure functions.
 
 pure
-requires acc(InvariantSCION(s), _)
-ensures res == unfolding acc(InvariantSCION(s), _) in len(s.RawSrcAddr)
-// (joao) cannot prove this postcondition if body is uncommented, but it is true as shown
-//        in `proveLenRawSrcAddrHasEvenLen`
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getDstAddrType() AddrType {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.DstAddrType
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getSrcAddrType() AddrType {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.SrcAddrType
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getVersion() uint8 {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.Version
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getTrafficClass() uint8 {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.TrafficClass
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getFlowID() uint32 {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.FlowID
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getNextHdr() common.L4ProtocolType {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.NextHdr
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getHdrLen() uint8 {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.HdrLen
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getPayloadLen() uint16 {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.PayloadLen
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getRawSrcAddr() []byte {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.RawSrcAddr
+}
+
+pure
+requires acc(s.MemSCION(), 1/1000)
+func (s *SCION) getPathType() PathType {
+	return unfolding acc(s.MemSCION(), 1/1000) in s.PathType
+}
+
+// (joao) Assumed
+requires acc(s.MemSCION(), 1/1000)
+requires 0 <= i && i < s.getLenRawSrcAddr()
+ensures acc(s.MemSCION(), 1/1000)
+func (s *SCION) getRawSrcAddrIdx(i int) (res byte) /* {
+	// (joao) Gobra does not terminate when unfolding a predicate that contains
+	//        quantified permissions
+	assume false
+	unfold acc(s.MemSCION(), 1/10000)
+	res = verifyutils.BytesIndex(s.RawSrcAddr, i)
+	fold acc(s.MemSCION(), 1/10000)
+	return res
+}
+*/
+
+// (joao) Assumed
+requires acc(s.MemSCION(), 1/1000)
+requires 0 <= i && i < s.getLenRawDstAddr()
+ensures acc(s.MemSCION(), 1/1000)
+func (s *SCION) getRawDstAddrIdx(i int) (res byte) /* {
+	// (joao) Gobra does not terminate when unfolding a predicate that contains
+	//        quantified permissions
+	assume false
+	unfold acc(s.MemSCION(), 1/10000)
+	res = verifyutils.BytesIndex(s.RawDstAddr, i)
+	fold acc(s.MemSCION(), 1/10000)
+	return res
+}
+*/
+
+pure
+requires acc(s.MemSCION(), _)
+func (s *SCION) getDstAddrLen() AddrLen {
+	return unfolding acc(s.MemSCION(), _) in s.DstAddrLen
+}
+
+pure
+requires acc(s.MemSCION(), _)
+func (s *SCION) getSrcAddrLen() AddrLen {
+	return unfolding acc(s.MemSCION(), _) in s.SrcAddrLen
+}
+
+// (joao) Assumed
+pure
+requires acc(s.MemSCION(), _)
+ensures res == unfolding acc(s.MemSCION(), _) in len(s.RawSrcAddr)
+// (joao) TODO: add this property to the Invariant
 ensures res % 2 == 0
 func (s *SCION) getLenRawSrcAddr() (res int) // {
-//	return unfolding acc(InvariantSCION(s), _) in len(s.RawSrcAddr)
+//	return unfolding acc(s.MemSCION(), _) in len(s.RawSrcAddr)
 //}
 
 pure
-requires acc(InvariantSCION(s), _)
+requires acc(s.MemSCION(), _)
 func (s *SCION) getRawDstAddr() []byte {
-	return unfolding acc(InvariantSCION(s), _) in s.RawDstAddr
+	return unfolding acc(s.MemSCION(), _) in s.RawDstAddr
 }
 
+// (joao) Assumed
 pure
-requires acc(InvariantSCION(s), _)
-ensures res == unfolding acc(InvariantSCION(s), _) in len(s.RawDstAddr)
+requires acc(s.MemSCION(), _)
+ensures res == unfolding acc(s.MemSCION(), _) in len(s.RawDstAddr)
 // (joao) cannot prove this postcondition if body is uncommented, but the proof of this
 //        is analogous to `proveLenRawSrcAddrHasEvenLen`
 ensures res % 2 == 0
 func (s *SCION) getLenRawDstAddr() (res int) // {
-//	return unfolding acc(InvariantSCION(s), _) in len(s.RawDstAddr)
+//	return unfolding acc(s.MemSCION(), _) in len(s.RawDstAddr)
 //}
 
 pure
-requires acc(InvariantSCION(s), _)
+requires acc(s.MemSCION(), _)
 func (s *SCION) getDstIA() addr.IA {
-	return unfolding acc(InvariantSCION(s), _) in s.DstIA
+	return unfolding acc(s.MemSCION(), _) in s.DstIA
 }
 
 pure
-requires acc(InvariantSCION(s), _)
+requires acc(s.MemSCION(), _)
 func (s *SCION) getSrcIA() addr.IA {
-	return unfolding acc(InvariantSCION(s), _) in s.SrcIA
+	return unfolding acc(s.MemSCION(), _) in s.SrcIA
 }
+/** End of Getters **/
 
 ensures res == (int(addrLen) + 1) * LineLen
+ensures addrLen == AddrLen4 ==> res == 4
+ensures addrLen == AddrLen8 ==> res == 8
+ensures addrLen == AddrLen12 ==> res == 12
+ensures addrLen == AddrLen16 ==> res == 16
 pure func addrBytes(addrLen AddrLen) (res int) {
 	return (int(addrLen) + 1) * LineLen
 }
 
-pred InvariantSCION(s *SCION) {
-	acc(s) &&
-	(s.RawSrcAddr != nil ==> (validAddrLen(s.SrcAddrLen) && lengthToAddrLen(len(s.RawSrcAddr)) == s.SrcAddrLen)) &&
-	(forall i int :: 0 <= i && i < len(s.RawSrcAddr) ==> acc(&(s.RawSrcAddr)[i])) &&
-	(s.RawDstAddr != nil ==> (validAddrLen(s.DstAddrLen) && lengthToAddrLen(len(s.RawDstAddr)) == s.DstAddrLen)) &&
-	(forall i int :: 0 <= i && i < len(s.RawDstAddr) ==> acc(&(s.RawDstAddr)[i])) &&
-	true
-	// s.Path.Mem()
+ghost
+pure func bogusIntMinAddrLen() int
+
+ghost
+requires validAddrLen(l)
+pure func minAddrLen(l AddrLen) int {
+	return l == AddrLen4? 4: (l == AddrLen8? 8: (l == AddrLen12? 12 : (l == AddrLen16? 16: bogusIntMinAddrLen())))
 }
 
-//ghost
-//ensures InvariantSCION(s)
-//func soundInvariantSCION1() (s *SCION) {
-//	sc@ := SCION{}
-//	s := &sc
-//	assert s.RawSrcAddr == nil
-//	assert s.RawDstAddr == nil
-//	fold InvariantSCION(s)
-//	return s
-//}
+ghost
+requires acc(s, _)
+pure func validSrcAddr(s *SCION) bool {
+	return validAddrLen(s.SrcAddrLen) && len(s.RawSrcAddr) >= minAddrLen(s.SrcAddrLen)
+}
 
-//(joao) Fails, as expected
-//ghost
-//requires InvariantSCION(s)
-//func soundInvariantSCION2(s *SCION) {
-//	unfold InvariantSCION(s)
-//	assert false
-//}
+ghost
+requires acc(s, _)
+pure func validDstAddr(s *SCION) bool {
+	return validAddrLen(s.DstAddrLen) && len(s.RawDstAddr) >= minAddrLen(s.DstAddrLen)
+}
 
 /* pure */
-func (s *SCION) LayerType() gopacket.LayerType // {
-// (joao) slayers.LayerTypeSCION not defined yet
-//	return LayerTypeSCION
-// }
+pure
+func (s *SCION) LayerType() gopacket.LayerType {
+	// (joao) slayers.LayerTypeSCION is currently implemented as a pure function due to the lack of support for global variables
+	// return LayerTypeSCION
+	return LayerTypeSCION()
+}
 
 /* pure */
 // (joao) LayerClass not implemented
@@ -362,18 +529,22 @@ func (s *SCION) LayerType() gopacket.LayerType // {
 //	return LayerTypeSCION
 //}
 
-requires acc(InvariantSCION(s), 1/100)
-func (s *SCION) NextLayerType() gopacket.LayerType // {
-//	return scionNextLayerType(s.NextHdr)
-//}
+requires acc(s.MemSCION(), 1/100)
+func (s *SCION) NextLayerType() gopacket.LayerType {
+	// return scionNextLayerType(s.NextHdr)
+	return scionNextLayerType(s.getNextHdr())
+}
 
-//(joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`
-//(joao) `layers.BaseLayer` is implemented in a third party package
-//requires acc(s, _)
-//func (s *SCION) LayerPayload() []byte
-//{
-//	return s.Payload
-//}
+// (joao) This does not grant permissions to the returned slice.
+//        This is useful if one only wants to compute the length of the returned slice.
+pure
+requires acc(s.MemSCION(), 1/10000)
+func (s *SCION) LayerPayload() []byte {
+	// (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`.
+	// (joao) embedded fields are broken.
+	// return s.Payload
+	return unfolding acc(s.MemSCION(), 1/10000) in (s.EmbeddedBaseLayer).Payload
+}
 
 // (joao) Flow not implemented
 //func (s *SCION) NetworkFlow() gopacket.Flow {
@@ -381,201 +552,286 @@ func (s *SCION) NextLayerType() gopacket.LayerType // {
 //	return gopacket.Flow{}
 //}
 
-// (joao) no support for gopacket
-//func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) error {
-//	scnLen := CmnHdrLen + s.AddrHdrLen() + s.Path.Len()
-//	buf, err := b.PrependBytes(scnLen)
-//	if err != nil {
-//		return err
-//	}
-//	if opts.FixLengths {
-//		s.HdrLen = uint8(scnLen / LineLen)
-//		s.PayloadLen = uint16(len(b.Bytes()) - int(scnLen))
-//	}
-//	// Serialize common header.
-//	firstLine := uint32(s.Version&0xF)<<28 | uint32(s.TrafficClass)<<20 | s.FlowID&0xFFFFF
-//	binary.BigEndian.PutUint32(buf[:4], firstLine)
-//	buf[4] = uint8(s.NextHdr)
-//	buf[5] = s.HdrLen
-//	binary.BigEndian.PutUint16(buf[6:8], s.PayloadLen)
-//	buf[8] = uint8(s.PathType)
-//	buf[9] = uint8(s.DstAddrType&0x3)<<6 | uint8(s.DstAddrLen&0x3)<<4 |
-//		uint8(s.SrcAddrType&0x3)<<2 | uint8(s.SrcAddrLen&0x3)
-//	binary.BigEndian.PutUint16(buf[10:12], 0)
-//
-//	// Serialize address header.
-//	if err := s.SerializeAddrHdr(buf[CmnHdrLen:]); err != nil {
-//		return err
-//	}
-//	offset := CmnHdrLen + s.AddrHdrLen()
-//
-//	// Serialize path header.
-//	return s.Path.SerializeTo(buf[offset:])
-//}
+requires acc(s.MemSCION(), 1/1000)
+ensures  ret == unfolding acc(s.MemSCION(), 1/100) in s.Path.Len()
+ensures  ret >= 0 // (joao) This cannot be added as a post-condition of the pure method in Path and is also not inferred from the instances
+pure func (s *SCION) getPathLen() (ret int) /* {
+	return unfolding acc(s.MemSCION(), 1/100) in s.Path.Len()
+}
+*/
 
-// THIS(2)
+// (joao) Verified
+requires s.MemSCION() && b.Mem()
+ensures  retErr == nil ==> s.MemSCION() && b.Mem()
+func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
+	scnLen := CmnHdrLen + s.AddrHdrLen() + s.getPathLen()
+	buf, err := b.PrependBytes(scnLen)
+	if err != nil {
+		return err
+	}
+	// (joao) this is safe but not proved atm. Verifying this requires introducing
+	//        a new pure function that returns the value of Bytes() and then proving that
+	//        Bytes() returns that value and permissions to the elements, and introduce a new variant
+	//        that does not give access to the elements of the slice and can be called when there is permission to b.PrependBytesMem()
+	// if opts.FixLengths {
+	// 	s.HdrLen = uint8(scnLen / LineLen)
+	// 	s.PayloadLen = uint16(len(b.Bytes()) - int(scnLen))
+	// }
+
+	// Serialize common header.
+	// (joao) rewrote the following
+	// firstLine := uint32(s.Version&0xF)<<28 | uint32(s.TrafficClass)<<20 | s.FlowID&0xFFFFF
+	firstLine := uint32(s.getVersion()&0xF)<<28 | uint32(s.getTrafficClass())<<20 | s.getFlowID()&0xFFFFF
+	unfold verifyutils.BytesAcc(buf)
+	assert &buf[:4][0] == &buf[0]
+	assert &buf[:4][1] == &buf[1]
+	assert &buf[:4][2] == &buf[2]
+	assert &buf[:4][3] == &buf[3]
+	binary.BigEndian.PutUint32(buf[:4], firstLine)
+	// (joao) rewrote the following:
+	// buf[4] = uint8(s.NextHdr)
+	// buf[5] = s.HdrLen
+	// binary.BigEndian.PutUint16(buf[6:8], s.PayloadLen)
+	// buf[8] = uint8(s.PathType)
+	buf[4] = uint8(s.getNextHdr())
+	buf[5] = s.getHdrLen()
+	assert &buf[6:8][0] == &buf[6]
+	assert &buf[6:8][1] == &buf[7]
+	binary.BigEndian.PutUint16(buf[6:8], s.getPayloadLen())
+	buf[8] = uint8(s.getPathType())
+	
+	// (joao) changed from field access to pure function call
+	// buf[9] = uint8(s.DstAddrType&0x3)<<6 | uint8(s.DstAddrLen&0x3)<<4 |
+	//	uint8(s.SrcAddrType&0x3)<<2 | uint8(s.SrcAddrLen&0x3)
+	buf[9] = uint8(s.getDstAddrType()&0x3)<<6 | uint8(s.getDstAddrLen()&0x3)<<4 |
+		uint8(s.getSrcAddrType()&0x3)<<2 | uint8(s.getSrcAddrLen()&0x3)
+	assert &buf[10:12][0] == &buf[10]
+	assert &buf[10:12][1] == &buf[11]
+	binary.BigEndian.PutUint16(buf[10:12], 0)
+
+	// Serialize address header.
+	assert len(buf) >= CmnHdrLen
+	assert forall i int :: 0 <= i && i < len(buf[CmnHdrLen:]) ==> &(buf[CmnHdrLen:])[i] == &buf[CmnHdrLen + i]
+	if err := s.SerializeAddrHdr(buf[CmnHdrLen:]); err != nil {
+		return err
+	}
+	offset := CmnHdrLen + s.AddrHdrLen()
+	// Serialize path header.
+	// (joao) outlined the following call
+	// return s.Path.SerializeTo(buf[offset:])
+	assert forall i int :: 0 <= i && i < len(buf[offset:]) ==> &(buf[offset:])[i] == &buf[i + offset]
+	var ret error = s.outlinePathSerializeTo(buf[offset:])
+	fold verifyutils.BytesAcc(buf)
+	b.CombinePrependBytesMem(buf)
+}
+
+requires acc(s.MemSCION(), 1/1000)
+requires forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+ensures  acc(s.MemSCION(), 1/1000)
+ensures  forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
+	unfold acc(s.MemSCION(), 1/1000)
+	ret := s.Path.SerializeTo(buf)
+	fold acc(s.MemSCION(), 1/1000)
+	return ret
+}
+*/
+
+// (joao) Assumed for now
 // DecodeFromBytes decodes the SCION layer. DecodeFromBytes resets the internal state of this layer
 // to the state defined by the passed-in bytes. Slices in the SCION layer reference the passed-in
 // data, so care should be taken to copy it first should later modification of data be required
 // before the SCION layer is discarded.
-// func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
-/*
+requires acc(s) && df.Mem()
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures  df.Mem()
+ensures  errRes == nil ==> s.MemSCION()
+func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes error) /* {
 	// Decode common header.
 	if len(data) < CmnHdrLen {
 		df.SetTruncated()
 		return serrors.New("packet is shorter than the common header length",
 			"min", CmnHdrLen, "actual", len(data))
 	}
-*/
-//	firstLine := binary.BigEndian.Uint32(data[:4])
-//	s.Version = uint8(firstLine >> 28)
-//	s.TrafficClass = uint8((firstLine >> 20) & 0xFF)
-//	s.FlowID = firstLine & 0xFFFFF
-//	s.NextHdr = common.L4ProtocolType(data[4])
-//	s.HdrLen = data[5]
-//	s.PayloadLen = binary.BigEndian.Uint16(data[6:8])
-//	s.PathType = PathType(data[8])
-//	s.DstAddrType = AddrType(data[9] >> 6)
-//	s.DstAddrLen = AddrLen(data[9] >> 4 & 0x3)
-//	s.SrcAddrType = AddrType(data[9] >> 2 & 0x3)
-//	s.SrcAddrLen = AddrLen(data[9] & 0x3)
-//
-//	// Decode address header.
-//	if err := s.DecodeAddrHdr(data[CmnHdrLen:]); err != nil {
-//		df.SetTruncated()
-//		return err
-//	}
-//	addrHdrLen := s.AddrHdrLen()
-//	offset := CmnHdrLen + addrHdrLen
-//
-//	// Decode path header.
-//	var err error
-//	hdrBytes := int(s.HdrLen) * LineLen
-//	pathLen := hdrBytes - CmnHdrLen - addrHdrLen
-//	if pathLen < 0 {
-//		return serrors.New("invalid header, negative pathLen",
-//			"hdrBytes", hdrBytes, "addrHdrLen", addrHdrLen, "CmdHdrLen", CmnHdrLen)
-//	}
-//
-//	switch s.PathType {
-//	case PathTypeEmpty:
-//		if _, ok := s.Path.(empty.Path); ok {
-//			break
-//		}
-//		s.Path = empty.Path{}
-//		if pathLen != 0 {
-//			return serrors.New("invalid header, non-empty empty path", "hdrBytes", hdrBytes,
-//				"addrHdrLen", addrHdrLen, "CmdHdrLen", CmnHdrLen, "pathLen", pathLen)
-//		}
-//	case PathTypeSCION:
-//		// Only allocate a SCION path if necessary. This reduces memory allocation and GC overhead
-//		// considerably (3x improvement for DecodeFromBytes performance)
-//		if _, ok := s.Path.(*scion.Raw); ok {
-//			break
-//		}
-//		s.Path = &scion.Raw{}
-//	case PathTypeOneHop:
-//		if _, ok := s.Path.(*onehop.Path); ok {
-//			break
-//		}
-//		s.Path = &onehop.Path{}
-//	case PathTypeEPIC, PathTypeCOLIBRI:
-//		return serrors.New("unsupported path type", "type", s.PathType.String())
-//	default:
-//		return serrors.New("unknown path type", "type", s.PathType.String())
-//	}
-//
-//	if minLen := offset + pathLen; len(data) < minLen {
-//		df.SetTruncated()
-//		return serrors.New("provided buffer is too small", "expected", minLen, "actual", len(data))
-//	}
-//	err = s.Path.DecodeFromBytes(data[offset : offset+pathLen])
-//	if err != nil {
-//		return err
-//	}
-//	s.Contents = data[:hdrBytes]
-//	s.Payload = data[hdrBytes:]
-//
-//	return nil
-//}
+	firstLine := binary.BigEndian.Uint32(data[:4])
+	s.Version = uint8(firstLine >> 28)
+	s.TrafficClass = uint8((firstLine >> 20) & 0xFF)
+	s.FlowID = firstLine & 0xFFFFF
+	s.NextHdr = common.L4ProtocolType(data[4])
+	s.HdrLen = data[5]
+	s.PayloadLen = binary.BigEndian.Uint16(data[6:8])
+	s.PathType = PathType(data[8])
+	s.DstAddrType = AddrType(data[9] >> 6)
+	s.DstAddrLen = AddrLen(data[9] >> 4 & 0x3)
+	s.SrcAddrType = AddrType(data[9] >> 2 & 0x3)
+	s.SrcAddrLen = AddrLen(data[9] & 0x3)
 
-// (joao) no support for gopacket
-//func decodeSCION(data []byte, pb gopacket.PacketBuilder) error {
-//	scn := &SCION{}
-//	err := scn.DecodeFromBytes(data, pb)
-//	if err != nil {
-//		return err
-//	}
-//	pb.AddLayer(scn)
-//	pb.SetNetworkLayer(scn)
-//	return pb.NextDecoder(scionNextLayerType(scn.NextHdr))
-//}
+	// Decode address header.
+	if err := s.DecodeAddrHdr(data[CmnHdrLen:]); err != nil {
+		df.SetTruncated()
+		return err
+	}
+	addrHdrLen := s.AddrHdrLen()
+	offset := CmnHdrLen + addrHdrLen
+
+	// Decode path header.
+	var err error
+	hdrBytes := int(s.HdrLen) * LineLen
+	pathLen := hdrBytes - CmnHdrLen - addrHdrLen
+	if pathLen < 0 {
+		return serrors.New("invalid header, negative pathLen",
+			"hdrBytes", hdrBytes, "addrHdrLen", addrHdrLen, "CmdHdrLen", CmnHdrLen)
+	}
+
+	switch s.PathType {
+	case PathTypeEmpty:
+		if _, ok := s.Path.(empty.Path); ok {
+			break
+		}
+		s.Path = empty.Path{}
+		if pathLen != 0 {
+			return serrors.New("invalid header, non-empty empty path", "hdrBytes", hdrBytes,
+				"addrHdrLen", addrHdrLen, "CmdHdrLen", CmnHdrLen, "pathLen", pathLen)
+		}
+	case PathTypeSCION:
+		// Only allocate a SCION path if necessary. This reduces memory allocation and GC overhead
+		// considerably (3x improvement for DecodeFromBytes performance)
+		if _, ok := s.Path.(*scion.Raw); ok {
+			break
+		}
+		s.Path = &scion.Raw{}
+	case PathTypeOneHop:
+		if _, ok := s.Path.(*onehop.Path); ok {
+			break
+		}
+		s.Path = &onehop.Path{}
+	case PathTypeEPIC, PathTypeCOLIBRI:
+		return serrors.New("unsupported path type", "type", s.PathType.String())
+	default:
+		return serrors.New("unknown path type", "type", s.PathType.String())
+	}
+
+	if minLen := offset + pathLen; len(data) < minLen {
+		df.SetTruncated()
+		return serrors.New("provided buffer is too small", "expected", minLen, "actual", len(data))
+	}
+	err = s.Path.DecodeFromBytes(data[offset : offset+pathLen])
+	if err != nil {
+		return err
+	}
+	s.Contents = data[:hdrBytes]
+	s.Payload = data[hdrBytes:]
+
+	return nil
+}
+*/
+
+
+// (joao) ignored for now, not used in this file
+/* func decodeSCION(data []byte, pb gopacket.PacketBuilder) error {
+	scn := &SCION{}
+	err := scn.DecodeFromBytes(data, pb)
+	if err != nil {
+		return err
+	}
+	pb.AddLayer(scn)
+	pb.SetNetworkLayer(scn)
+	return pb.NextDecoder(scionNextLayerType(scn.NextHdr))
+}
+*/
 
 // (joao) global variables still not supported
-func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType // {
-//	switch t {
-//	case common.L4UDP:
-//		return LayerTypeSCIONUDP
-//	case common.L4SCMP:
-//		return LayerTypeSCMP
-//	case common.L4BFD:
-//		return layers.LayerTypeBFD
-//	case common.HopByHopClass:
-//		return LayerTypeHopByHopExtn
-//	case common.End2EndClass:
-//		return LayerTypeEndToEndExtn
-//	default:
-//		return gopacket.LayerTypePayload
-//	}
-//}
+func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
+	switch t {
+	case common.L4UDP:
+		// return LayerTypeSCIONUDP
+		return LayerTypeSCIONUDP()
+	case common.L4SCMP:
+		// return LayerTypeSCMP
+		return LayerTypeSCMP()
+	case common.L4BFD:
+		// return layers.LayerTypeBFD
+		return layers.LayerTypeBFD()
+	case common.HopByHopClass:
+		// return LayerTypeHopByHopExtn
+		return LayerTypeHopByHopExtn()
+	case common.End2EndClass:
+		// return LayerTypeEndToEndExtn
+		return LayerTypeEndToEndExtn()
+	default:
+		// return gopacket.LayerTypePayload
+		return gopacket.LayerTypePayload()
+	}
+}
 
+// (joao) The following predicate and ghost function would not be necessary
+//        if Gobra had support for magic wands 
+pred (s *SCION) ReadDstAddr(addr net.Addr)
+
+ghost
+requires acc(s.MemSCION(), 1/200) && acc(addr.mem(), 1/200)
+requires s.ReadDstAddr(addr)
+ensures acc(s.MemSCION(), 1/100)
+func (s *SCION) AddReadDstAddr(addr net.Addr)
+
+// (joao) Verified
 // DstAddr parses the destination address into a net.Addr. The returned net.Addr references data
 // from the underlaying layer data. Changing the net.Addr object might lead to inconsistent layer
 // information and thus should be treated read-only. Instead, SetDstAddr should be used to update
 // the destination address.
-/*
-requires p > 0
-requires acc(InvariantSCION(s), p)
-ensures acc(InvariantSCION(s), p)
-//(joao) commented to save CI time
-func (s *SCION) DstAddr(ghost p perm) (net.Addr, error) {
-	unfold acc(InvariantSCION(s), p)
+requires acc(s.MemSCION(), 1/200)
+ensures resErr == nil ==> acc(resAddr.mem(), 1/200) && s.ReadDstAddr(resAddr)
+func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
+	unfold acc(s.MemSCION(), 1/200)
 	// (joao) this call used to be part of the return statement
-	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr, p)
-	fold acc(InvariantSCION(s), p)
+	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
+	assume err == nil ==> s.ReadDstAddr(res)
 	return res, err
-}*/
+}
 
+// (joao) The following predicate and ghost function would not be necessary
+//        if Gobra had support for magic wands 
+pred (s *SCION) ReadSrcAddr(addr net.Addr)
+
+ghost
+requires acc(s.MemSCION(), 1/200) && acc(addr.mem(), 1/200)
+requires s.ReadSrcAddr(addr)
+ensures acc(s.MemSCION(), 1/100)
+func (s *SCION) AddReadSrcAddr(addr net.Addr)
+
+// (joao) Verified
 // SrcAddr parses the source address into a net.Addr. The returned net.Addr references data from the
 // underlaying layer data. Changing the net.Addr object might lead to inconsistent layer information
 // and thus should be treated read-only. Instead, SetDstAddr should be used to update the source
 // address.
-/*
-requires p > 0
-requires acc(InvariantSCION(s), p)
-ensures acc(InvariantSCION(s), p)
-//(joao) commented to save CI time
-func (s *SCION) SrcAddr(ghost p perm) (net.Addr, error) {
-	unfold acc(InvariantSCION(s), p)
+requires acc(s.MemSCION(), 1/200)
+ensures resErr == nil ==> acc(resAddr.mem(), 1/200) && s.ReadSrcAddr(resAddr)
+func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
+	unfold acc(s.MemSCION(), 1/200)
 	// (joao) this call used to be part of the return statement
-	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr, p)
-	fold acc(InvariantSCION(s), p)
+	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr)
+	assume err == nil ==> s.ReadSrcAddr(res)
 	return res, err
 }
 */
 
+// (joao) Verified
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
 // SetDstAddr takes ownership of dst and callers should not write to it after calling SetDstAddr.
 // Changes to dst might leave the layer in an inconsistent state.
-/*
-requires InvariantSCION(s) && dst.mem()
-ensures InvariantSCION(s)
-//(joao) commented to save CI time
+requires s.MemSCION() && dst.mem()
+ensures ret == nil ==> s.MemSCION()
 func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
-	unfold InvariantSCION(s)
+	unfold s.MemSCION()
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
-	fold InvariantSCION(s)
+	ghost if err == nil {
+		assert validDstAddr(s) && len(s.RawDstAddr) >= minAddrLen(s.DstAddrLen)
+		assert (s.RawSrcAddr != nil ==> validSrcAddr(s))
+		assert verifyutils.BytesAcc(s.RawSrcAddr) 
+		assert verifyutils.BytesAcc(s.RawDstAddr) 
+		fold s.MemSCION()
+	}
 	return err
 }
 */
@@ -583,24 +839,38 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 // SetSrcAddr sets the source address and updates the DstAddrLen/Type fields accordingly.
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
 // Changes to src might leave the layer in an inconsistent state.
-/*
-requires InvariantSCION(s) && src.mem()
-ensures InvariantSCION(s)
-//(joao) commented to save CI time
+// (joao) Verified
+requires s.MemSCION() && src.mem()
+ensures ret == nil ==> s.MemSCION()
 func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	var err error
+	unfold s.MemSCION()
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)
+	ghost if err == nil {
+		assert validSrcAddr(s) && len(s.RawSrcAddr) >= minAddrLen(s.SrcAddrLen)
+		assert (s.RawDstAddr != nil ==> validDstAddr(s))
+		assert verifyutils.BytesAcc(s.RawSrcAddr) 
+		assert verifyutils.BytesAcc(s.RawDstAddr) 
+		fold s.MemSCION()
+	}
 	return err
 }
 */
 
+// (joao) Assumed
+// (joao) requires implementation proof that IPAddr implements Addr to verify the body
 /*
-requires p > 0
-requires lengthToAddrLen(len(raw)) == addrLen
-requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
-ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], p)
-// (joao) commented to save CI time
-func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (net.Addr, error) {
+requires addrLen == AddrLen4  ==> (addrType == T4Ip || addrType == T4Svc)
+requires addrLen == AddrLen16 ==> addrType == T16Ip
+*/
+requires addrLen == AddrLen4 ==> len(raw) >= 4
+requires addrLen == AddrLen16 ==> len(raw) >= 16
+requires acc(verifyutils.BytesAcc(raw), 1/200)
+ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
+ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
+ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
+ensures resErr == nil ==> acc(resAddr.mem(), 1/200)
+func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) /* {
 	switch addrLen {
 	case AddrLen4:
 		switch addrType {
@@ -617,85 +887,150 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte, ghost p perm) (ne
 	}
 	return nil, serrors.New("unsupported address type/length combination",
 		"type", addrType, "len", addrLen)
-}*/
-
-/*
-requires hostAddr.mem()
-ensures err == nil ==> validAddrLen(addrLen)
-ensures err == nil ==> lengthToAddrLen(len(s)) == addrLen
-ensures err == nil ==> forall i int :: 0 <= i && i < len(s) ==> acc(&s[i])
-ensures err != nil ==> addrLen == 0 && addrType == 0 && s == nil
-func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) // {
-//	switch a := hostAddr.(type) {
-//	case *net.IPAddr:
-//		if ip := a.IP.To4(); ip != nil {
-//			return AddrLen4, T4Ip, ip, nil
-//		}
-//		return AddrLen16, T16Ip, a.IP, nil
-//	case addr.HostSVC:
-//		return AddrLen4, T4Svc, a.PackWithPad(2), nil
-//	}
-// (joao) node not in tree: Network
-//	return 0, 0, nil, serrors.New("unsupported address", "addr", hostAddr)
-//}
+}
 */
 
+// (joao) Assumed
+// (joao) requires implementation proof that IPAddr implements Addr to verify the body
+requires hostAddr.mem()
+ensures verifyutils.BytesAcc(s)
+// (joao) the LHS of this implication is necessary, because AddrLen4 is 0 and 0 is the value returned for addrLen
+//        in case of error
+ensures (err == nil && addrLen == AddrLen4)  ==> (addrType == T4Svc || addrType == T4Ip)
+ensures (err == nil && addrLen == AddrLen16) ==> addrType == T16Ip
+// (joao) This post-condition may require additional-checks to hold 
+ensures err == nil ==> validAddrLen(addrLen) && len(s) >= minAddrLen(addrLen)
+ensures err != nil ==> addrLen == 0 && addrType == 0 && s == nil
+func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) /* {
+	switch a := hostAddr.(type) {
+	case *net.IPAddr:
+		if ip := a.IP.To4(); ip != nil {
+			return AddrLen4, T4Ip, ip, nil
+		}
+		return AddrLen16, T16Ip, a.IP, nil
+	case addr.HostSVC:
+		return AddrLen4, T4Svc, a.PackWithPad(2), nil
+	}
+	return 0, 0, nil, serrors.New("unsupported address", "addr", hostAddr)
+}
+*/
+
+// (joao) Assumed
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
-requires acc(InvariantSCION(s), _)
-ensures unfolding acc(InvariantSCION(s), _) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+requires acc(s.MemSCION(), _)
+ensures unfolding acc(s.MemSCION(), _) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 // (joao) if the body of the function is uncommented, this post-condition will not verify because Gobra does not
 //        take into account that uint cannot be negative.
 ensures res >= 2*addr.IABytes
-ensures unfolding acc(InvariantSCION(s), _) in addrBytes(s.DstAddrLen) >= 0
-ensures unfolding acc(InvariantSCION(s), _) in addrBytes(s.SrcAddrLen) >= 0
-pure func (s *SCION) AddrHdrLen() (res int) // {
-//	return unfolding InvariantSCION(s) in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
-//}
+ensures unfolding acc(s.MemSCION(), _) in addrBytes(s.DstAddrLen) >= 0
+ensures unfolding acc(s.MemSCION(), _) in addrBytes(s.SrcAddrLen) >= 0
+pure func (s *SCION) AddrHdrLen() (res int) /* {
+	return unfolding s.MemSCION() in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
+}*/
 
+// (joao) Verified
 // SerializeAddrHdr serializes destination and source ISD-AS-Host address triples into the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
-// (joao) no support for the copy function
-/*
-requires p > 0
-requires acc(InvariantSCION(s), p)
-// ensures InvariantSCION(s)
-// (joao) commented to save CI time
-func (s *SCION) SerializeAddrHdr(buf []byte, ghost p perm) error {
+preserves acc(s.MemSCION(), 1/100)
+preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+ensures len(buf) >= s.AddrHdrLen() ==> err == nil
+ensures len(buf) < s.AddrHdrLen()  ==> err != nil
+func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(buf))
 	}
-	unfold InvariantSCION(s)
-	dstAddrBytes := addrBytes(s.DstAddrLen)
-	srcAddrBytes := addrBytes(s.SrcAddrLen)
+	// (joao) rewrote the following
+	// dstAddrBytes := addrBytes(s.DstAddrLen)
+	// srcAddrBytes := addrBytes(s.SrcAddrLen)
+	dstAddrBytes := addrBytes(s.getDstAddrLen())
+	srcAddrBytes := addrBytes(s.getSrcAddrLen())
 	offset := 0
-	s.DstIA.Write(buf[offset:])
+	assert len(buf) == len(buf[offset:])
+	assert forall i int :: 0 <= i && i < len(buf) ==> &buf[i] == &(buf[offset:][i])
+	// (joao) rewrote the following
+	// s.DstIA.Write(buf[offset:])
+	(s.getDstIA()).Write(buf[offset:])
 	offset += addr.IABytes
-	s.SrcIA.Write(buf[offset:])
+	assert len(buf) == len(buf[offset:]) + offset
+	assert forall i int :: 0 <= i && i < len(buf[offset:]) ==> &buf[i + offset] == &(buf[offset:][i])
+	// (joao) rewrote the following
+	// s.SrcIA.Write(buf[offset:])
+	(s.getSrcIA()).Write(buf[offset:])
 	offset += addr.IABytes
-//	copy(buf[offset:offset+dstAddrBytes], s.RawDstAddr)
-//	offset += dstAddrBytes
-//	copy(buf[offset:offset+srcAddrBytes], s.RawSrcAddr)
-	//fold InvariantSCION(s)
+	assert offset <= len(buf)
+	assert offset + dstAddrBytes <= len(buf)
+	assert forall i int :: 0 <= i && i < len(buf[offset:offset+dstAddrBytes]) ==> &buf[i + offset] == &(buf[offset:offset+dstAddrBytes][i])
+	// (joao) Outlined call to copy
+	// copy(buf[offset:offset+dstAddrBytes], s.RawDstAddr)
+	copyRawDstAddr(s, buf[offset:offset+dstAddrBytes])
+	offset += dstAddrBytes
+	assert offset <= len(buf)
+	assert offset + srcAddrBytes <= len(buf)
+	assert forall i int :: 0 <= i && i < len(buf[offset:offset+srcAddrBytes]) ==> &buf[i + offset] == &(buf[offset:offset+srcAddrBytes][i])
+	// (joao) Outlined call to copy
+	// copy(buf[offset:offset+srcAddrBytes], s.RawSrcAddr)
+	copyRawSrcAddr(s, buf[offset:offset+srcAddrBytes])
 	return nil
 }*/
 
-// (joao) Unverified
+// (joao) Assumed
+// (joao) function not present in the original code
+preserves acc(s.MemSCION(), 1/1000)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func copyRawDstAddr(s *SCION, b []byte) /* {
+	// (joao) without this assumption, verification does not terminate
+	assume false
+	unfold acc(s.MemSCION(), 1/1000)
+	unfold acc(verifyutils.BytesAcc(s.RawDstAddr), 1/10000)
+	verifyutils.OutlineMemorySafeCopy(b, s.RawDstAddr)
+	assume false
+	fold acc(verifyutils.BytesAcc(s.RawDstAddr), 1/10000)
+	fold acc(s.MemSCION(), 1/1000)
+}
+*/
+
+// (joao) Assumed
+// (joao) function not present in the original code
+preserves acc(s.MemSCION(), 1/1000)
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func copyRawSrcAddr(s *SCION, b []byte) /* {
+	// (joao) without this assumption, verification does not terminate
+	assume false
+	unfold acc(s.MemSCION(), 1/1000)
+	unfold acc(verifyutils.BytesAcc(s.RawSrcAddr), 1/10000)
+	verifyutils.OutlineMemorySafeCopy(b, s.RawSrcAddr)
+	fold acc(verifyutils.BytesAcc(s.RawSrcAddr), 1/10000)
+	fold acc(s.MemSCION(), 1/1000)
+}
+*/
+
+// (joao) Assumed for now
 // DecodeAddrHdr decodes the destination and source ISD-AS-Host address triples from the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
 // layer, otherwise the results of this method are undefined.
-requires InvariantSCION(s) // (joao) Maybe the precondition can be weaker: acc(s)?
+requires acc(s) && validAddrLen(s.SrcAddrLen) && validAddrLen(s.DstAddrLen)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-// ensures  InvariantSCION(s)
-func (s *SCION) DecodeAddrHdr(data []byte) (res error) {
-	if len(data) < s.AddrHdrLen() {
-		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
+ensures  acc(s) && validAddrLen(s.SrcAddrLen) && validAddrLen(s.DstAddrLen)
+// (joao) uncommenting the following post-condition increases verification time from ~4min to ~26
+// ensures  res == nil ==> (verifyutils.BytesAcc(s.RawSrcAddr) && verifyutils.BytesAcc(s.RawDstAddr) && validSrcAddr(s) && validDstAddr(s))
+func (s *SCION) DecodeAddrHdr(data []byte) (res error) /* {
+	assert addrBytes(s.DstAddrLen) >= 0
+	assert addrBytes(s.SrcAddrLen) >= 0
+	// (joao) inline calls to s.AddrHdrLen due to missing s.MemSCION() permission
+	// if len(data) < s.AddrHdrLen() {
+	//	return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
+	//		"actual", len(data))
+	//}
+	if len(data) < 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen) {
+		return serrors.New("provided buffer is too small", "expected", 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen),
 			"actual", len(data))
 	}
+	assume false
 	offset := 0
-	unfold InvariantSCION(s)
+	unfold s.MemSCION()
 	assert len(data[offset:]) == len(data)
 	assert forall i int :: 0 <= i && i < len(data[offset:]) ==> &(data[offset:])[i] == &data[offset + i]
 	s.DstIA = addr.IAFromRaw(data[offset:])
@@ -715,154 +1050,155 @@ func (s *SCION) DecodeAddrHdr(data []byte) (res error) {
 	assert len(data[offset:]) == len(data) - offset
 	assert forall i int :: 0 <= i && i < len(data[offset:]) ==> &(data[offset:])[i] == &data[offset + i]
 	s.RawSrcAddr = data[offset : offset+srcAddrBytes]
-	/*
-	acc(s) &&
-	(s.RawSrcAddr != nil ==> (validAddrLen(s.SrcAddrLen) && lengthToAddrLen(len(s.RawSrcAddr)) == s.SrcAddrLen)) &&
-	(forall i int :: 0 <= i && i < len(s.RawSrcAddr) ==> acc(&(s.RawSrcAddr)[i])) &&
-	(s.RawDstAddr != nil ==> (validAddrLen(s.DstAddrLen) && lengthToAddrLen(len(s.RawDstAddr)) == s.DstAddrLen)) &&
-	(forall i int :: 0 <= i && i < len(s.RawDstAddr) ==> acc(&(s.RawDstAddr)[i])) &&
-	*/
-
-//	// fold InvariantSCION(s)
-//	return nil
+	return nil
 }
+*/
 
-// (joao) Verified but commented for performance reasons
+// (joao) Verified
 // computeChecksum computes the checksum with the SCION pseudo header.
-preserves s != nil ==> acc(InvariantSCION(s), 1/100)
+preserves s != nil ==> acc(s.MemSCION(), 1/100)
 preserves forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/10000)
 ensures retErr != nil ==> ret == 0
 ensures s == nil ==> retErr != nil
 ensures s != nil && s.getLenRawSrcAddr() > 0 && s.getLenRawDstAddr() > 0 ==> retErr == nil
-func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8) (ret uint16, retErr error) // {
-//	if s == nil {
-//		return 0, serrors.New("SCION header missing")
-//	}
-//	csum, err := s.pseudoHeaderChecksum(len(upperLayer), protocol)
-//	if err != nil {
-//		return 0, err
-//	}
-//	csum = s.upperLayerChecksum(upperLayer, csum)
-//	folded := s.foldChecksum(csum)
-//	return folded, nil
-//}
+func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8) (ret uint16, retErr error) {
+	if s == nil {
+		return 0, serrors.New("SCION header missing")
+	}
+	csum, err := s.pseudoHeaderChecksum(len(upperLayer), protocol)
+	if err != nil {
+		return 0, err
+	}
+	csum = s.upperLayerChecksum(upperLayer, csum)
+	folded := s.foldChecksum(csum)
+	return folded, nil
+}
 
-// (joao) Verified but commented for performance reasons
-requires acc(InvariantSCION(s), 1/100)
-ensures acc(InvariantSCION(s), 1/100)
+// (joao) Verified
+requires acc(s.MemSCION(), 1/100)
+ensures acc(s.MemSCION(), 1/100)
 ensures s.getLenRawSrcAddr() == 0 ==> resErr != nil
 ensures s.getLenRawDstAddr() == 0 ==> resErr != nil
 ensures s.getLenRawSrcAddr() > 0 && s.getLenRawDstAddr() > 0 ==> resErr == nil
-func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32, resErr error) // {
-//	// (joao) len(s.RawDstAddr) replaced by s.getLenRawDstAddr() to avoid unfoldings
-//	// if len(s.RawDstAddr) == 0 {
-//	if s.getLenRawDstAddr() == 0 {
-//		return 0, serrors.New("destination address missing")
-//	}
-//	// (joao) len(s.RawSrcAddr) replaced by s.getLenRawSrcAddr() to avoid unfoldings
-//	// if len(s.RawSrcAddr) == 0 {
-//	if s.getLenRawSrcAddr() == 0 {
-//		return 0, serrors.New("source address missing")
-//	}
-//	var csum uint32
-//	var srcIA@, dstIA@ [8]byte
-//
-//	// (joao) outlining this section causes Gobra to crash
-//	// s.SrcIA.Write(srcIA[:])
-//	// s.DstIA.Write(dstIA[:])
-//	// (joao) rewrote as:
-//	srcIASlice := srcIA[:]
-//	dstIASlice := dstIA[:]
-//	assert len(srcIASlice) == 8
-//	assert forall i int :: 0 <= i && i < 8 ==> &(srcIASlice)[i] == &srcIA[i]
-//	assert len(dstIASlice) == 8
-//	assert forall i int :: 0 <= i && i < 8 ==> &(dstIASlice)[i] == &dstIA[i]
-//	s.pseudoHeaderChecksumOutlineBlock1(srcIASlice, dstIASlice)
-//	assert forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
-//	assert forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
-//
-//	invariant 0 <= i && i <= 8
-//	invariant i % 2 == 0
-//	invariant forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
-//	invariant forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
-//	for i := 0; i < 8; i += 2 {
-//		csum += uint32(srcIA[i]) << 8
-//		csum += uint32(srcIA[i+1])
-//		csum += uint32(dstIA[i]) << 8
-//		csum += uint32(dstIA[i+1])
-//	}
-//
-//	// Address length is guaranteed to be a multiple of 2 by the protocol.
-//	invariant acc(InvariantSCION(s), 1/200)
-//	invariant s.getLenRawSrcAddr() % 2 == 0
-//	invariant i % 2 == 0
-//	invariant 0 <= i && i <= s.getLenRawSrcAddr()
-//	// (joao) len(s.RawSrcAddr) replaced by s.getLenRawSrcAddr() to avoid unfoldings
-//	// for i := 0; i < len(s.RawSrcAddr); i += 2 {
-//	for i := 0; i < s.getLenRawSrcAddr(); i += 2 {
-//		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
-//		csum += uint32(unfolding acc(InvariantSCION(s), 1/400) in (s.RawSrcAddr)[i]) << 8
-//		csum += uint32(unfolding acc(InvariantSCION(s), 1/400) in (s.RawSrcAddr)[i+1])
-//	}
-//
-//	invariant acc(InvariantSCION(s), 1/200)
-//	invariant s.getLenRawDstAddr() % 2 == 0
-//	invariant i % 2 == 0
-//	invariant 0 <= i && i <= s.getLenRawDstAddr()
-//	// (joao) len(s.RawDstAddr) replaced by s.getLenRawSrcAddr() to avoid unfoldings
-//	// for i := 0; i < len(s.RawDstAddr); i += 2 {
-//	for i := 0; i < s.getLenRawDstAddr(); i += 2 {
-//		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
-//		csum += uint32(unfolding acc(InvariantSCION(s), 1/400) in (s.RawDstAddr)[i]) << 8
-//		csum += uint32(unfolding acc(InvariantSCION(s), 1/400) in (s.RawDstAddr)[i+1])
-//	}
-//	l := uint32(length)
-//	csum += (l >> 16) + (l & 0xffff)
-//	csum += uint32(protocol)
-//	return csum, nil
-//}
+func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32, resErr error) {
+	// (joao) len(s.RawDstAddr) replaced by s.getLenRawDstAddr() to avoid unfoldings
+	// if len(s.RawDstAddr) == 0 {
+	if s.getLenRawDstAddr() == 0 {
+		return 0, serrors.New("destination address missing")
+	}
+	// (joao) len(s.RawSrcAddr) replaced by s.getLenRawSrcAddr() to avoid unfoldings
+	// if len(s.RawSrcAddr) == 0 {
+	if s.getLenRawSrcAddr() == 0 {
+		return 0, serrors.New("source address missing")
+	}
+	var csum uint32
+	var srcIA@, dstIA@ [8]byte
 
-// (joao) Verified but commented for performance reasons
+	// (joao) outlining this section causes Gobra to crash
+	// s.SrcIA.Write(srcIA[:])
+	// s.DstIA.Write(dstIA[:])
+	// (joao) rewrote as:
+	srcIASlice := srcIA[:]
+	dstIASlice := dstIA[:]
+	assert len(srcIASlice) == 8
+	assert forall i int :: 0 <= i && i < 8 ==> &(srcIASlice)[i] == &srcIA[i]
+	assert len(dstIASlice) == 8
+	assert forall i int :: 0 <= i && i < 8 ==> &(dstIASlice)[i] == &dstIA[i]
+	s.pseudoHeaderChecksumOutlineBlock1(srcIASlice, dstIASlice)
+	assert forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
+	assert forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
+
+	invariant 0 <= i && i <= 8
+	invariant i % 2 == 0
+	invariant forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
+	invariant forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
+	for i := 0; i < 8; i += 2 {
+		csum += uint32(srcIA[i]) << 8
+		csum += uint32(srcIA[i+1])
+		csum += uint32(dstIA[i]) << 8
+		csum += uint32(dstIA[i+1])
+	}
+
+	// Address length is guaranteed to be a multiple of 2 by the protocol.
+	invariant acc(s.MemSCION(), 1/200)
+	invariant s.getLenRawSrcAddr() % 2 == 0
+	invariant i % 2 == 0
+	invariant 0 <= i && i <= s.getLenRawSrcAddr()
+	// (joao) len(s.RawSrcAddr) replaced by s.getLenRawSrcAddr() to avoid unfoldings
+	// for i := 0; i < len(s.RawSrcAddr); i += 2 {
+	for i := 0; i < s.getLenRawSrcAddr(); i += 2 {
+		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
+		// (joao) original:
+		// csum += uint32(s.RawSrcAddr[i]) << 8
+		// csum += uint32(s.RawSrcAddr[i+1])
+		// (joao) the following rewrite used to work before grouping permissions to s.RawSrcAddr in an instance of BytesAcc:
+		// csum += uint32(unfolding acc(s.MemSCION(), 1/400) in (s.RawSrcAddr)[i]) << 8
+		// csum += uint32(unfolding acc(s.MemSCION(), 1/400) in (s.RawSrcAddr)[i+1])
+		csum += uint32(s.getRawSrcAddrIdx(i)) << 8
+		csum += uint32(s.getRawSrcAddrIdx(i+1))
+	}
+
+	invariant acc(s.MemSCION(), 1/200)
+	invariant s.getLenRawDstAddr() % 2 == 0
+	invariant i % 2 == 0
+	invariant 0 <= i && i <= s.getLenRawDstAddr()
+	// (joao) len(s.RawDstAddr) replaced by s.getLenRawSrcAddr() to avoid unfoldings
+	// for i := 0; i < len(s.RawDstAddr); i += 2 {
+	for i := 0; i < s.getLenRawDstAddr(); i += 2 {
+		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
+		// (joao) rewrite 1:
+		// csum += uint32(unfolding acc(s.MemSCION(), 1/400) in (s.RawDstAddr)[i]) << 8
+		// csum += uint32(unfolding acc(s.MemSCION(), 1/400) in (s.RawDstAddr)[i+1])
+		csum += uint32(s.getRawDstAddrIdx(i)) << 8
+		csum += uint32(s.getRawDstAddrIdx(i+1))
+	}
+	l := uint32(length)
+	csum += (l >> 16) + (l & 0xffff)
+	csum += uint32(protocol)
+	return csum, nil
+}
+
+// (joao) Verified
 requires len(srcIA) == 8 && len(dstIA) == 8
-requires acc(InvariantSCION(s), 1/200)
+requires acc(s.MemSCION(), 1/200)
 requires forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
 requires forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
-ensures  acc(InvariantSCION(s), 1/200)
+ensures  acc(s.MemSCION(), 1/200)
 ensures  forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
 ensures  forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
-func (s *SCION) pseudoHeaderChecksumOutlineBlock1(srcIA []byte, dstIA []byte) // {
-//	// (joao) Original code, omitted to avoid unfolding
-//	// s.SrcIA.Write(srcIA)
-//	(s.getSrcIA()).Write(srcIA)
-//	// (joao) Original code, omitted to avoid unfolding
-//	// s.DstIA.Write(dstIA)
-//	(s.getDstIA()).Write(srcIA)
-//}
+func (s *SCION) pseudoHeaderChecksumOutlineBlock1(srcIA []byte, dstIA []byte) {
+	// (joao) Original code, omitted to avoid unfolding
+	// s.SrcIA.Write(srcIA)
+	(s.getSrcIA()).Write(srcIA)
+	// (joao) Original code, omitted to avoid unfolding
+	// s.DstIA.Write(dstIA)
+	(s.getDstIA()).Write(srcIA)
+}
 
-// (joao) Verified but commented for performance reasons
+// (joao) Verified
 requires forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/10000)
 ensures forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/10000)
-func (s *SCION) upperLayerChecksum(upperLayer []byte, csum uint32) uint32 // {
-//	// Compute safe boundary to ensure we do not access out of bounds.
-//	// Odd lengths are handled at the end.
-//	safeBoundary := len(upperLayer) - 1
-//	invariant safeBoundary == len(upperLayer) - 1
-//	invariant 0 <= i && i < safeBoundary + 2 && i % 2 == 0
-//	invariant forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/20000)
-//	for i := 0; i < safeBoundary; i += 2 {
-//		csum += uint32(upperLayer[i]) << 8
-//		csum += uint32(upperLayer[i+1])
-//	}
-//	if len(upperLayer)%2 == 1 {
-//		csum += uint32(upperLayer[safeBoundary]) << 8
-//	}
-//	return csum
-//}
+func (s *SCION) upperLayerChecksum(upperLayer []byte, csum uint32) uint32 {
+	// Compute safe boundary to ensure we do not access out of bounds.
+	// Odd lengths are handled at the end.
+	safeBoundary := len(upperLayer) - 1
+	invariant safeBoundary == len(upperLayer) - 1
+	invariant 0 <= i && i < safeBoundary + 2 && i % 2 == 0
+	invariant forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/20000)
+	for i := 0; i < safeBoundary; i += 2 {
+		csum += uint32(upperLayer[i]) << 8
+		csum += uint32(upperLayer[i+1])
+	}
+	if len(upperLayer)%2 == 1 {
+		csum += uint32(upperLayer[safeBoundary]) << 8
+	}
+	return csum
+}
 
-// (joao) Verified but commented for performance reasons
-func (s *SCION) foldChecksum(csum uint32) uint16 // {
-//	for csum > 0xffff {
-//		csum = (csum >> 16) + (csum & 0xffff)
-//	}
-//	return ^uint16(csum)
-//}
+// (joao) Verified
+func (s *SCION) foldChecksum(csum uint32) uint16 {
+	for csum > 0xffff {
+		csum = (csum >> 16) + (csum & 0xffff)
+	}
+	return ^uint16(csum)
+}
