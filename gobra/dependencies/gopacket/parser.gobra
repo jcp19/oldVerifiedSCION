@@ -1,5 +1,7 @@
 package gopacket
 
+import "gobra/verifyutils"
+
 type DecodingLayer interface {
 	pred Mem()
 
@@ -33,10 +35,12 @@ ensures forall i int :: 0 <= i && i < len(decoders) ==> acc(&decoders[i])
 ensures acc(d)
 func NewDecodingLayerParser(first LayerType, decoders ...DecodingLayer) (d *DecodingLayerParser)
 
-requires bytesAcc(data)
-requires acc(decoded) && decodedAcc(*decoded)
-ensures bytesAcc(data)
-ensures acc(decoded) && decodedAcc(*decoded)
+requires acc(l)
+requires verifyutils.BytesAcc(data)
+requires acc(decoded, 1/1000) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
+ensures  acc(l)
+ensures  verifyutils.BytesAcc(data)
+ensures  acc(decoded, 1/1000) && forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
 func (l *DecodingLayerParser) DecodeLayers(data []byte, decoded *[]LayerType) (err error)
 
 (UnsupportedLayerType) implements error {
