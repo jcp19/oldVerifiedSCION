@@ -18,7 +18,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: jogasser/VerifiedSCION
-          path: verifiedSCION
 
       - name: Verify all Gobra files
         uses: jogasser/gobra-action@main
