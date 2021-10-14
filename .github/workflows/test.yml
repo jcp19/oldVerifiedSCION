@@ -21,7 +21,7 @@ jobs:
           path: verifiedSCION
 
       - name: Verify all Gobra files
-        uses: jogasser/gobra-action
+        uses: jogasser/gobra-action@master
         with:
           imageVersion: verified-scion-preview-without-selective
           packageLocation: gobra
