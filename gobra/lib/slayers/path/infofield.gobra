@@ -100,9 +100,9 @@ func (inf *InfoField) SerializeTo(b []byte) error {
 // https://scion.docs.anapaya.net/en/latest/protocols/scion-header.html#hop-field-mac-computation
 requires acc(inf)
 requires len(hfMac) >= 2
-requires acc(&hfMac[0]) && acc(&hfMac[1]) 
+requires acc(&hfMac[0], 1/1000) && acc(&hfMac[1], 1/1000)
 ensures acc(inf)
-ensures acc(&hfMac[0]) && acc(&hfMac[1]) 
+ensures acc(&hfMac[0], 1/1000) && acc(&hfMac[1], 1/1000)
 func (inf *InfoField) UpdateSegID(hfMac []byte) {
 	inf.SegID = inf.SegID ^ binary.BigEndian.Uint16(hfMac[:2])
 }
