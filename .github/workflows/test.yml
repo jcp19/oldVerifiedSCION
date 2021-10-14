@@ -16,9 +16,7 @@ jobs:
     steps:
       - name: Checkout VerifiedSCION
         uses: actions/checkout@v2
-        with:
-          repository: jogasser/VerifiedSCION
-
+        
       - name: Verify all Gobra files
         uses: jogasser/gobra-action@main
         with:
