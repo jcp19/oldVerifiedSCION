@@ -658,6 +658,7 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	return nil
 }
 
+// (joao) Partially Verified
 // AddNextHopBFD adds the BFD session for the next hop address.
 // If the remote ifID belongs to an existing address, the existing
 // BFD session will be re-used.
@@ -665,54 +666,63 @@ requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg control.BFD,
-	sibling string) error /* {
+	sibling string) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	// defer d.mtx.Unlock()
 	if d.running {
+		// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 		// return modifyExisting
 		return modifyExisting()
 	}
 
 	if dst == nil {
+		// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 		// return emptyValue
 		return emptyValue()
 	}
 
-	// for k, v := range d.internalNextHops {
-	// 	if v.String() == dst.String() {
-	//		if c, ok := d.bfdSessions[k]; ok {
-	//			d.bfdSessions[ifID] = c
-	//			return nil
-	//		}
-	//	}
-	// }
-	// var m bfd.Metrics
-	// if d.Metrics != nil {
-	// 	labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
-	// 	m = bfd.Metrics{
-	// 		Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
-	// 			With(labels...),
-	// 		StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
-	// 			With(labels...),
-	// 		PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
-	// 			With(labels...),
-	// 		PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
-	// 			With(labels...),
-	// 	}
-	// }
-	// s := &bfdSend{
-	// 	conn:       d.internal,
-	// 	srcAddr:    src,
-	// 	dstAddr:    dst,
-	// 	srcIA:      d.localIA,
-	// 	dstIA:      d.localIA,
-	// 	ifID:       0,
-	// 	macFactory: d.macFactory,
-	// }
-	// return d.addBFDController(ifID, s, cfg, m)
+	assume false
+	// (joao) the following code is still not supported
+	/*
+	for k, v := range d.internalNextHops {
+		if v.String() == dst.String() {
+			if c, ok := d.bfdSessions[k]; ok {
+				d.bfdSessions[ifID] = c
+				return nil
+			}
+		}
+	}
+	var m bfd.Metrics
+	if d.Metrics != nil {
+		labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
+		m = bfd.Metrics{
+			Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
+				With(labels...),
+			StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
+				With(labels...),
+			PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
+				With(labels...),
+			PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
+				With(labels...),
+		}
+	}
+	s := &bfdSend{
+		conn:       d.internal,
+		srcAddr:    src,
+		dstAddr:    dst,
+		srcIA:      d.localIA,
+		dstIA:      d.localIA,
+		ifID:       0,
+		macFactory: d.macFactory,
+	}
+	return d.addBFDController(ifID, s, cfg, m)
+	*/
 }
-*/
 
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
@@ -727,32 +737,32 @@ func (d *DataPlane) Run() error /* {
 
 	// (joao) At this point, there used to be a closure definition, saved in a variable called "read"
 
-	// for k, v := range d.bfdSessions {
-	// 	go func(ifID uint16, c bfdSession) {
-	// 		defer log.HandlePanic()
-	// 		if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
-	// 			log.Error("BFD session failed to start", "ifID", ifID, "err", err)
-	// 		}
-	// 	}(k, v)
-	// }
-	// for ifID, v := range d.external {
-	// 	go func(i uint16, c BatchConn) {
-	// 		defer log.HandlePanic()
-	// 		read(i, c)
-	// 	}(ifID, v)
-	// }
-	// go func(c BatchConn) {
-	// 	defer log.HandlePanic()
-	// 	read(0, c)
-	// }(d.internal)
-	//
- 	// // (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
-	// //        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
-	// //        the lock invariant.
-	// d.mtx.Unlock()
-	// for d.running {
-	// 	time.Sleep(time.Second)
-	// }
+	for k, v := range d.bfdSessions {
+		go func(ifID uint16, c bfdSession) {
+			defer log.HandlePanic()
+			if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
+				log.Error("BFD session failed to start", "ifID", ifID, "err", err)
+			}
+		}(k, v)
+	}
+	for ifID, v := range d.external {
+		go func(i uint16, c BatchConn) {
+			defer log.HandlePanic()
+			read(i, c)
+		}(ifID, v)
+	}
+	go func(c BatchConn) {
+		defer log.HandlePanic()
+		read(0, c)
+	}(d.internal)
+	
+ 	// (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
+	//        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
+	//        the lock invariant.
+	d.mtx.Unlock()
+	for d.running {
+		time.Sleep(time.Second)
+	}
 	return nil
 }
 */
@@ -833,6 +843,8 @@ func RunReadClosure(ingressID uint16, rd BatchConn) /* {
 }
 */
 
+requires DataPlaneMutexInvariant(d)
+ensures  DataPlaneMutexInvariant(d)
 func (d *DataPlane) initMetrics() /* {
 	labels := interfaceToMetricLabels(0, d.localIA, d.neighborIAs)
 	d.Metrics.InputBytesTotal.With(labels).Add(0)
@@ -1068,13 +1080,34 @@ pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
 }
 
+requires acc(parser)
+requires verifyutils.BytesAcc(data)
+requires acc(decoded, 1/1000)
+requires forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
+requires len(*decoded) == 5
+func outlinePackSCMP1(parser *gopacket.DecodingLayerParser, data []byte, decoded *[]gopacket.LayerType, cause error) (processResult, error) {
+	if err := parser.DecodeLayers(data, decoded); err != nil {
+		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
+			assert len(*decoded) == 5
+			assert forall j int :: 0 <= j && j < len(*decoded) ==> acc(&(*decoded)[j])
+			return processResult{}, serrors.WrapStr("decoding packet", err)
+		}
+	}
+	assert len(*decoded) == 5
+	assert forall j int :: 0 <= j && j < len(*decoded) ==> acc(&(*decoded)[j])
+	// TODO: uncomment this
+	if (*decoded)[len(*decoded)-1] == slayers.LayerTypeSCMP() /*&& !scmpLayer.TypeCode.InfoMsg() */{
+		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
+	}
+}
+
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 // TODO: switch to scionPacketProcessorInvariant() eventually
 requires acc(p) && scmpH.Mem() && scmpP.Mem()
 // requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
 requires verifyutils.BytesAcc(p.origPacket)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	cause error) (processResult, error) /* {
+	cause error) (processResult, error) {
 
 	// parse everything to see if the original packet was an SCMP error.
 	var (
@@ -1098,7 +1131,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
 		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
 			assert len(decoded) == 5
-			assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j], 1/2)
+			assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
 			return processResult{}, serrors.WrapStr("decoding packet", err)
 		}
 		assert len(decoded) == 5
@@ -1115,7 +1148,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	}
 
 	assume false
-
+/*
 	// the quoted packet is the packet in its current state
 	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
 		return processResult{}, serrors.WrapStr("update info field", err)
@@ -1156,8 +1189,8 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 		cause,
 	)
 	return processResult{OutPkt: rawSCMP}, err
-}
 */
+}
 
 ensures ok ==> s.Mem()
 func havocRaw() (s *scion.Raw, ok bool)

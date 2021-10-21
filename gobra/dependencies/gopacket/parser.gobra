@@ -42,10 +42,10 @@ requires forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
 ensures  acc(l)
 ensures  verifyutils.BytesAcc(data)
 ensures  acc(decoded, 1/1000)
-ensures  forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
 // ensures  old(*decoded) == *decoded
 ensures  old(len(*decoded)) == len(*decoded)
-ensures  forall i int :: 0 <= i && i < len(*decoded) ==> &(*decoded)[i] == old(&(*decoded)[i])
+// ensures  forall i int :: 0 <= i && i < len(*decoded) ==> &(*decoded)[i] == old(&(*decoded)[i])
+ensures  forall i int :: { (*decoded)[i] } 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
 func (l *DecodingLayerParser) DecodeLayers(data []byte, decoded *[]LayerType) (err error)
 
 (UnsupportedLayerType) implements error {
