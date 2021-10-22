@@ -2,8 +2,12 @@ package ipv4
 
 import (
 	"net"
-    "gobra/dependencies/x/net/internal"
+	"gobra/dependencies/x/net/internal/socket"
 )
+
+pred (p *PacketConn) Mem() {
+	acc(p)
+}
 
 // A PacketConn represents a packet network endpoint that uses the
 // IPv4 transport. It is used to control several IP-level socket
@@ -18,8 +22,8 @@ type PacketConn struct {
 
 // NewPacketConn returns a new PacketConn using c as its underlying
 // transport.
-preserves c.mem()
-ensures acc(p)
+requires c.mem()
+ensures p.Mem()
 func NewPacketConn(c net.PacketConn) (p *PacketConn) 
 // {
 // 	cc, _ := socket.NewConn(c.(net.Conn))
