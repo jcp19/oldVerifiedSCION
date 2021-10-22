@@ -35,14 +35,34 @@ import (
 	"gobra/lib/serrors"
 //	"github.com/scionproto/scion/go/lib/sockctrl"
 //	"github.com/scionproto/scion/go/lib/topology/underlay"
+
+//	add helper
+	"gobra/verifyutils"
+
 )
 
 pred MessagesAcc(m Messages) {
 	forall i int :: 0 <= i && i < len(m) ==> acc(&m[i])
 }
 
+// pred (m Messages) Mem() {
+// 	forall i int :: 0 <= i && i < len(m) ==> acc(&m[i]) && m[i].Mem()
+// }
+
 pred ReadMetasAcc(m []ReadMeta) {
 	forall i int :: 0 <= i && i < len(m) ==> acc(&m[i])
+}
+
+pred (conn *connUDPIPv4) Mem() {
+	acc(conn)
+}
+
+pred (r *ReadMeta) Mem() {
+	acc(&r.Src) && acc(&r.Local) && acc(&r.RcvOvfl) && acc(&r.Recvd) && acc(&r.ReadDelay)
+}
+
+pred (conn *connUDPBase) Mem() {
+	acc(&conn.conn) && acc(&conn.Listen) && acc(&conn.Remote) && acc(&conn.oob) && verifyutils.BytesAcc(conn.oob) && acc(&conn.closed) && acc(&conn.readMeta) && conn.readMeta.Mem()
 }
 
 // ReceiveBufferSize is the default size, in bytes, of receive buffers for
@@ -465,8 +485,8 @@ func (m *ReadMeta) reset() {
 
 // NewReadMessages allocates memory for reading IPv4 Linux network stack
 // messages.
-requires n > 0
-ensures acc(MessagesAcc(msgs))
+requires n >= 0
+ensures MessagesAcc(msgs)
 ensures len(msgs) == n
 func NewReadMessages(n int) (msgs Messages) 
 // {
@@ -481,7 +501,7 @@ func NewReadMessages(n int) (msgs Messages)
 
 // NewWriteMessages allocates memory for writing IPv4 Linux network stack
 // messages.
-requires n > 0
+requires n >= 0
 ensures acc(MessagesAcc(msgs))
 ensures len(msgs) == n
 func NewWriteMessages(n int) (msgs Messages)

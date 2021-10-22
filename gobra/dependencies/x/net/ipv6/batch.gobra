@@ -2,7 +2,7 @@ package ipv6
 
 import (
     "net"
-    "gobra/dependencies/x/net/internal"
+    "gobra/dependencies/x/net/internal/socket"
 )
 
 // A Message represents an IO message.
