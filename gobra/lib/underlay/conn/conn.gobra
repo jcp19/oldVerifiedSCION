@@ -26,6 +26,7 @@ import (
 //	"unsafe"
 
 //	"golang.org/x/net/ipv4"
+	"gobra/dependencies/x/net/ipv4"
 //	"golang.org/x/net/ipv6"
 
 //	"github.com/scionproto/scion/go/lib/common"
@@ -35,6 +36,14 @@ import (
 //	"github.com/scionproto/scion/go/lib/sockctrl"
 //	"github.com/scionproto/scion/go/lib/topology/underlay"
 )
+
+pred MessagesAcc(m Messages) {
+	forall i int :: 0 <= i && i < len(m) ==> acc(&m[i])
+}
+
+pred ReadMetasAcc(m []ReadMeta) {
+	forall i int :: 0 <= i && i < len(m) ==> acc(&m[i])
+}
 
 // ReceiveBufferSize is the default size, in bytes, of receive buffers for
 // opened sockets.
@@ -49,7 +58,7 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 
 // Messages is a list of ipX.Messages. It is necessary to hide the type alias
 // between ipv4.Message, ipv6.Message and socket.Message.
-// type Messages []ipv4.Message
+type Messages []ipv4.Message
 
 // Conn describes the API for an underlay socket with additional metadata on
 // reads.
@@ -106,41 +115,62 @@ func (c *Config) getReceiveBufferSize(ghost p perm) int {
 //}
 
 type connUDPIPv4 struct {
-//	connUDPBase
-//	pconn *ipv4.PacketConn
+	connUDPBase
+	pconn *ipv4.PacketConn
 }
 
-//func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (*connUDPIPv4, error) {
-//	cc := &connUDPIPv4{}
-//	if err := cc.initConnUDP("udp4", listen, remote, cfg); err != nil {
-//		return nil, err
-//	}
-//	cc.pconn = ipv4.NewPacketConn(cc.conn)
-//	return cc, nil
-//}
+requires acc(listen)
+requires acc(remote)
+requires acc(cfg)
+ensures acc(listen)
+ensures acc(remote)
+ensures acc(cfg)
+ensures err == nil ==> acc(conn) && conn != nil
+func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4, err error) 
+// {
+// 	cc := &connUDPIPv4{}
+// 	if err := cc.initConnUDP("udp4", listen, remote, cfg); err != nil {
+// 		return nil, err
+// 	}
+// 	cc.pconn = ipv4.NewPacketConn(cc.conn)
+// 	return cc, nil
+// }
 
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
-// func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (int, error) {
-//	for i := range metas {
-//		metas[i].reset()
-//	}
-//	n, err := c.pconn.ReadBatch(msgs, syscall.MSG_WAITFORONE)
-//	readTime := time.Now()
-//	for i := 0; i < n; i++ {
-//		msg := msgs[i]
-//		meta := &metas[i]
-//		if msg.NN > 0 {
-//			c.handleCmsg(msg.OOB[:msg.NN], meta, readTime)
-//		}
-//		meta.setSrc(c.Remote, msg.Addr.(*net.UDPAddr), underlay.UDPIPv4)
-//	}
-//	return n, err
-//}
+requires acc(c)
+requires MessagesAcc(msgs)
+requires ReadMetasAcc(metas)
+ensures acc(c)
+ensures MessagesAcc(msgs)
+ensures ReadMetasAcc(metas)
+ensures err == nil ==> n <= len(msgs) && n <= len(metas)
+func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error)
+// {
+// 	for i := range metas {
+// 		metas[i].reset()
+// 	}
+// 	n, err := c.pconn.ReadBatch(msgs, syscall.MSG_WAITFORONE)
+// 	readTime := time.Now()
+// 	for i := 0; i < n; i++ {
+// 		msg := msgs[i]
+// 		meta := &metas[i]
+// 		if msg.NN > 0 {
+// 			c.handleCmsg(msg.OOB[:msg.NN], meta, readTime)
+// 		}
+// 		meta.setSrc(c.Remote, msg.Addr.(*net.UDPAddr), underlay.UDPIPv4)
+// 	}
+// 	return n, err
+// }
 
-// func (c *connUDPIPv4) WriteBatch(msgs Messages) (int, error) {
-//	return c.pconn.WriteBatch(msgs, 0)
-//}
+requires acc(c)
+requires acc(MessagesAcc(msgs), 1/1000)
+ensures acc(c)
+ensures acc(MessagesAcc(msgs), 1/1000)
+func (c *connUDPIPv4) WriteBatch(msgs Messages) (n int, err error)
+// {
+// 	return c.pconn.WriteBatch(msgs, 0)
+// }
 
 // SetReadDeadline sets the read deadline associated with the endpoint.
 requires acc(c)
@@ -218,9 +248,9 @@ func (c *connUDPIPv6) SetDeadline(t time.Time) error // {
 //}
 
 type connUDPBase struct {
-//	conn     *net.UDPConn
-//	Listen   *net.UDPAddr
-//	Remote   *net.UDPAddr
+	conn     *net.UDPConn
+	Listen   *net.UDPAddr
+	Remote   *net.UDPAddr
 	oob      common.RawBytes
 	closed   bool
 	readMeta ReadMeta
@@ -307,6 +337,7 @@ func (c *connUDPBase) Read(b common.RawBytes) (int, rMeta *ReadMeta, error) // {
 //	}
 //	return n, &c.readMeta, err
 //}
+
 requires acc(c)
 requires forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
 requires acc(meta)
@@ -355,20 +386,33 @@ func (c *connUDPBase) Write(b common.RawBytes) (int, error) // {
 //	return c.conn.Write(b)
 //}
 
-//func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (int, error) // {
-//	if c.Remote != nil {
-//		return c.conn.Write(b)
-//	}
-//	return c.conn.WriteTo(b, dst)
-//}
+requires acc(c)
+requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+requires acc(dst)
+ensures acc(c)
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures acc(dst)
+func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (int, error)
+// {
+// 	if c.Remote != nil {
+// 		return c.conn.Write(b)
+// 	}
+// 	return c.conn.WriteTo(b, dst)
+// }
 
-//func (c *connUDPBase) LocalAddr() *net.UDPAddr {
-//	return c.Listen
-//}
+pure 
+requires acc(c, 1/1000)
+func (c *connUDPBase) LocalAddr() *net.UDPAddr 
+// {
+// 	return c.Listen
+// }
 
-//func (c *connUDPBase) RemoteAddr() *net.UDPAddr {
-//	return c.Remote
-//}
+pure 
+requires acc(c, 1/1000)
+func (c *connUDPBase) RemoteAddr() *net.UDPAddr 
+// {
+// 	return c.Remote
+// }
 
 requires acc(c)
 ensures acc(c)
@@ -421,24 +465,32 @@ func (m *ReadMeta) reset() {
 
 // NewReadMessages allocates memory for reading IPv4 Linux network stack
 // messages.
-// func NewReadMessages(n int) Messages {
-//	m := make(Messages, n)
-//	for i := range m {
-//		// Allocate a single-element, to avoid allocations when setting the buffer.
-//		m[i].Buffers = make([][]byte, 1)
-//		m[i].OOB = make(common.RawBytes, oobSize)
-//	}
-//	return m
-//}
+requires n > 0
+ensures acc(MessagesAcc(msgs))
+ensures len(msgs) == n
+func NewReadMessages(n int) (msgs Messages) 
+// {
+// 	m := make(Messages, n)
+// 	for i := range m {
+// 		// Allocate a single-element, to avoid allocations when setting the buffer.
+// 		m[i].Buffers = make([][]byte, 1)
+// 		m[i].OOB = make(common.RawBytes, oobSize)
+// 	}
+// 	return m
+// }
 
 // NewWriteMessages allocates memory for writing IPv4 Linux network stack
 // messages.
-// func NewWriteMessages(n int) Messages {
-//	m := make(Messages, n)
-//	for i := range m {
-//		// Allocate a single-element, to avoid allocations when setting the buffer.
-//		m[i].Buffers = make([][]byte, 1)
-//		m[i].Addr = &net.UDPAddr{}
-//	}
-//	return m
-//}
+requires n > 0
+ensures acc(MessagesAcc(msgs))
+ensures len(msgs) == n
+func NewWriteMessages(n int) (msgs Messages)
+// {
+// 	m := make(Messages, n)
+// 	for i := range m {
+// 		// Allocate a single-element, to avoid allocations when setting the buffer.
+// 		m[i].Buffers = make([][]byte, 1)
+// 		m[i].Addr = &net.UDPAddr{}
+// 	}
+// 	return m
+// }
