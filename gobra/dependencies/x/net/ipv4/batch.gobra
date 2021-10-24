@@ -5,10 +5,6 @@ import (
     "gobra/dependencies/x/net/internal/socket"
 )
 
-pred (m *Message) Mem() {
-    ((*socket.Message)(m)).Mem()
-}
-
 // A Message represents an IO message.
 //
 //	type Message struct {
