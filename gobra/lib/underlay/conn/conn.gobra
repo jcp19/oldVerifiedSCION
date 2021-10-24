@@ -88,16 +88,48 @@ type Messages []ipv4.Message
 // Conn describes the API for an underlay socket with additional metadata on
 // reads.
 type Conn interface {
-	Read(common.RawBytes) (int, *ReadMeta, error)
-//	ReadBatch(Messages, []ReadMeta) (int, error)
-	Write(common.RawBytes) (int, error)
-//	WriteTo(common.RawBytes, *net.UDPAddr) (int, error)
-//	WriteBatch(Messages) (int, error)
-//	LocalAddr() *net.UDPAddr
-//	RemoteAddr() *net.UDPAddr
+	pred Mem()
+
+	preserves Mem()
+	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	ensures r.Mem()
+	Read(b common.RawBytes) (n int, r *ReadMeta, err error)
+
+	preserves Mem()
+	preserves MessagesAcc(msgs)
+	preserves ReadMetasAcc(metas)
+	ensures err == nil ==> n <= len(msgs) && n <= len(metas)
+	ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error)
+
+	preserves Mem()
+	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	Write(b common.RawBytes) (n int, err error)
+
+	preserves Mem()
+	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	preserves dst.mem()
+	WriteTo(b common.RawBytes, dst *net.UDPAddr) (int, error)
+
+	preserves Mem()
+	preserves acc(MessagesAcc(msgs), 1/1000)
+	WriteBatch(msgs Messages) (int, error)
+
+	preserves Mem()
+	LocalAddr() *net.UDPAddr
+
+	preserves Mem()
+	RemoteAddr() *net.UDPAddr
+
+	preserves Mem()
 	SetReadDeadline(time.Time) error
+
+	preserves Mem()
 	SetWriteDeadline(time.Time) error
+
+	preserves Mem()
 	SetDeadline(time.Time) error
+
+	preserves Mem()
 	Close() error
 }
 
@@ -429,6 +461,7 @@ func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err e
 // 	return
 // }
 
+// (tlino) not sure about contracts
 pure 
 requires acc(c.Mem(), 1/1000)
 func (c *connUDPBase) LocalAddr() *net.UDPAddr {
