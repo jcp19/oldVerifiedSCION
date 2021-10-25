@@ -159,23 +159,22 @@ preserves listen.mem()
 preserves remote.mem()
 preserves cfg.Mem()
 ensures c.Mem()
-func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) 
-// {
-// 	if cfg == nil {
-// 		cfg = &Config{}
-// 	}
-// 	a := listen
-// 	if remote != nil {
-// 		a = remote
-// 	}
-// 	if listen == nil && remote == nil {
-// 		panic("either listen or remote must be set")
-// 	}
-// 	if a.IP.To4() != nil {
-// 		return newConnUDPIPv4(listen, remote, cfg)
-// 	}
-// 	return newConnUDPIPv6(listen, remote, cfg)
-// }
+func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) {
+	// if cfg == nil {
+	// 	cfg = &Config{}
+	// }
+	// a := listen
+	// if remote != nil {
+	// 	a = remote
+	// }
+	// if listen == nil && remote == nil {
+	// 	panic("either listen or remote must be set")
+	// }
+	// if a.IP.To4() != nil {
+	// 	return newConnUDPIPv4(listen, remote, cfg)
+	// }
+	return newConnUDPIPv6(listen, remote, cfg)
+}
 
 type connUDPIPv4 struct {
 	connUDPBase
