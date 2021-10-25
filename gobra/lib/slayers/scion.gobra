@@ -202,8 +202,6 @@ pred UninitializedRaw(x *scion.Raw) {
 	acc(&x.Base) && acc(&x.Raw)
 }
 
-/*
-// (joao) uncommenting out this implementation will make it verify in 1h instead of a few minutes
 (*scion.Raw) implements Path {
 
 	pred UninitializedMem := UninitializedRaw
@@ -230,7 +228,6 @@ pred UninitializedRaw(x *scion.Raw) {
 		fold UninitializedRaw(x)
 	}
 }
-*/
 
 // SCION is the header of a SCION packet.
 type SCION struct {
