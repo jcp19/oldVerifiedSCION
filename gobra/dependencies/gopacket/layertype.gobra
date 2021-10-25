@@ -16,3 +16,5 @@ requires c.Mem()
 ensures acc(bytesAcc(data), p/2)
 ensures c.Mem()
 func (t LayerType) Decode(data []byte, c PacketBuilder, ghost p perm) error
+
+const maxLayerType = 2000
