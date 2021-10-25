@@ -1,0 +1,35 @@
+package ipv6
+
+import (
+	"net"
+	"gobra/dependencies/x/net/internal/socket"
+)
+
+pred (p *PacketConn) Mem() {
+	acc(p)
+}
+
+// A PacketConn represents a packet network endpoint that uses IPv6
+// transport. It is used to control several IP-level socket options
+// including IPv6 header manipulation. It also provides datagram
+// based network I/O methods specific to the IPv6 and higher layer
+// protocols such as OSPF, GRE, and UDP.
+type PacketConn struct {
+	// genericOpt
+	// dgramOpt
+	// payloadHandler
+}
+
+// NewPacketConn returns a new PacketConn using c as its underlying
+// transport.
+requires c.mem()
+ensures p.Mem()
+func NewPacketConn(c net.PacketConn) (p *PacketConn) 
+// {
+// 	cc, _ := socket.NewConn(c.(net.Conn))
+// 	return &PacketConn{
+// 		genericOpt:     genericOpt{Conn: cc},
+// 		dgramOpt:       dgramOpt{Conn: cc},
+// 		payloadHandler: payloadHandler{PacketConn: c, Conn: cc},
+// 	}
+// }
