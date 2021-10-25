@@ -1017,7 +1017,6 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 		return nil
 	}
 
-	fold DataPlaneMutexInvariant(d)
 //	return noBFDSessionFound
 	return noBFDSessionFound()
 }
