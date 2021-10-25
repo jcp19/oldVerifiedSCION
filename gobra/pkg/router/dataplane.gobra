@@ -1073,37 +1073,16 @@ type scionPacketProcessor struct {
 	segmentChange bool
 }
 
-pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
+pred (p *scionPacketProcessor) Mem() {
 	acc(p) &&
 	acc(&p.d.mtx, _) &&
 	p.d.mtx.LockP() &&
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
 }
 
-requires acc(parser)
-requires verifyutils.BytesAcc(data)
-requires acc(decoded, 1/1000)
-requires forall i int :: 0 <= i && i < len(*decoded) ==> acc(&(*decoded)[i])
-requires len(*decoded) == 5
-func outlinePackSCMP1(parser *gopacket.DecodingLayerParser, data []byte, decoded *[]gopacket.LayerType, cause error) (processResult, error) {
-	if err := parser.DecodeLayers(data, decoded); err != nil {
-		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
-			assert len(*decoded) == 5
-			assert forall j int :: 0 <= j && j < len(*decoded) ==> acc(&(*decoded)[j])
-			return processResult{}, serrors.WrapStr("decoding packet", err)
-		}
-	}
-	assert len(*decoded) == 5
-	assert forall j int :: 0 <= j && j < len(*decoded) ==> acc(&(*decoded)[j])
-	// TODO: uncomment this
-	if (*decoded)[len(*decoded)-1] == slayers.LayerTypeSCMP() /*&& !scmpLayer.TypeCode.InfoMsg() */{
-		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
-	}
-}
-
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 // TODO: switch to scionPacketProcessorInvariant() eventually
-requires acc(p) && scmpH.Mem() && scmpP.Mem()
+requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 // requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
 requires verifyutils.BytesAcc(p.origPacket)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
@@ -1118,12 +1097,11 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 		// e2eExtn    slayers.EndToEndExtn
 		scmpLayer  slayers.SCMP
 	)
-	// (joao) currently not supported
+	// (joao) currently not supported, rewritten below
 	// parser := gopacket.NewDecodingLayerParser(
 	//	slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
 	// )
 	parser := gopacket.NewDecodingLayerParser(slayers.LayerTypeSCION())
-
 
 	decoded@ := make([]gopacket.LayerType, 5)
 	assert forall i int :: 0 <= i && i < len(decoded) ==> acc(&decoded[i])
@@ -1135,9 +1113,8 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 			return processResult{}, serrors.WrapStr("decoding packet", err)
 		}
 		assert len(decoded) == 5
-		// assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
+		assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
 	}
-	assume false
 	assert forall i int :: 0 <= i && i < len(decoded) ==> acc(&decoded[i])
 	assert len(decoded) == 5
 	assert acc(&(decoded[len(decoded)-1]))
@@ -1153,6 +1130,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
 		return processResult{}, serrors.WrapStr("update info field", err)
 	}
+
 	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
 		return processResult{}, serrors.WrapStr("update hop field", err)
 	}
