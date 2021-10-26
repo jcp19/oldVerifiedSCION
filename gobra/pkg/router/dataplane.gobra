@@ -85,7 +85,7 @@ const (
 
 type bfdSession interface {
 	Run() error
-//	Messages() chan<- *layers.BFD
+	Messages() chan<- *layers.BFD
 	IsUp() bool
 }
 
