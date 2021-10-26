@@ -159,7 +159,7 @@ preserves listen.mem()
 preserves remote.mem()
 preserves cfg.Mem()
 ensures c.Mem()
-func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) {
+func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) //{
 	// if cfg == nil {
 	// 	cfg = &Config{}
 	// }
@@ -173,8 +173,8 @@ func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) {
 	// if a.IP.To4() != nil {
 	// 	return newConnUDPIPv4(listen, remote, cfg)
 	// }
-	return newConnUDPIPv6(listen, remote, cfg)
-}
+	// return newConnUDPIPv6(listen, remote, cfg)
+// }
 
 type connUDPIPv4 struct {
 	connUDPBase
@@ -393,6 +393,30 @@ func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cf
 // 	return nil
 // }
 
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves acc(laddr)
+preserves acc(raddr)
+preserves cfg.Mem()
+func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
+	unfold c.Mem()
+	err := c.connUDPBase.initConnUDP(network, laddr, raddr, cfg)
+	fold c.Mem()
+	return err
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves acc(laddr)
+preserves acc(raddr)
+preserves cfg.Mem()
+func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
+	unfold c.Mem()
+	err := c.connUDPBase.initConnUDP(network, laddr, raddr, cfg)
+	fold c.Mem()
+	return err
+}
+
 // (tlino) TODO conn.ReadMsgUDP not yet supported 
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
@@ -416,6 +440,26 @@ func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error)
 //	}
 //	return n, &c.readMeta, err
 //}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures r.Mem()
+func (c *connUDPIPv4) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
+	unfold c.Mem()
+	n, r, err := c.connUDPBase.Read(b)
+	fold c.Mem()
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures r.Mem()
+func (c *connUDPIPv6) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
+	unfold c.Mem()
+	n, r, err := c.connUDPBase.Read(b)
+	fold c.Mem()
+}
 
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
@@ -454,12 +498,52 @@ func (c *connUDPBase) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime t
 //	}
 //}
 
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
+preserves meta.Mem()
+func (c *connUDPIPv4) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime time.Time) {
+	unfold c.Mem()
+	c.connUDPBase.handleCmsg(oob, meta, readTime)
+	fold c.Mem()
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
+preserves meta.Mem()
+func (c *connUDPIPv6) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime time.Time) {
+	unfold c.Mem()
+	c.connUDPBase.handleCmsg(oob, meta, readTime)
+	fold c.Mem()
+}
+
 // (tlino) TODO conn.Write not supported yet
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func (c *connUDPBase) Write(b common.RawBytes) (int, error) // {
 //	return c.conn.Write(b)
 //}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func (c *connUDPIPv4) Write(b common.RawBytes) (int, error) {
+	unfold c.Mem()
+	n, err := c.connUDPBase.Write(b)
+	fold c.Mem()
+	return n, err
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func (c *connUDPIPv6) Write(b common.RawBytes) (int, error) {
+	unfold c.Mem()
+	n, err := c.connUDPBase.Write(b)
+	fold c.Mem()
+	return n, err
+}
 
 // (tlino) TODO conn.Write not supported yet
 preserves c.Mem()
@@ -478,17 +562,66 @@ func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err e
 // 	return
 // }
 
-// (tlino) not sure about contracts
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+preserves acc(dst)
+func (c *connUDPIPv4) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error) {
+	unfold c.Mem()
+	n, err := c.connUDPBase.WriteTo(b, dst)
+	fold c.Mem()
+	return n, err
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+preserves acc(dst)
+func (c *connUDPIPv6) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error) {
+	unfold c.Mem()
+	n, err := c.connUDPBase.WriteTo(b, dst)
+	fold c.Mem()
+	return n, err
+}
+
 pure 
 requires acc(c.Mem(), 1/1000)
 func (c *connUDPBase) LocalAddr() *net.UDPAddr {
 	return unfolding acc(c.Mem(), 1/1000) in c.Listen
 }
 
+// (tlino) added method, since gobra doesn't support function promotion
+pure
+requires acc(c.Mem(), 1/1000)
+func (c *connUDPIPv4) LocalAddr() *net.UDPAddr {
+	return unfolding acc(c.Mem(), 1/1000) in c.connUDPBase.LocalAddr()
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+pure
+requires acc(c.Mem(), 1/1000)
+func (c *connUDPIPv6) LocalAddr() *net.UDPAddr {
+	return unfolding acc(c.Mem(), 1/1000) in c.connUDPBase.LocalAddr()
+}
+
 pure 
 requires acc(c.Mem(), 1/1000)
 func (c *connUDPBase) RemoteAddr() *net.UDPAddr {
 	return unfolding acc(c.Mem(), 1/1000) in c.Remote
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+pure
+requires acc(c.Mem(), 1/1000)
+func (c *connUDPIPv4) RemoteAddr() *net.UDPAddr {
+	return unfolding acc(c.Mem(), 1/1000) in c.connUDPBase.RemoteAddr()
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+pure
+requires acc(c.Mem(), 1/1000)
+func (c *connUDPIPv6) RemoteAddr() *net.UDPAddr {
+	return unfolding acc(c.Mem(), 1/1000) in c.connUDPBase.RemoteAddr()
 }
 
 // (tlino) TODO: conn.Close() not supported yet
@@ -502,6 +635,24 @@ func (c *connUDPBase) Close() error {
 	c.closed = true
 	// return c.conn.Close()
 	fold c.Mem()
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+func (c *connUDPIPv4) Close() error {
+	unfold c.Mem()
+	err := c.connUDPBase.Close()
+	fold c.Mem()
+	return err
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+func (c *connUDPIPv6) Close() error {
+	unfold c.Mem()
+	err := c.connUDPBase.Close()
+	fold c.Mem()
+	return err
 }
 
 // ReadMeta contains extra information about socket reads.
