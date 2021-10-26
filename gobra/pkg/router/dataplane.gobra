@@ -522,6 +522,7 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 }
 
 // (joao) Partially Verified
+// TODO: specify `rand`
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
@@ -982,10 +983,10 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 //		return noBFDSessionConfigured
 		return noBFDSessionConfigured()
 	}
-//	p := &layers.BFD{}
-//	if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
-//		return err
-//	}
+	p := &layers.BFD{}
+	if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
+		return err
+	}
 
 	ifID := uint16(0)
 	srcUDPAddr, ok := src.(*net.UDPAddr)
@@ -1083,7 +1084,7 @@ pred (p *scionPacketProcessor) Mem() {
 // TODO: switch to scionPacketProcessorInvariant() eventually
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 // requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
-requires verifyutils.BytesAcc(p.origPacket)
+// requires verifyutils.BytesAcc(p.origPacket)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 	cause error) (processResult, error) {
 
