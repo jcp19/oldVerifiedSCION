@@ -85,7 +85,7 @@ const (
 
 type bfdSession interface {
 	Run() error
-//	Messages() chan<- *layers.BFD
+	Messages() chan<- *layers.BFD
 	IsUp() bool
 }
 
@@ -1086,7 +1086,7 @@ requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 // requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
 // requires verifyutils.BytesAcc(p.origPacket)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	cause error) (processResult, error) {
+	cause error) (processResult, error) /*{
 
 	// parse everything to see if the original packet was an SCMP error.
 	var (
@@ -1125,7 +1125,6 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	}
 
 	assume false
-/*
 	// the quoted packet is the packet in its current state
 	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
 		return processResult{}, serrors.WrapStr("update info field", err)
@@ -1167,8 +1166,8 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 		cause,
 	)
 	return processResult{OutPkt: rawSCMP}, err
-*/
 }
+*/
 
 ensures ok ==> s.Mem()
 func havocRaw() (s *scion.Raw, ok bool)
