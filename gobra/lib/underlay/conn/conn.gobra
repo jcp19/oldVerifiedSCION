@@ -319,31 +319,45 @@ func (c *connUDPIPv6) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err err
 // }
 
 
-// (tlino) TODO: add support for pconn.WriteBatch
+// (tlino) Verified
 preserves c.Mem()
 preserves acc(msgs.Mem(), 1/1000)
-func (c *connUDPIPv6) WriteBatch(msgs Messages) (int, error) // {
-// 	return c.pconn.WriteBatch(msgs, 0)
-// }
+func (c *connUDPIPv6) WriteBatch(msgs Messages) (int, error) {
+	unfold c.Mem()
+	unfold acc(msgs.Mem(), 1/1000)
+	n, err := c.pconn.WriteBatch(msgs, 0)
+	fold c.Mem()
+	fold acc(msgs.Mem(), 1/1000)
+	return n, err
+}
 
-// (tlino) TODO: add support for pconn.SetReadDeadline
+// (tlino) Verified
 // SetReadDeadline sets the read deadline associated with the endpoint.
 preserves c.Mem()
-func (c *connUDPIPv6) SetReadDeadline(t time.Time) error // {
-//	return c.pconn.SetReadDeadline(t)
-//}
+func (c *connUDPIPv6) SetReadDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetReadDeadline(t)
+	fold c.Mem()
+	return err
+}
 
-// (tlino) TODO: add support for pconn.SetWriteDeadline
+// (tlino) Verified
 preserves c.Mem()
-func (c *connUDPIPv6) SetWriteDeadline(t time.Time) error // {
-//	return c.pconn.SetWriteDeadline(t)
-//}
+func (c *connUDPIPv6) SetWriteDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetWriteDeadline(t)
+	fold c.Mem()
+	return err
+}
 
-// (tlino) TODO: add support for pconn.SetDeadline
+// (tlino) Verified
 preserves c.Mem()
-func (c *connUDPIPv6) SetDeadline(t time.Time) error // {
-//	return c.pconn.SetDeadline(t)
-//}
+func (c *connUDPIPv6) SetDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetDeadline(t)
+	fold c.Mem()
+	return err
+}
 
 type connUDPBase struct {
 	conn     *net.UDPConn
