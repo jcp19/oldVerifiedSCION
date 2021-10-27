@@ -36,6 +36,7 @@ import (
 	"gobra/lib/serrors"
 //	"github.com/scionproto/scion/go/lib/sockctrl"
 //	"github.com/scionproto/scion/go/lib/topology/underlay"
+	"gobra/lib/topology/underlay"
 
 //	add helper
 	"gobra/verifyutils"
@@ -708,12 +709,12 @@ func (m *ReadMeta) reset() {
 	fold m.Mem()
 }
 
-// (tlino) TODO add underlay.Type, somehow not needed yet in the implementation
+// (tlino) Verified
 preserves m.Mem()
 preserves acc(a.Mem(), 1/1000)
 preserves acc(raddr.Mem(), 1/1000)
 // func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type)
-func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr /*,ot underlay.Type*/) {
+func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) {
 	unfold m.Mem()
 	unfold acc(a.Mem(), 1/1000)
 	unfold acc(raddr.Mem(), 1/1000)
