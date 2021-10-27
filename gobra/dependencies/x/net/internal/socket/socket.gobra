@@ -5,12 +5,8 @@ import (
 	"gobra/verifyutils"
 )
 
-pred BytesBytesAcc(b [][]byte) {
-	forall i int :: 0 <= i && i < len(b) ==> acc(&b[i]) && verifyutils.BytesAcc(b[i])
-}
-
 pred (m *Message) Mem() {
-	acc(&m.Buffers) && BytesBytesAcc(m.Buffers) && acc(&m.OOB) && verifyutils.BytesAcc(m.OOB) && acc(&m.Addr) && acc(&m.N) && acc(&m.NN) && acc(&m.Flags)
+	acc(&m.Buffers) && (forall i int :: 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) && (forall i,j int :: 0 <= i && i < len(m.Buffers) && 0 <= j && j < len((m.Buffers)[i]) ==> acc(&(m.Buffers)[i][j])) && acc(&m.OOB) && verifyutils.BytesAcc(m.OOB) && acc(&m.Addr) && acc(&m.N) && acc(&m.NN) && acc(&m.Flags)
 }
 
 // A Message represents an IO message.
