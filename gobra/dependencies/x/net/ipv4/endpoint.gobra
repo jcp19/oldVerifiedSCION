@@ -97,7 +97,7 @@ func (c *PacketConn) Close() error // {
 
 // NewPacketConn returns a new PacketConn using c as its underlying
 // transport.
-requires c.mem()
+requires c.Mem()
 ensures p.Mem()
 func NewPacketConn(c net.PacketConn) (p *PacketConn) 
 // {

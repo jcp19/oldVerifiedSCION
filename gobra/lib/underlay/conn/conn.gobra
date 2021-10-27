@@ -106,7 +106,7 @@ type Conn interface {
 
 	preserves Mem()
 	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-	preserves dst.mem()
+	preserves dst.Mem()
 	WriteTo(b common.RawBytes, dst *net.UDPAddr) (int, error)
 
 	preserves Mem()
@@ -156,8 +156,8 @@ func (c *Config) getReceiveBufferSize(ghost p perm) int {
 //
 // The config can be used to customize socket behavior. If config is nil,
 // default values are used.
-preserves listen.mem()
-preserves remote.mem()
+preserves listen.Mem()
+preserves remote.Mem()
 preserves cfg.Mem()
 ensures err == nil ==> c.Mem()
 func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) // {
@@ -195,8 +195,8 @@ type connUDPIPv4 struct {
 }
 
 // (tlino) TODO: add support for net.UDPConn
-preserves listen.mem()
-preserves remote.mem()
+preserves listen.Mem()
+preserves remote.Mem()
 preserves cfg.Mem()
 ensures err == nil ==> conn.Mem() && conn != nil
 func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4, err error) //{
@@ -275,8 +275,8 @@ type connUDPIPv6 struct {
 }
 
 // (tlino) TODO: add support for net.UDPConn
-preserves listen.mem()
-preserves remote.mem()
+preserves listen.Mem()
+preserves remote.Mem()
 preserves cfg.Mem()
 ensures err == nil ==> conn.Mem() && conn != nil
 func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6, err error) 
@@ -352,8 +352,8 @@ type connUDPBase struct {
 
 // (tlino) TODO a lot of identifiers not supported yet. Especially syscall stuff
 preserves cc.Mem()
-preserves laddr.mem()
-preserves raddr.mem()
+preserves laddr.Mem()
+preserves raddr.Mem()
 preserves cfg.Mem()
 func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error 
 // {
@@ -416,8 +416,8 @@ func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cf
 
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
-preserves laddr.mem()
-preserves raddr.mem()
+preserves laddr.Mem()
+preserves raddr.Mem()
 preserves cfg.Mem()
 func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
 	unfold c.Mem()
@@ -428,8 +428,8 @@ func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg
 
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
-preserves laddr.mem()
-preserves raddr.mem()
+preserves laddr.Mem()
+preserves raddr.Mem()
 preserves cfg.Mem()
 func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
 	unfold c.Mem()
@@ -570,7 +570,7 @@ func (c *connUDPIPv6) Write(b common.RawBytes) (int, error) {
 // (tlino) TODO conn.Write not supported yet
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-preserves dst.mem()
+preserves dst.Mem()
 func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error)
 // {
 // 	unfold c.Mem()
@@ -587,7 +587,7 @@ func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err e
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-preserves dst.mem()
+preserves dst.Mem()
 func (c *connUDPIPv4) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error) {
 	unfold c.Mem()
 	n, err := c.connUDPBase.WriteTo(b, dst)
@@ -598,7 +598,7 @@ func (c *connUDPIPv4) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err e
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-preserves dst.mem()
+preserves dst.Mem()
 func (c *connUDPIPv6) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error) {
 	unfold c.Mem()
 	n, err := c.connUDPBase.WriteTo(b, dst)
@@ -707,13 +707,13 @@ func (m *ReadMeta) reset() {
 
 // (tlino) TODO add underlay.Type, somehow not needed yet in the implementation
 preserves m.Mem()
-preserves acc(a.mem(), 1/1000)
-preserves acc(raddr.mem(), 1/1000)
+preserves acc(a.Mem(), 1/1000)
+preserves acc(raddr.Mem(), 1/1000)
 // func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type)
 func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr /*,ot underlay.Type*/) {
 	unfold m.Mem()
-	unfold acc(a.mem(), 1/1000)
-	unfold acc(raddr.mem(), 1/1000)
+	unfold acc(a.Mem(), 1/1000)
+	unfold acc(raddr.Mem(), 1/1000)
 	if a != nil {
 		m.Src = a
 	} else {
@@ -724,8 +724,8 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr /*,ot underlay.Type
 		}
 	}
 	fold m.Mem()
-	fold acc(a.mem(), 1/1000)
-	fold acc(raddr.mem(), 1/1000)
+	fold acc(a.Mem(), 1/1000)
+	fold acc(raddr.Mem(), 1/1000)
 }
 
 // (tlino) TODO: oobSize depends on syscall stuff
