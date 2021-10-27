@@ -141,17 +141,20 @@ type Config struct {
 	ReceiveBufferSize int
 }
 
-requires p > 0
-requires acc(c, p)
-ensures acc(c, p)
-func (c *Config) getReceiveBufferSize(ghost p perm) int {
+// (tlino) Verified
+preserves acc(c.Mem(), 1/1000)
+func (c *Config) getReceiveBufferSize() int {
+	unfold acc(c.Mem(), 1/1000)
 	if c.ReceiveBufferSize != 0 {
-		return c.ReceiveBufferSize
+		s := c.ReceiveBufferSize
+		fold acc(c.Mem(), 1/1000)
+		return s
 	}
+	fold acc(c.Mem(), 1/1000)
 	return ReceiveBufferSize
 }
 
-// (tlino) TODO *net.UDPAddr.mem() needs to capture access to IP and other fields
+// (tlino) Verified
 // New opens a new underlay socket on the specified addresses.
 //
 // The config can be used to customize socket behavior. If config is nil,
@@ -160,34 +163,34 @@ preserves listen.Mem()
 preserves remote.Mem()
 preserves cfg.Mem()
 ensures err == nil ==> c.Mem()
-func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) // {
-// 	unfold cfg.Mem()
-// 	unfold listen.mem()
-// 	unfold remote.mem()
-// 	if cfg == nil {
-// 		cfg = &Config{}
-// 	}
-// 	a := listen
-// 	if remote != nil {
-// 		a = remote
-// 	}
-// 	if listen == nil && remote == nil {
-// 		fold cfg.Mem()
-// 		fold listen.mem()
-// 		fold remote.mem()
-// 		panic("either listen or remote must be set")
-// 	}
-// 	if a.IP.To4() != nil {
-// 		fold cfg.Mem()
-// 		fold listen.mem()
-// 		fold remote.mem()
-// 		return newConnUDPIPv4(listen, remote, cfg)
-// 	}
-// 	fold cfg.Mem()
-// 	fold listen.mem()
-// 	fold remote.mem()
-// 	return newConnUDPIPv6(listen, remote, cfg)
-// }
+func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) {
+	unfold cfg.Mem()
+	unfold listen.Mem()
+	unfold remote.Mem()
+	if cfg == nil {
+		cfg = &Config{}
+	}
+	a := listen
+	if remote != nil {
+		a = remote
+	}
+	if listen == nil && remote == nil {
+		fold cfg.Mem()
+		fold listen.Mem()
+		fold remote.Mem()
+		panic("either listen or remote must be set")
+	}
+	if a.IP.To4() != nil {
+		fold cfg.Mem()
+		fold listen.Mem()
+		fold remote.Mem()
+		return newConnUDPIPv4(listen, remote, cfg)
+	}
+	fold cfg.Mem()
+	fold listen.Mem()
+	fold remote.Mem()
+	return newConnUDPIPv6(listen, remote, cfg)
+}
 
 type connUDPIPv4 struct {
 	connUDPBase
