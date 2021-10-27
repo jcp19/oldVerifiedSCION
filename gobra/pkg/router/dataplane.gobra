@@ -84,8 +84,16 @@ const (
 )
 
 type bfdSession interface {
-	Run() error
-	Messages() chan<- *layers.BFD
+	pred Mem()
+
+	requires Mem()
+	Run() (err error)
+
+	requires acc(Mem(), _)
+	ensures  acc(c.SendChannel(), _) && c.SendGivenPerm() == (*layers.BFD).Mem!<_!>;
+	Messages() (c chan<- *layers.BFD)
+
+	requires acc(Mem(), 1/1000)
 	IsUp() bool
 }
 
@@ -137,7 +145,8 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
 	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
 	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
-	(d.bfdSessions != nil ==> acc(d.bfdSessions))
+	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
+	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem())
 }
 
 ghost
@@ -954,27 +963,52 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 }
 
 // (joao) THIS(2)
-// next: layers.BFD, v.Messages()
-//func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
-//	if len(d.bfdSessions) == 0 {
-//		return noBFDSessionConfigured
-//	}
-//
-//	p := &layers.BFD{}
-//	if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
-//		return err
-//	}
-//
-//	if v, ok := d.bfdSessions[ingressID]; ok {
-//		v.Messages() <- p
-//		return nil
-//	}
-//
-//	return noBFDSessionFound
-//}
+// (joao) `oh` is not used anywhere in the function
+requires acc(DataPlaneMutexInvariant(d), _)
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	if len(d.bfdSessions) == 0 {
+		// (joao) no globals
+		// return noBFDSessionConfigured
+		return noBFDSessionConfigured()
+	}
+
+	p := &layers.BFD{}
+	// (joao) TODO: gopacket.NilDecodeFeedback is a var in gopacket but Luca implemented as a type (should be changed).
+	//              Code adapted below.
+	//if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
+	//	return err
+	//}
+	tmp := gopacket.NilDecodeFeedback{}
+	fold tmp.Mem()
+	if err := p.DecodeFromBytes(data, tmp); err != nil {
+		return err
+	}
+
+	translateBFDMemPred(p)
+
+	// (joao) add parentheses surrounding `d.bfdSessions`
+	if v, ok := (d.bfdSessions)[ingressID]; ok {
+		v.Messages() <- p
+		return nil
+	}
+
+	// (joao) no globals
+	// return noBFDSessionFound
+	return noBFDSessionFound()
+}
+
+ghost
+requires b.Mem()
+ensures  (*layers.BFD).Mem!<_!>(b)
+func translateBFDMemPred(b *layers.BFD) {
+	unfold (*layers.BFD).Mem(b)
+	fold (*layers.BFD).Mem!<_!>(b)
+}
 
 // (joao) THIS(2)
-// depends on issue #341 and on layers.BFD
+// depends on issue #341
 requires acc(DataPlaneMutexInvariant(d), _)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 	unfold DataPlaneMutexInvariant(d)
