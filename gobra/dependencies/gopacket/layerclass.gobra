@@ -1,0 +1,201 @@
+// Copyright 2012 Google, Inc. All rights reserved.
+//
+// Use of this source code is governed by a BSD-style license
+// that can be found in the LICENSE file in the root of the source
+// tree.
+// Adapted from https://github.com/google/gopacket/blob/master/layerclass.go
+
+package gopacket
+
+// LayerClass is a set of LayerTypes, used for grabbing one of a number of
+// different types from a packet.
+type LayerClass interface {
+	pred Mem()
+	// Contains returns true if the given layer type should be considered part
+	// of this layer class.
+	preserves acc(Mem(), 1/10000) && l >= 0
+	Contains(l LayerType) bool
+	// LayerTypes returns the set of all layer types in this layer class.
+	// Note that this may not be a fast operation on all LayerClass
+	// implementations.
+	preserves acc(Mem(), 1/10000)
+	ensures forall i int :: 0 <= i && i < len(ret) ==> acc(&ret[i])
+	LayerTypes() (ret []LayerType)
+}
+
+pred (l LayerType) Mem() { true }
+
+// Contains implements LayerClass.
+func (l LayerType) Contains(a LayerType) bool {
+	return l == a
+}
+
+// LayerTypes implements LayerClass.
+ensures forall i int :: 0 <= i && i < len(ret) ==> acc(&ret[i])
+func (l LayerType) LayerTypes() (ret []LayerType) {
+	return []LayerType{l}
+}
+
+// (joao) Gobra does not seem to be able to generate the following proof automatically
+(LayerType) implements LayerClass {
+	(l LayerType) Contains(a LayerType) bool {
+		return l.Contains(a)
+	}
+
+	(l LayerType) LayerTypes() (ret []LayerType) {
+		return l.LayerTypes()
+	}
+}
+
+// LayerClassSlice implements a LayerClass with a slice.
+type LayerClassSlice []bool
+
+pred (l LayerClassSlice) Mem() {
+	forall i int :: 0 <= i && i < len(l) ==> acc(&l[i])
+}
+
+// Contains returns true if the given layer type should be considered part
+// of this layer class.
+requires  0 <= t // && t < len(s)
+preserves acc(s.Mem(), 1/10000)
+func (s LayerClassSlice) Contains(t LayerType) bool {
+	// (joao) explicit conversion required
+	// return int(t) < len(s) && s[t]
+	return int(t) < len(s) && unfolding acc(s.Mem(), 1/10000) in s[int64(t)]
+}
+
+// LayerTypes returns all layer types in this LayerClassSlice.
+// Because of LayerClassSlice's implementation, this could be quite slow.
+preserves acc(s.Mem(), 1/10000)
+ensures   forall j int :: 0 <= j && j < len(all) ==> acc(&all[j])
+func (s LayerClassSlice) LayerTypes() (all []LayerType) {
+	invariant 0 <= i && i <= len(s)
+	invariant acc(s.Mem(), 1/10000)
+	invariant forall j int :: 0 <= j && j < len(all) ==> acc(&all[j])
+	for i := 0; i < len(s); i++ {
+		if (unfolding acc(s.Mem(), 1/10000) in s[i]) {
+			all = append(perm(1/100000), all, LayerType(i))
+		}
+	}
+	return
+}
+
+// NewLayerClassSlice creates a new LayerClassSlice by creating a slice of
+// size max(types) and setting slice[t] to true for each type t.  Note, if
+// you implement your own LayerType and give it a high value, this WILL create
+// a very large slice.
+requires forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/10000) && types[j] >= 0
+ensures  forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/10000)
+ensures   ret.Mem()
+func NewLayerClassSlice(types []LayerType) (ret LayerClassSlice) {
+	var max LayerType
+	// (joao) range statements not supported
+	//for _, typ := range types {
+	//	if typ > max {
+	//		max = typ
+	//	}
+	//}
+	invariant 0 <= i && i <= len(types)
+	invariant forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/100000)
+	invariant max >= 0
+	invariant forall j int :: 0 <= j && j < i ==> max >= types[j]
+	for i := 0; i < len(types); i++ {
+		typ := types[i]
+		if typ > max {
+			max = typ
+		}
+	}
+	t := make([]bool, int(max+1))
+	// (joao) range statements not supported
+	//for _, typ := range types {
+	//	t[typ] = true
+	//}
+	invariant 0 <= i && i <= len(types)
+	invariant forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/100000) && types[j] >= 0
+	invariant forall j int :: 0 <= j && j < len(t) ==> acc(&t[j])
+	invariant forall j int :: 0 <= j && j < len(types) ==> types[j] < len(t)
+	for i := 0; i < len(types); i++ {
+		typ := types[i]
+		// (joao) explicit conversion required
+		t[int64(typ)] = true
+	}
+	// (joao) used to be
+	// return t
+	ret = t
+	fold ret.Mem()
+	return ret
+}
+
+// LayerClassMap implements a LayerClass with a map.
+type LayerClassMap map[LayerType]bool
+
+pred (m LayerClassMap) Mem() { 
+	m != nil ==> acc(m, 1/1000)
+}
+
+// Contains returns true if the given layer type should be considered part
+// of this layer class.
+preserves acc(m.Mem(), 1/10000)
+func (m LayerClassMap) Contains(t LayerType) bool {
+	return unfolding acc(m.Mem(), 1/10000) in m[t]
+}
+
+// LayerTypes returns all layer types in this LayerClassMap.
+preserves acc(m.Mem(), 1/10000)
+ensures   forall j int :: 0 <= j && j < len(all) ==> acc(&all[j])
+func (m LayerClassMap) LayerTypes() (all []LayerType) /* {
+	// (joao) range statements not supported, encoding of range for maps is convuluted to expand
+	for t := range m {
+		all = append(all, t)
+	}
+	return
+}
+*/
+
+// NewLayerClassMap creates a LayerClassMap and sets map[t] to true for each
+// type in types.
+preserves forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/10000)
+ensures   ret.Mem()
+func NewLayerClassMap(types []LayerType) (ret LayerClassMap) {
+	m := LayerClassMap{}
+	// (joao) range statements not supported
+	//for _, typ := range types {
+	//	m[typ] = true
+	//}
+	invariant 0 <= i && i <= len(types)
+	invariant forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/100000)
+	invariant acc(m)
+	for i := 0; i < len(types); i++ {
+		typ := types[i]
+		m[typ] = true
+	}
+	fold m.Mem()
+	return m
+}
+
+// NewLayerClass creates a LayerClass, attempting to be smart about which type
+// it creates based on which types are passed in.
+requires forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/10000) && types[j] >= 0
+ensures  forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/10000)
+ensures  ret.Mem()
+func NewLayerClass(types []LayerType) (ret LayerClass) {
+	// (joao) range statements not supported
+	//for _, typ := range types {
+	//	if typ > maxLayerType {
+	//		// NewLayerClassSlice could create a very large object, so instead create
+	//		// a map.
+	//		return NewLayerClassMap(types)
+	//	}
+	//}
+	invariant 0 <= i && i <= len(types)
+	invariant forall j int :: 0 <= j && j < len(types) ==> acc(&types[j], 1/10000)  && types[j] >= 0
+	for i := 0; i < len(types); i++ {
+		typ := types[i]
+		if typ > maxLayerType {
+			// NewLayerClassSlice could create a very large object, so instead create
+			// a map.
+			return NewLayerClassMap(types)
+		}
+	}
+	return NewLayerClassSlice(types)
+}
