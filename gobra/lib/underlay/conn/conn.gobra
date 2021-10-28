@@ -212,7 +212,9 @@ type connUDPIPv4 struct {
 	pconn *ipv4.PacketConn
 }
 
-// (tlino) TODO: add support for net.UDPConn
+// (tlino) TODO: add support for net.UDPConn.
+// (tlino) Problem: property error: *UDPConn is not assignable to ipv4.PacketConn (cc.conn as argument in NewPacketConn)
+// (tlino) Reason:  *UDPConn has no members with name SetWriteDeadline, SetDeadline, SetReadDeadline, LocalAddr, and Close
 preserves listen.Mem()
 preserves remote.Mem()
 preserves cfg.Mem()
@@ -226,15 +228,15 @@ func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4
 // 	return cc, nil
 // }
 
-// (tlino) TODO: add support for underlay and syscall stuff
+// (tlino) TODO: add support for underlay, ipv4.ReadBatch and syscall
+// (tlino) Problem: got unknown identifier ReadBatch, syscall, syscall.MSG_WAITFORONE
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
 preserves c.Mem()
 preserves msgs.Mem()
 preserves ReadMetasAcc(metas)
 ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
-func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error)
-// {
+func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) // {
 // 	for i := range metas {
 // 		metas[i].reset()
 // 	}
@@ -244,9 +246,9 @@ func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err err
 // 		msg := msgs[i]
 // 		meta := &metas[i]
 // 		if msg.NN > 0 {
-// 			c.handleCmsg(msg.OOB[:msg.NN], meta, readTime)
+// 			c.handleCmsg((msg.OOB)[:msg.NN], meta, readTime)
 // 		}
-// 		meta.setSrc(c.Remote, msg.Addr.(*net.UDPAddr), underlay.UDPIPv4)
+// 		meta.setSrc(c.Remote, (msg.Addr).(*net.UDPAddr), underlay.UDPIPv4)
 // 	}
 // 	return n, err
 // }
@@ -292,13 +294,14 @@ type connUDPIPv6 struct {
 	pconn *ipv6.PacketConn
 }
 
-// (tlino) TODO: add support for net.UDPConn
+// (tlino) TODO: add support for net.UDPConn.
+// (tlino) Problem: property error: *UDPConn is not assignable to ipv6.PacketConn (cc.conn as argument in NewPacketConn)
+// (tlino) Reason:  *UDPConn has no members with name SetWriteDeadline, SetDeadline, SetReadDeadline, LocalAddr, and Close
 preserves listen.Mem()
 preserves remote.Mem()
 preserves cfg.Mem()
 ensures err == nil ==> conn.Mem() && conn != nil
-func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6, err error) 
-// {
+func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6, err error) //{
 // 	cc := &connUDPIPv6{}
 // 	if err := cc.initConnUDP("udp6", listen, remote, cfg); err != nil {
 // 		return nil, err
@@ -307,7 +310,8 @@ func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6
 // 	return cc, nil
 // }
 
-// (tlino) TODO: add support for underlay and syscall stuff
+// (tlino) TODO: add support for underlay, ipv6.ReadBatch and syscall
+// (tlino) Problem: got unknown identifier ReadBatch, syscall, syscall.MSG_WAITFORONE
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
 preserves c.Mem()
@@ -382,13 +386,15 @@ type connUDPBase struct {
 	readMeta ReadMeta
 }
 
-// (tlino) TODO a lot of identifiers not supported yet. Especially syscall stuff
+// (tlino) TODO: add support for features of sockctrl, syscall, net
+// (tlino) net: unknown identifier ListenUDP
+// (tlino) sockctrl: unkonwn identifier SetsockoptInt, GetsockoptInt
+// (tlino) syscall: unkonwn identifier SOL_SOCKET, SO_RXQ_OVFL, SO_TIMESTAMPNS, SO_RCVBUF
 preserves cc.Mem()
 preserves laddr.Mem()
 preserves raddr.Mem()
 preserves cfg.Mem()
-func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error 
-// {
+func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error //{
 // 	var c *net.UDPConn
 // 	var err error
 // 	if laddr == nil {
@@ -470,12 +476,12 @@ func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg
 	return err
 }
 
-// (tlino) TODO conn.ReadMsgUDP not yet supported 
+// (tlino) TODO: add support for ReadMsgUDP to net.UDPConn
+// (tlino) Problem: unknown identifier ReadMsgUDP
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures r.Mem()
-func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) 
-//{
+func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) //{
 //	c.readMeta.reset()
 //	n, oobn, _, src, err := c.conn.ReadMsgUDP(b, c.oob)
 //	readTime := time.Now()
@@ -515,10 +521,11 @@ func (c *connUDPIPv6) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 }
 
 // (tlino) TODO add support for the syscall stuff
+// (tlino) Problem: unkown identifiers SOL_SOCKET, SO_TIMESTAMPNS, Cmsghdr, SizeofCmsghdr, CmsgLen and many others
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
 preserves meta.Mem()
-func (c *connUDPBase) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime time.Time) // {
+func (c *connUDPBase) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime time.Time) //{
 //	// Based on https://github.com/golang/go/blob/release-branch.go1.8/src/syscall/sockcmsg_unix.go#L49
 //	// and modified to remove most allocations.
 //	sizeofCmsgHdr := syscall.CmsgLen(0)
@@ -572,12 +579,12 @@ func (c *connUDPIPv6) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime t
 	fold c.Mem()
 }
 
-// (tlino) TODO conn.Write not supported yet
+// (tlino) TODO: unkown identifier UDPConn.Write
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
-func (c *connUDPBase) Write(b common.RawBytes) (int, error) // {
-//	return c.conn.Write(b)
-//}
+func (c *connUDPBase) Write(b common.RawBytes) (int, error) //{
+// 	return c.conn.Write(b)
+// }
 
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
@@ -599,7 +606,7 @@ func (c *connUDPIPv6) Write(b common.RawBytes) (int, error) {
 	return n, err
 }
 
-// (tlino) TODO conn.Write not supported yet
+// (tlino) TODO: unkown identifier UDPConn.Write
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
 preserves dst.Mem()
@@ -638,6 +645,7 @@ func (c *connUDPIPv6) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err e
 	return n, err
 }
 
+// (tlino) Verified
 preserves c.Mem()
 func (c *connUDPBase) LocalAddr() *net.UDPAddr {
 	unfold c.Mem()
@@ -663,6 +671,7 @@ func (c *connUDPIPv6) LocalAddr() *net.UDPAddr {
 	fold c.Mem()
 }
 
+// (tlino) Verified
 preserves c.Mem()
 func (c *connUDPBase) RemoteAddr() *net.UDPAddr {
 	unfold c.Mem()
@@ -689,18 +698,15 @@ func (c *connUDPIPv6) RemoteAddr() *net.UDPAddr {
 	return n
 }
 
-// (tlino) TODO: conn.Close() not supported yet
+// (tlino) TODO: unkown identifier UDPConn.Close()
 preserves c.Mem()
-func (c *connUDPBase) Close() error {
-	unfold c.Mem()
-	if c.closed {
-		fold c.Mem()
-		return nil
-	}
-	c.closed = true
-	// return c.conn.Close()
-	fold c.Mem()
-}
+func (c *connUDPBase) Close() error //{
+// 	if c.closed {
+// 		return nil
+// 	}
+// 	c.closed = true
+// 	// return c.conn.Close()
+// }
 
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
@@ -772,6 +778,8 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 	fold acc(raddr.Mem(), 1/1000)
 }
 
+// (tlino) TODO: m[i].Addr isn't assignable due to issue #341
+// (tlino) First fix the issue: https://github.com/viperproject/gobra/issues/341
 // (tlino) TODO: oobSize depends on syscall stuff
 // NewReadMessages allocates memory for reading IPv4 Linux network stack
 // messages.
@@ -789,18 +797,19 @@ func NewReadMessages(n int) (msgs Messages)
 // 	return m
 // }
 
+// (tlino) TODO: m[i].Addr isn't assignable due to issue #341
+// (tlino) First fix the issue: https://github.com/viperproject/gobra/issues/341
 // NewWriteMessages allocates memory for writing IPv4 Linux network stack
 // messages.
 requires n >= 0
 ensures msgs.Mem()
 ensures len(msgs) == n
-func NewWriteMessages(n int) (msgs Messages) // {
+func NewWriteMessages(n int) (msgs Messages) //{
 //  	m := make(Messages, n)
-// // 	for i := range m {
-// // 		// Allocate a single-element, to avoid allocations when setting the buffer.
-// // 		m[i].Buffers = make([][]byte, 1)
-// // 		m[i].Addr = &net.UDPAddr{}
-// // 	}
-// 	fold m.Mem()
+// 	for i := range m {
+// 		// Allocate a single-element, to avoid allocations when setting the buffer.
+// 		m[i].Buffers = make([][]byte, 1)
+// 		m[i].Addr = &net.UDPAddr{}
+// 	}
 // 	return m
 // }
