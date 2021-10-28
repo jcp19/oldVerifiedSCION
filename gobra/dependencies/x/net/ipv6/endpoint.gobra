@@ -129,7 +129,7 @@ func NewPacketConn(c net.PacketConn) (p *PacketConn)
 
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
-preserves forall i int :: 0 <= i && i < len(ms) ==> acc(&ms[i], 1/1000) && acc(ms[i].Mem(), 1/1000)
+preserves forall i int :: 0 <= i && i < len(ms) ==> acc((&ms[i]).Mem(), 1/1000)
 func (c *PacketConn) WriteBatch(ms []socket.Message, flags int) (int, error) // {
 //	return c.payloadHandler.WriteBatch(ms, flags)
 // }

@@ -2,11 +2,13 @@ package socket
 
 import (
 	"net"
-	"gobra/verifyutils"
 )
 
 pred (m *Message) Mem() {
-	acc(&m.Buffers) && (forall i int :: 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) && (forall i,j int :: 0 <= i && i < len(m.Buffers) && 0 <= j && j < len((m.Buffers)[i]) ==> acc(&(m.Buffers)[i][j])) && acc(&m.OOB) && verifyutils.BytesAcc(m.OOB) && acc(&m.Addr) && acc(&m.N) && acc(&m.NN) && acc(&m.Flags)
+	acc(m) && 
+	(forall i int :: 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) && 
+	(forall i,j int :: 0 <= i && i < len(m.Buffers) && 0 <= j && j < len((m.Buffers)[i]) ==> acc(&(m.Buffers)[i][j])) && 
+	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i]))
 }
 
 // A Message represents an IO message.
