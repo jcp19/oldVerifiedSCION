@@ -910,7 +910,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires isZeroSCION(s)
 requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
 requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-requires srcAddr.mem()
+requires srcAddr.Mem()
 requires buffer.Mem()
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
@@ -1759,8 +1759,8 @@ func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 //}
 
 // (joao) depends on issue #341
-requires dst.mem()
-ensures  ret.mem()
+requires dst.Mem()
+ensures  ret.Mem()
 func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 	if ip, ok := dst.(*net.IPAddr); ok {
 		return &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
