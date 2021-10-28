@@ -94,26 +94,26 @@ func (o Type) String() string //{
 // }
 
 // (tlino) TODO common.NewBasicError doesn't work yet
-func TypeFromString(s string) (Type, error) //{
-// 	switch strings.ToLower(s) {
-// 	case strings.ToLower(UDPIPv4Name()):
-//         // (tlino) globals not supported
-// 		// return UDPIPv4, nil
-//         return UDPIPv4(), nil
-// 	case strings.ToLower(UDPIPv6Name()):
-//         // (tlino) globals not supported
-// 		// return UDPIPv6, nil
-//         return UDPIPv6(), nil
-// 	case strings.ToLower(UDPIPv46Name()):
-//         // (tlino) globals not supported
-// 		// return UDPIPv46, nil
-//         return UDPIPv46(), nil
-// 	default:
-//         // (tlino) globals not supported
-// 		// return Invalid, common.NewBasicError("Unknown underlay type", nil, "type", s)
-//         return Invalid(), common.NewBasicError("Unknown underlay type", nil, "type", s)
-// 	}
-// }
+func TypeFromString(s string) (Type, error) {
+	switch strings.ToLower(s) {
+	case strings.ToLower(UDPIPv4Name()):
+        // (tlino) globals not supported
+		// return UDPIPv4, nil
+        return UDPIPv4(), nil
+	case strings.ToLower(UDPIPv6Name()):
+        // (tlino) globals not supported
+		// return UDPIPv6, nil
+        return UDPIPv6(), nil
+	case strings.ToLower(UDPIPv46Name()):
+        // (tlino) globals not supported
+		// return UDPIPv46, nil
+        return UDPIPv46(), nil
+	default:
+        // (tlino) globals not supported
+		// return Invalid, common.NewBasicError("Unknown underlay type", nil, "type", s)
+        return Invalid(), common.NewBasicError(common.ErrMsg("Unknown underlay type"), nil, "type", s)
+	}
+}
 
 // (tlino) TODO add support for encoding/json
 func (ot *Type) UnmarshalJSON(data []byte) error // {
