@@ -33,6 +33,7 @@ type Type int
 // 	UDPIPv46
 // )
 
+// (tlino) explicit constant definitions without iota
 const (
 	Invalid Type = 0
 	UDPIPv4 Type = 1
@@ -77,12 +78,14 @@ func TypeFromString(s string) (Type, error) {
 	case strings.ToLower(UDPIPv46Name):
 		return UDPIPv46, nil
 	default:
+		// (tlino) use common.ErrMsg, since the string argument isn't supported directly
 		// return Invalid, common.NewBasicError("Unknown underlay type", nil, "type", s)
         return Invalid, common.NewBasicError(common.ErrMsg("Unknown underlay type"), nil, "type", s)
 	}
 }
 
 // (tlino) TODO add support for encoding/json
+preserves acc(ot)
 preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/1000)
 func (ot *Type) UnmarshalJSON(data []byte) error // {
 // 	var strVal string

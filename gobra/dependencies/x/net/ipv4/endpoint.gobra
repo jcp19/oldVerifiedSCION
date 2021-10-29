@@ -10,6 +10,14 @@ pred (p *PacketConn) Mem() {
 	acc(p)
 }
 
+pred (c *Conn) Mem() {
+	acc(c)
+}
+
+pred (r *RawConn) Mem() {
+	acc(r)
+}
+
 // A Conn represents a network endpoint that uses the IPv4 transport.
 // It is used to control basic IP-level socket options such as TOS and
 // TTL.
@@ -21,10 +29,12 @@ type genericOpt struct {
 	// *socket.Conn
 }
 
-func (c *genericOpt) ok() bool //{ return c != nil && c.Conn != nil }
+//func (c *genericOpt) ok() bool { return c != nil && c.Conn != nil }
 
 // NewConn returns a new Conn.
-func NewConn(c net.Conn) *Conn //{
+preserves c.Mem()
+ensures conn.Mem()
+func NewConn(c net.Conn) (conn *Conn) //{
 // 	cc, _ := socket.NewConn(c)
 // 	return &Conn{
 // 		genericOpt: genericOpt{Conn: cc},
@@ -46,7 +56,7 @@ type dgramOpt struct {
 	//*socket.Conn
 }
 
-func (c *dgramOpt) ok() bool //{ return c != nil && c.Conn != nil }
+// func (c *dgramOpt) ok() bool { return c != nil && c.Conn != nil }
 
 // SetControlMessage sets the per packet IP-level socket options.
 // func (c *PacketConn) SetControlMessage(cf ControlFlags, on bool) error //{
@@ -99,8 +109,7 @@ func (c *PacketConn) Close() error // {
 // transport.
 requires c.Mem()
 ensures p.Mem()
-func NewPacketConn(c net.PacketConn) (p *PacketConn) 
-// {
+func NewPacketConn(c net.PacketConn) (p *PacketConn) //{
 // 	cc, _ := socket.NewConn(c.(net.Conn))
 // 	p := &PacketConn{
 // 		genericOpt:     genericOpt{Conn: cc},
@@ -131,6 +140,7 @@ type RawConn struct {
 
 // SetDeadline sets the read and write deadlines associated with the
 // endpoint.
+preserves c.Mem()
 func (c *RawConn) SetDeadline(t time.Time) error //{
 // 	if !c.packetHandler.ok() {
 // 		return errInvalidConn
@@ -140,6 +150,7 @@ func (c *RawConn) SetDeadline(t time.Time) error //{
 
 // SetReadDeadline sets the read deadline associated with the
 // endpoint.
+preserves c.Mem()
 func (c *RawConn) SetReadDeadline(t time.Time) error //{
 // 	if !c.packetHandler.ok() {
 // 		return errInvalidConn
@@ -149,6 +160,7 @@ func (c *RawConn) SetReadDeadline(t time.Time) error //{
 
 // SetWriteDeadline sets the write deadline associated with the
 // endpoint.
+preserves c.Mem()
 func (c *RawConn) SetWriteDeadline(t time.Time) error //{
 // 	if !c.packetHandler.ok() {
 // 		return errInvalidConn
@@ -157,6 +169,7 @@ func (c *RawConn) SetWriteDeadline(t time.Time) error //{
 // }
 
 // Close closes the endpoint.
+requires c.Mem()
 func (c *RawConn) Close() error //{
 // 	if !c.packetHandler.ok() {
 // 		return errInvalidConn
@@ -166,7 +179,10 @@ func (c *RawConn) Close() error //{
 
 // NewRawConn returns a new RawConn using c as its underlying
 // transport.
-func NewRawConn(c net.PacketConn) (*RawConn, error) //{
+requires c.Mem()
+ensures err == nil ==> r.Mem()
+ensures err != nil ==> c.Mem()
+func NewRawConn(c net.PacketConn) (r *RawConn, err error) //{
 // cc, err := socket.NewConn(c.(net.Conn))
 // if err != nil {
 // 	return nil, err

@@ -10,6 +10,10 @@ pred (p *PacketConn) Mem() {
 	acc(p)
 }
 
+pred (c *Conn) Mem() {
+	acc(c)
+}
+
 // A Conn represents a network endpoint that uses IPv6 transport.
 // It allows to set basic IP-level socket options such as traffic
 // class and hop limit.
@@ -21,10 +25,11 @@ type genericOpt struct {
 	// *socket.Conn
 }
 
-func (c *genericOpt) ok() bool //{ return c != nil && c.Conn != nil }
+// func (c *genericOpt) ok() bool { return c != nil && c.Conn != nil }
 
 // PathMTU returns a path MTU value for the destination associated
 // with the endpoint.
+preserves c.Mem()
 func (c *Conn) PathMTU() (int, error) //{
 // 	if !c.ok() {
 // 		return 0, errInvalidConn
@@ -41,7 +46,10 @@ func (c *Conn) PathMTU() (int, error) //{
 // }
 
 // NewConn returns a new Conn.
-func NewConn(c net.Conn) *Conn //{
+
+preserves c.Mem()
+ensures conn.Mem()
+func NewConn(c net.Conn) (conn *Conn) //{
 // 	cc, _ := socket.NewConn(c)
 // 	return &Conn{
 // 		genericOpt: genericOpt{Conn: cc},
@@ -63,7 +71,7 @@ type dgramOpt struct {
 	// *socket.Conn
 }
 
-func (c *dgramOpt) ok() bool //{ return c != nil && c.Conn != nil }
+// func (c *dgramOpt) ok() bool { return c != nil && c.Conn != nil }
 
 // SetControlMessage allows to receive the per packet basis IP-level
 // socket options.
@@ -117,8 +125,7 @@ func (c *PacketConn) Close() error //{
 // transport.
 requires c.Mem()
 ensures p.Mem()
-func NewPacketConn(c net.PacketConn) (p *PacketConn) 
-// {
+func NewPacketConn(c net.PacketConn) (p *PacketConn) //{
 // 	cc, _ := socket.NewConn(c.(net.Conn))
 // 	return &PacketConn{
 // 		genericOpt:     genericOpt{Conn: cc},
