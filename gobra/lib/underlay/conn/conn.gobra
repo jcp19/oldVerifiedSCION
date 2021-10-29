@@ -43,14 +43,6 @@ pred (m Messages) Mem() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
 }
 
-pred ReadMetasAcc(m []ReadMeta) {
-	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
-}
-
-pred (r *ReadMeta) Mem() {
-	acc(r)
-}
-
 pred (conn *connUDPBase) Mem() {
 	acc(conn) &&
 	(forall i int :: 0 <= i && i < len(conn.oob) ==> acc(&(conn.oob)[i])) && 
@@ -62,11 +54,11 @@ pred (c *Config) Mem() {
 }
 
 pred (conn *connUDPIPv4) Mem() {
-	acc(conn) && (&conn.connUDPBase).Mem() && (&conn.pconn).Mem()
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (&conn.pconn).Mem()
 }
 
 pred (conn *connUDPIPv6) Mem() {
-	acc(conn) && (&conn.connUDPBase).Mem() && (&conn.pconn).Mem()
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (&conn.pconn).Mem()
 }
 
 // ReceiveBufferSize is the default size, in bytes, of receive buffers for
@@ -89,62 +81,69 @@ type Messages []ipv4.Message
 type Conn interface {
 	pred Mem()
 
-	// Reads a message and copies the payload into b.
-	// Returns the number of read bytes and the metadata
+	// (tlino) Reads a message and copies the payload into b.
+	// (tlino) Returns the number of read bytes and the metadata
 	preserves Mem()
 	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	ensures err != nil ==> 0 <= n && n < len(b)
 	ensures r.Mem()
 	Read(b common.RawBytes) (n int, r *ReadMeta, err error)
 
-	// Reads a batch of messages and stores them in msgs.
-	// The metadata is store in metas.
-	// Returns the number of read messages
+	// (tlino) Reads a batch of messages and stores them in msgs.
+	// (tlino) The metadata is store in metas.
+	// (tlino) Returns the number of read messages
 	preserves Mem()
 	preserves msgs.Mem()
 	preserves ReadMetasAcc(metas)
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 	ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error)
 
-	// Writes bytes in b
-	// Returns the number of written bytes
+	// (tlino) Writes the bytes in b to the receiver
+	// (tlino) Returns the number of written bytes
 	preserves Mem()
 	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
 	Write(b common.RawBytes) (n int, err error)
 
-	// Writes bytes in b to dst
-	// Returns the number of written bytes
+	// (tlino) Writes bytes in b to dst
+	// (tlino) Returns the number of written bytes
 	preserves Mem()
 	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
-	preserves dst.Mem()
+	preserves acc(dst.Mem(), 1/1000)
 	WriteTo(b common.RawBytes, dst *net.UDPAddr) (int, error)
 
-	// Writes a batch of messages
-	// Returns the number of written messages
+	// (tlino) Writes a batch of messages
+	// (tlino) Returns the number of written messages
 	preserves Mem()
 	preserves acc(msgs.Mem(), 1/1000)
 	WriteBatch(msgs Messages) (int, error)
 
-	// Returns local address
+	// (tlino) Returns local address
+	// (tlino) TODO: will change in the future to something like:
+	// (tlino) requires Mem()
+	// (tlino) ensures acc(ret.Mem(), 1/1000) && acc(ret.Mem(), 1/1000) --* Mem()
 	preserves Mem()
 	LocalAddr() *net.UDPAddr
 
-	// Returns remote address
+	// (tlino) Returns remote address
+	// (tlino) TODO: will change in the future to something like:
+	// (tlino) requires Mem()
+	// (tlino) ensures acc(ret.Mem(), 1/1000) && acc(ret.Mem(), 1/1000) --* Mem()
 	preserves Mem()
 	RemoteAddr() *net.UDPAddr
 
-	// Sets the read deadline
+	// (tlino) Sets the read deadline
 	preserves Mem()
 	SetReadDeadline(time.Time) error
 
-	// Sets the write deadline
+	// (tlino) Sets the write deadline
 	preserves Mem()
 	SetWriteDeadline(time.Time) error
 
-	// sets the read and write deadlines 
+	// (tlino) sets the read and write deadlines 
 	preserves Mem()
 	SetDeadline(time.Time) error
 
-	// closes the connection
+	// (tlino) closes the connection
 	preserves Mem()
 	Close() error
 }
@@ -174,9 +173,9 @@ func (c *Config) getReceiveBufferSize() int {
 //
 // The config can be used to customize socket behavior. If config is nil,
 // default values are used.
-preserves listen.Mem()
-preserves remote.Mem()
-preserves cfg.Mem()
+requires listen.Mem()
+requires remote.Mem()
+requires cfg.Mem()
 ensures err == nil ==> c.Mem()
 func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) {
 	unfold cfg.Mem()
@@ -215,9 +214,9 @@ type connUDPIPv4 struct {
 // (tlino) TODO: add support for net.UDPConn.
 // (tlino) Problem: property error: *UDPConn is not assignable to ipv4.PacketConn (cc.conn as argument in NewPacketConn)
 // (tlino) Reason:  *UDPConn has no members with name SetWriteDeadline, SetDeadline, SetReadDeadline, LocalAddr, and Close
-preserves listen.Mem()
-preserves remote.Mem()
-preserves cfg.Mem()
+requires listen.Mem()
+requires remote.Mem()
+requires cfg.Mem()
 ensures err == nil ==> conn.Mem() && conn != nil
 func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4, err error) //{
 // 	cc := &connUDPIPv4{}
@@ -256,6 +255,7 @@ func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err err
 // (tlino) Verified
 preserves c.Mem()
 preserves acc(msgs.Mem(), 1/1000)
+ensures err == nil ==> 0 <= n && n <= len(msgs)
 func (c *connUDPIPv4) WriteBatch(msgs Messages) (n int, err error) {
 	unfold c.Mem()
 	unfold acc(msgs.Mem(), 1/1000)
@@ -297,9 +297,9 @@ type connUDPIPv6 struct {
 // (tlino) TODO: add support for net.UDPConn.
 // (tlino) Problem: property error: *UDPConn is not assignable to ipv6.PacketConn (cc.conn as argument in NewPacketConn)
 // (tlino) Reason:  *UDPConn has no members with name SetWriteDeadline, SetDeadline, SetReadDeadline, LocalAddr, and Close
-preserves listen.Mem()
-preserves remote.Mem()
-preserves cfg.Mem()
+requires listen.Mem()
+requires remote.Mem()
+requires cfg.Mem()
 ensures err == nil ==> conn.Mem() && conn != nil
 func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6, err error) //{
 // 	cc := &connUDPIPv6{}
@@ -340,7 +340,8 @@ func (c *connUDPIPv6) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err err
 // (tlino) Verified
 preserves c.Mem()
 preserves acc(msgs.Mem(), 1/1000)
-func (c *connUDPIPv6) WriteBatch(msgs Messages) (int, error) {
+ensures err == nil ==> 0 <= n && n <= len(msgs)
+func (c *connUDPIPv6) WriteBatch(msgs Messages) (n int, err error) {
 	unfold c.Mem()
 	unfold acc(msgs.Mem(), 1/1000)
 	n, err := c.pconn.WriteBatch(msgs, 0)
@@ -391,9 +392,9 @@ type connUDPBase struct {
 // (tlino) sockctrl: unkonwn identifier SetsockoptInt, GetsockoptInt
 // (tlino) syscall: unkonwn identifier SOL_SOCKET, SO_RXQ_OVFL, SO_TIMESTAMPNS, SO_RCVBUF
 preserves cc.Mem()
-preserves laddr.Mem()
-preserves raddr.Mem()
-preserves cfg.Mem()
+requires laddr.Mem()
+requires raddr.Mem()
+requires cfg.Mem()
 func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error //{
 // 	var c *net.UDPConn
 // 	var err error
@@ -454,9 +455,9 @@ func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cf
 
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
-preserves laddr.Mem()
-preserves raddr.Mem()
-preserves cfg.Mem()
+requires laddr.Mem()
+requires raddr.Mem()
+requires cfg.Mem()
 func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
 	unfold c.Mem()
 	err := c.connUDPBase.initConnUDP(network, laddr, raddr, cfg)
@@ -466,9 +467,9 @@ func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg
 
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
-preserves laddr.Mem()
-preserves raddr.Mem()
-preserves cfg.Mem()
+requires laddr.Mem()
+requires raddr.Mem()
+requires cfg.Mem()
 func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
 	unfold c.Mem()
 	err := c.connUDPBase.initConnUDP(network, laddr, raddr, cfg)
@@ -480,6 +481,7 @@ func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg
 // (tlino) Problem: unknown identifier ReadMsgUDP
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures err != nil ==> 0 <= n && n < len(b)
 ensures r.Mem()
 func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) //{
 //	c.readMeta.reset()
@@ -500,9 +502,11 @@ func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) //
 //	return n, &c.readMeta, err
 //}
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures err != nil ==> 0 <= n && n < len(b)
 ensures r.Mem()
 func (c *connUDPIPv4) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 	unfold c.Mem()
@@ -510,9 +514,11 @@ func (c *connUDPIPv4) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 	fold c.Mem()
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures err != nil ==> 0 <= n && n < len(b)
 ensures r.Mem()
 func (c *connUDPIPv6) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 	unfold c.Mem()
@@ -559,6 +565,7 @@ func (c *connUDPBase) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime t
 //	}
 //}
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
@@ -569,6 +576,7 @@ func (c *connUDPIPv4) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime t
 	fold c.Mem()
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
@@ -586,6 +594,7 @@ func (c *connUDPBase) Write(b common.RawBytes) (int, error) //{
 // 	return c.conn.Write(b)
 // }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
@@ -596,6 +605,7 @@ func (c *connUDPIPv4) Write(b common.RawBytes) (int, error) {
 	return n, err
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
@@ -609,7 +619,7 @@ func (c *connUDPIPv6) Write(b common.RawBytes) (int, error) {
 // (tlino) TODO: unkown identifier UDPConn.Write
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
-preserves dst.Mem()
+preserves acc(dst.Mem(), 1/1000)
 func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error)
 // {
 // 	unfold c.Mem()
@@ -626,7 +636,7 @@ func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err e
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
-preserves dst.Mem()
+preserves acc(dst.Mem(), 1/1000)
 func (c *connUDPIPv4) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error) {
 	unfold c.Mem()
 	n, err := c.connUDPBase.WriteTo(b, dst)
@@ -634,10 +644,11 @@ func (c *connUDPIPv4) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err e
 	return n, err
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
-preserves dst.Mem()
+preserves acc(dst.Mem(), 1/1000)
 func (c *connUDPIPv6) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error) {
 	unfold c.Mem()
 	n, err := c.connUDPBase.WriteTo(b, dst)
@@ -654,6 +665,7 @@ func (c *connUDPBase) LocalAddr() *net.UDPAddr {
 	return n
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 func (c *connUDPIPv4) LocalAddr() *net.UDPAddr {
@@ -663,6 +675,7 @@ func (c *connUDPIPv4) LocalAddr() *net.UDPAddr {
 	return n
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 func (c *connUDPIPv6) LocalAddr() *net.UDPAddr {
@@ -680,6 +693,7 @@ func (c *connUDPBase) RemoteAddr() *net.UDPAddr {
 	return n
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 func (c *connUDPIPv4) RemoteAddr() *net.UDPAddr {
@@ -689,6 +703,7 @@ func (c *connUDPIPv4) RemoteAddr() *net.UDPAddr {
 	return n
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 func (c *connUDPIPv6) RemoteAddr() *net.UDPAddr {
@@ -708,6 +723,7 @@ func (c *connUDPBase) Close() error //{
 // 	// return c.conn.Close()
 // }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 func (c *connUDPIPv4) Close() error {
@@ -717,6 +733,7 @@ func (c *connUDPIPv4) Close() error {
 	return err
 }
 
+// (tlino) Verified
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 func (c *connUDPIPv6) Close() error {
@@ -744,6 +761,14 @@ type ReadMeta struct {
 	ReadDelay time.Duration
 }
 
+pred (r *ReadMeta) Mem() {
+	acc(r)
+}
+
+pred ReadMetasAcc(m []ReadMeta) {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
+}
+
 // (tlino) Verifed
 preserves m.Mem()
 func (m *ReadMeta) reset() {
@@ -757,12 +782,11 @@ func (m *ReadMeta) reset() {
 
 // (tlino) Verified
 preserves m.Mem()
-preserves acc(a.Mem(), 1/1000)
-preserves acc(raddr.Mem(), 1/1000)
+requires acc(a)
+requires acc(raddr.Mem(), 1/1000)
 // func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type)
 func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) {
 	unfold m.Mem()
-	unfold acc(a.Mem(), 1/1000)
 	unfold acc(raddr.Mem(), 1/1000)
 	if a != nil {
 		m.Src = a
@@ -774,7 +798,6 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 		}
 	}
 	fold m.Mem()
-	fold acc(a.Mem(), 1/1000)
 	fold acc(raddr.Mem(), 1/1000)
 }
 
