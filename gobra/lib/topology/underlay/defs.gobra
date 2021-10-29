@@ -25,7 +25,7 @@ import (
 
 type Type int
 
-// (tlino) globals not supported by gobra use functions instead
+// (tlino) iota not supported by gobra
 // const (
 // 	Invalid Type = iota
 // 	UDPIPv4
@@ -33,51 +33,24 @@ type Type int
 // 	UDPIPv46
 // )
 
-// const (
-// 	UDPIPv4Name  = "UDP/IPv4"
-// 	UDPIPv6Name  = "UDP/IPv6"
-// 	UDPIPv46Name = "UDP/IPv4+6"
-// )
+const (
+	Invalid Type = 0
+	UDPIPv4 Type = 1
+	UDPIPv6 Type = 2
+	UDPIPv46 Type = 3
+)
 
-pure func Invalid() Type {
-    return 0
-}
+const (
+	UDPIPv4Name  = "UDP/IPv4"
+	UDPIPv6Name  = "UDP/IPv6"
+	UDPIPv46Name = "UDP/IPv4+6"
+)
 
-pure func UDPIPv4() Type {
-    return 1
-}
-
-pure func UDPIPv6() Type {
-    return 2
-}
-
-pure func UDPIPv46() Type {
-    return 3
-}
-
-pure func UDPIPv4Name() string {
-    return "UDP/IPv4"
-}
-
-pure func UDPIPv6Name() string {
-    return "UDP/IPv6"
-}
-
-pure func UDPIPv46Name() string {
-    return "UDP/IPv4+6"
-}
-
-
-// (tlino) globals not supported by gobra use functions instead
-// const (
-// 	// EndhostPort is the underlay port that the dispatcher binds to on non-routers. Subject to
-// 	// change during standardisation.
-// 	EndhostPort = 30041
-// )
-
-pure func EndhostPort() int {
-    return 30041
-}
+const (
+	// EndhostPort is the underlay port that the dispatcher binds to on non-routers. Subject to
+	// change during standardisation.
+	EndhostPort = 30041
+)
 
 // (tlino) TODO need support for fmt
 func (o Type) String() string //{
@@ -93,29 +66,24 @@ func (o Type) String() string //{
 // 	}
 // }
 
+// (tlino) Verified
 // (tlino) TODO common.NewBasicError doesn't work yet
 func TypeFromString(s string) (Type, error) {
 	switch strings.ToLower(s) {
-	case strings.ToLower(UDPIPv4Name()):
-        // (tlino) globals not supported
-		// return UDPIPv4, nil
-        return UDPIPv4(), nil
-	case strings.ToLower(UDPIPv6Name()):
-        // (tlino) globals not supported
-		// return UDPIPv6, nil
-        return UDPIPv6(), nil
-	case strings.ToLower(UDPIPv46Name()):
-        // (tlino) globals not supported
-		// return UDPIPv46, nil
-        return UDPIPv46(), nil
+	case strings.ToLower(UDPIPv4Name):
+		return UDPIPv4, nil
+	case strings.ToLower(UDPIPv6Name):
+		return UDPIPv6, nil
+	case strings.ToLower(UDPIPv46Name):
+		return UDPIPv46, nil
 	default:
-        // (tlino) globals not supported
 		// return Invalid, common.NewBasicError("Unknown underlay type", nil, "type", s)
-        return Invalid(), common.NewBasicError(common.ErrMsg("Unknown underlay type"), nil, "type", s)
+        return Invalid, common.NewBasicError(common.ErrMsg("Unknown underlay type"), nil, "type", s)
 	}
 }
 
 // (tlino) TODO add support for encoding/json
+preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/1000)
 func (ot *Type) UnmarshalJSON(data []byte) error // {
 // 	var strVal string
 // 	if err := json.Unmarshal(data, &strVal); err != nil {
@@ -130,15 +98,15 @@ func (ot *Type) UnmarshalJSON(data []byte) error // {
 // }
 
 // (tlino) TODO add support for encoding/json
-func (ot Type) MarshalJSON() ([]byte, error) //{
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func (ot Type) MarshalJSON() (b []byte, error) //{
 // 	return json.Marshal(ot.String())
 // }
 
+// (tlino) Verified
 func (ot Type) IsUDP() bool {
 	switch ot {
-    // (tlino) no support for globals
-    // case UDPIPv4, UDPIPv6, UDPIPv46:
-	case UDPIPv4(), UDPIPv6(), UDPIPv46():
+	case UDPIPv4, UDPIPv6, UDPIPv46:
 		return true
 	}
 	return false
