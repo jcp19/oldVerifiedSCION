@@ -760,7 +760,7 @@ func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
 pred (s *SCION) ReadDstAddr(addr net.Addr)
 
 ghost
-requires acc(s.MemSCION(), 1/200) && acc(addr.mem(), 1/200)
+requires acc(s.MemSCION(), 1/200) && acc(addr.Mem(), 1/200)
 requires s.ReadDstAddr(addr)
 ensures acc(s.MemSCION(), 1/100)
 func (s *SCION) AddReadDstAddr(addr net.Addr)
@@ -771,7 +771,7 @@ func (s *SCION) AddReadDstAddr(addr net.Addr)
 // information and thus should be treated read-only. Instead, SetDstAddr should be used to update
 // the destination address.
 requires acc(s.MemSCION(), 1/200)
-ensures resErr == nil ==> acc(resAddr.mem(), 1/200) && s.ReadDstAddr(resAddr)
+ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadDstAddr(resAddr)
 func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.MemSCION(), 1/200)
 	// (joao) this call used to be part of the return statement
@@ -785,7 +785,7 @@ func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 pred (s *SCION) ReadSrcAddr(addr net.Addr)
 
 ghost
-requires acc(s.MemSCION(), 1/200) && acc(addr.mem(), 1/200)
+requires acc(s.MemSCION(), 1/200) && acc(addr.Mem(), 1/200)
 requires s.ReadSrcAddr(addr)
 ensures acc(s.MemSCION(), 1/100)
 func (s *SCION) AddReadSrcAddr(addr net.Addr)
@@ -796,7 +796,7 @@ func (s *SCION) AddReadSrcAddr(addr net.Addr)
 // and thus should be treated read-only. Instead, SetDstAddr should be used to update the source
 // address.
 requires acc(s.MemSCION(), 1/200)
-ensures resErr == nil ==> acc(resAddr.mem(), 1/200) && s.ReadSrcAddr(resAddr)
+ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadSrcAddr(resAddr)
 func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.MemSCION(), 1/200)
 	// (joao) this call used to be part of the return statement
@@ -809,7 +809,7 @@ func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
 // SetDstAddr takes ownership of dst and callers should not write to it after calling SetDstAddr.
 // Changes to dst might leave the layer in an inconsistent state.
-requires s.MemSCION() && dst.mem()
+requires s.MemSCION() && dst.Mem()
 ensures ret == nil ==> s.MemSCION()
 func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	unfold s.MemSCION()
@@ -829,7 +829,7 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
 // Changes to src might leave the layer in an inconsistent state.
 // (joao) Verified
-requires s.MemSCION() && src.mem()
+requires s.MemSCION() && src.Mem()
 ensures ret == nil ==> s.MemSCION()
 func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	var err error
@@ -857,7 +857,7 @@ requires acc(verifyutils.BytesAcc(raw), 1/200)
 ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
 ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
 ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
-ensures resErr == nil ==> acc(resAddr.mem(), 1/200)
+ensures resErr == nil ==> acc(resAddr.Mem(), 1/200)
 func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) /* {
 	switch addrLen {
 	case AddrLen4:
@@ -880,7 +880,7 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr
 
 // (joao) Assumed
 // (joao) requires implementation proof that IPAddr implements Addr to verify the body
-requires hostAddr.mem()
+requires hostAddr.Mem()
 ensures verifyutils.BytesAcc(s)
 // (joao) the LHS of this implication is necessary, because AddrLen4 is 0 and 0 is the value returned for addrLen
 //        in case of error
