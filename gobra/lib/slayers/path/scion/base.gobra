@@ -248,7 +248,6 @@ func (s *Base) SerializePathMetaTo(b []byte) (res error) {
 }
 
 // (joao) fmt still not supported
-decreases *
 func (m MetaHdr) String() string // {
 //	return fmt.Sprintf("{CurrInf: %d, CurrHF: %d, SegLen: %v}", m.CurrINF, m.CurrHF, m.SegLen)
 // }
