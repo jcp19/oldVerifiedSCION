@@ -96,3 +96,26 @@ func (n NilDecodeFeedback) SetTruncated() {}
 // but treat as a success, IE: an application-level payload.
 // var LayerTypePayload = RegisterLayerType(2, LayerTypeMetadata{Name: "Payload", Decoder: DecodePayload})
 pure func LayerTypePayload() LayerType
+
+// (joao) Global variables not supported
+/*
+// LayerTypeZero is an invalid layer type, but can be used to determine whether
+// layer type has actually been set correctly.
+var LayerTypeZero = RegisterLayerType(0, LayerTypeMetadata{Name: "Unknown", Decoder: DecodeUnknown})
+
+// LayerTypeDecodeFailure is the layer type for the default error layer.
+var LayerTypeDecodeFailure = RegisterLayerType(1, LayerTypeMetadata{Name: "DecodeFailure", Decoder: DecodeUnknown})
+
+// LayerTypePayload is the layer type for a payload that we don't try to decode
+// but treat as a success, IE: an application-level payload.
+var LayerTypePayload = RegisterLayerType(2, LayerTypeMetadata{Name: "Payload", Decoder: DecodePayload})
+
+// LayerTypeFragment is the layer type for a fragment of a layer transported
+// by an underlying layer that supports fragmentation.
+var LayerTypeFragment = RegisterLayerType(3, LayerTypeMetadata{Name: "Fragment", Decoder: DecodeFragment})
+*/
+
+// (joao) Alternative for lack if support for globals
+pure func LayerTypeZero() LayerType
+pure func LayerTypeDecodeFailure() LayerType
+pure func LayerTypeFragment() LayerType
