@@ -316,7 +316,6 @@ func soundInvariantSCION1(s *SCION) {
 }
 */
 
-/*
 (*SCION) implements gopacket.SerializableLayer {
 	pred Mem := MemSCION
 
@@ -328,7 +327,6 @@ func soundInvariantSCION1(s *SCION) {
 		err = s.SerializeTo(b, opts)
 	}
 }
-*/
 
 /** Getters **/
 // (joao) As suggested in Sascha's thesis, we extracted getters that require unfoldings to
