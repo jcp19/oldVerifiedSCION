@@ -39,28 +39,6 @@ import (
 	"gobra/lib/topology/underlay"
 )
 
-pred (m Messages) Mem() {
-	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
-}
-
-pred (conn *connUDPBase) Mem() {
-	acc(conn) &&
-	(forall i int :: 0 <= i && i < len(conn.oob) ==> acc(&(conn.oob)[i])) && 
-	(&conn.readMeta).Mem()
-}
-
-pred (c *Config) Mem() {
-	acc(c)
-}
-
-pred (conn *connUDPIPv4) Mem() {
-	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (&conn.pconn).Mem()
-}
-
-pred (conn *connUDPIPv6) Mem() {
-	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (&conn.pconn).Mem()
-}
-
 // ReceiveBufferSize is the default size, in bytes, of receive buffers for
 // opened sockets.
 const ReceiveBufferSize = 1 << 20
@@ -76,6 +54,10 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 // between ipv4.Message, ipv6.Message and socket.Message.
 type Messages []ipv4.Message
 
+pred (m Messages) Mem() {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
+}
+
 // Conn describes the API for an underlay socket with additional metadata on
 // reads.
 type Conn interface {
@@ -85,7 +67,7 @@ type Conn interface {
 	// (tlino) Returns the number of read bytes and the metadata
 	preserves Mem()
 	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-	ensures err != nil ==> 0 <= n && n < len(b)
+	ensures err == nil ==> 0 <= n && n < len(b)
 	ensures r.Mem()
 	Read(b common.RawBytes) (n int, r *ReadMeta, err error)
 
@@ -115,7 +97,8 @@ type Conn interface {
 	// (tlino) Returns the number of written messages
 	preserves Mem()
 	preserves acc(msgs.Mem(), 1/1000)
-	WriteBatch(msgs Messages) (int, error)
+	ensures err == nil ==> 0 <= n && n <= len(msgs)
+	WriteBatch(msgs Messages) (n int, err error)
 
 	// (tlino) Returns local address
 	// (tlino) TODO: will change in the future to something like:
@@ -153,6 +136,10 @@ type Config struct {
 	// ReceiveBufferSize is the size of the operating system receive buffer, in
 	// bytes. If 0, the package constant is used instead.
 	ReceiveBufferSize int
+}
+
+pred (c *Config) Mem() {
+	acc(c)
 }
 
 // (tlino) Verified
@@ -209,6 +196,14 @@ func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) {
 type connUDPIPv4 struct {
 	connUDPBase
 	pconn *ipv4.PacketConn
+}
+
+pred (conn *connUDPIPv4) Mem() {
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (&conn.pconn).Mem()
+}
+
+pred (conn *connUDPIPv4) MemWithOutpconn() {
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn)
 }
 
 // (tlino) TODO: add support for net.UDPConn.
@@ -292,6 +287,14 @@ func (c *connUDPIPv4) SetDeadline(t time.Time) error {
 type connUDPIPv6 struct {
 	connUDPBase
 	pconn *ipv6.PacketConn
+}
+
+pred (conn *connUDPIPv6) Mem() {
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (&conn.pconn).Mem()
+}
+
+pred (conn *connUDPIPv6) MemWithOutpconn() {
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn)
 }
 
 // (tlino) TODO: add support for net.UDPConn.
@@ -387,15 +390,23 @@ type connUDPBase struct {
 	readMeta ReadMeta
 }
 
+pred (conn *connUDPBase) Mem() {
+	acc(conn) &&
+	(forall i int :: 0 <= i && i < len(conn.oob) ==> acc(&(conn.oob)[i])) && 
+	(&conn.readMeta).Mem()
+}
+
 // (tlino) TODO: add support for features of sockctrl, syscall, net
 // (tlino) net: unknown identifier ListenUDP
 // (tlino) sockctrl: unkonwn identifier SetsockoptInt, GetsockoptInt
 // (tlino) syscall: unkonwn identifier SOL_SOCKET, SO_RXQ_OVFL, SO_TIMESTAMPNS, SO_RCVBUF
-preserves cc.Mem()
+requires acc(cc)
 requires laddr.Mem()
 requires raddr.Mem()
 requires cfg.Mem()
-func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error //{
+ensures  err == nil ==> cc.Mem()
+ensures err != nil ==> acc(cc)
+func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) (err error) //{
 // 	var c *net.UDPConn
 // 	var err error
 // 	if laddr == nil {
@@ -454,26 +465,32 @@ func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cf
 // }
 
 // (tlino) added method, since gobra doesn't support function promotion
-preserves c.Mem()
+requires acc(c)
 requires laddr.Mem()
 requires raddr.Mem()
 requires cfg.Mem()
-func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
-	unfold c.Mem()
+ensures err == nil ==> c.MemWithOutpconn()
+ensures err != nil ==> acc(c)
+func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) (err error) {
 	err := c.connUDPBase.initConnUDP(network, laddr, raddr, cfg)
-	fold c.Mem()
+	if err == nil {
+		fold c.MemWithOutpconn()
+	}
 	return err
 }
 
 // (tlino) added method, since gobra doesn't support function promotion
-preserves c.Mem()
+requires acc(c)
 requires laddr.Mem()
 requires raddr.Mem()
 requires cfg.Mem()
-func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
-	unfold c.Mem()
+ensures err == nil ==> c.MemWithOutpconn()
+ensures err != nil ==> acc(c)
+func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) (err error) {
 	err := c.connUDPBase.initConnUDP(network, laddr, raddr, cfg)
-	fold c.Mem()
+	if err == nil {
+		fold c.MemWithOutpconn()
+	}
 	return err
 }
 
@@ -481,7 +498,7 @@ func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg
 // (tlino) Problem: unknown identifier ReadMsgUDP
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures err != nil ==> 0 <= n && n < len(b)
+ensures err == nil ==> 0 <= n && n < len(b)
 ensures r.Mem()
 func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) //{
 //	c.readMeta.reset()
@@ -506,7 +523,7 @@ func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) //
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures err != nil ==> 0 <= n && n < len(b)
+ensures err == nil ==> 0 <= n && n < len(b)
 ensures r.Mem()
 func (c *connUDPIPv4) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 	unfold c.Mem()
@@ -518,7 +535,7 @@ func (c *connUDPIPv4) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 // (tlino) added method, since gobra doesn't support function promotion
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures err != nil ==> 0 <= n && n < len(b)
+ensures err == nil ==> 0 <= n && n < len(b)
 ensures r.Mem()
 func (c *connUDPIPv6) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 	unfold c.Mem()
@@ -762,7 +779,7 @@ type ReadMeta struct {
 }
 
 pred (r *ReadMeta) Mem() {
-	acc(r)
+	acc(r) && (r.Src != nil ==> (&r.Src).Mem()) && (r.Local != nil ==> (&r.Local).Mem())
 }
 
 pred ReadMetasAcc(m []ReadMeta) {
@@ -782,13 +799,13 @@ func (m *ReadMeta) reset() {
 
 // (tlino) Verified
 preserves m.Mem()
-requires acc(a)
-requires acc(raddr.Mem(), 1/1000)
-// func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type)
+requires a != nil ==> a.Mem()
+requires raddr.Mem()
 func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) {
 	unfold m.Mem()
-	unfold acc(raddr.Mem(), 1/1000)
+	unfold raddr.Mem()
 	if a != nil {
+		unfold a.Mem()
 		m.Src = a
 	} else {
 		m.Src = &net.UDPAddr{
@@ -797,8 +814,8 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 			Zone: raddr.Zone,
 		}
 	}
+	fold (&m.Src).Mem()
 	fold m.Mem()
-	fold acc(raddr.Mem(), 1/1000)
 }
 
 // (tlino) TODO: m[i].Addr isn't assignable due to issue #341
