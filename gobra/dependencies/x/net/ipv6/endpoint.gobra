@@ -134,7 +134,28 @@ func NewPacketConn(c net.PacketConn) (p *PacketConn) //{
 // 	}
 // }
 
+// (tlino) add method, since gobra doesn't support function promotion
+// ReadBatch reads a batch of messages.
+//
+// The provided flags is a set of platform-dependent flags, such as
+// syscall.MSG_PEEK.
+//
+// On a successful read it returns the number of messages received, up
+// to len(ms).
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(ms) ==> (&ms[i]).Mem()
+ensures err == nil ==> 0 <= n && n <= len(ms)
+func (c *PacketConn) ReadBatch(ms []socket.Message, flags int) (n int, err error) //{
+//	return c.payloadHandler.ReadBatch(ms, flags)
+// }
+
 // (tlino) added method, since gobra doesn't support function promotion
+// WriteBatch writes a batch of messages.
+//
+// The provided flags is a set of platform-dependent flags, such as
+// syscall.MSG_DONTROUTE.
+//
+// It returns the number of messages written on a successful write.
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(ms) ==> acc((&ms[i]).Mem(), 1/1000)
 ensures err == nil ==> 0 <= n && n <= len(ms)
