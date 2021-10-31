@@ -143,13 +143,10 @@ pred (c *Config) Mem() {
 // (tlino) Verified
 preserves acc(c.Mem(), 1/1000)
 func (c *Config) getReceiveBufferSize() int {
-	unfold acc(c.Mem(), 1/1000)
-	if c.ReceiveBufferSize != 0 {
-		s := c.ReceiveBufferSize
-		fold acc(c.Mem(), 1/1000)
+	s := unfolding acc(c.Mem(), 1/1000) in c.ReceiveBufferSize
+	if s != 0 {
 		return s
 	}
-	fold acc(c.Mem(), 1/1000)
 	return ReceiveBufferSize
 }
 
@@ -197,7 +194,7 @@ type connUDPIPv4 struct {
 }
 
 pred (conn *connUDPIPv4) Mem() {
-	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (&conn.pconn).Mem()
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (conn.pconn).Mem()
 }
 
 pred (conn *connUDPIPv4) MemWithOutpconn() {
@@ -210,7 +207,7 @@ pred (conn *connUDPIPv4) MemWithOutpconn() {
 requires listen.Mem()
 requires remote.Mem()
 requires cfg.Mem()
-ensures err == nil ==> conn.Mem() && conn != nil
+ensures err == nil ==> conn.Mem()
 func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4, err error) //{
 // 	cc := &connUDPIPv4{}
 // 	if err := cc.initConnUDP("udp4", listen, remote, cfg); err != nil {
@@ -288,7 +285,7 @@ type connUDPIPv6 struct {
 }
 
 pred (conn *connUDPIPv6) Mem() {
-	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (&conn.pconn).Mem()
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (conn.pconn).Mem()
 }
 
 pred (conn *connUDPIPv6) MemWithOutpconn() {
@@ -301,7 +298,7 @@ pred (conn *connUDPIPv6) MemWithOutpconn() {
 requires listen.Mem()
 requires remote.Mem()
 requires cfg.Mem()
-ensures err == nil ==> conn.Mem() && conn != nil
+ensures err == nil ==> conn.Mem()
 func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6, err error) //{
 // 	cc := &connUDPIPv6{}
 // 	if err := cc.initConnUDP("udp6", listen, remote, cfg); err != nil {
@@ -336,7 +333,6 @@ func (c *connUDPIPv6) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err err
 // 	}
 // 	return n, err
 // }
-
 
 // (tlino) Verified
 preserves c.Mem()
@@ -389,8 +385,15 @@ type connUDPBase struct {
 }
 
 pred (conn *connUDPBase) Mem() {
-	acc(conn) &&
-	(forall i int :: 0 <= i && i < len(conn.oob) ==> acc(&(conn.oob)[i])) && 
+	acc(&conn.conn) &&
+	acc(&conn.Listen) &&
+	acc(&conn.Remote) &&
+	acc(&conn.oob) &&
+	acc(&conn.closed) &&
+	(forall i int :: 0 <= i && i < len(conn.oob) ==> acc(&(conn.oob)[i])) &&
+	conn.conn.Mem() &&
+	(conn.Listen != nil ==> conn.Listen.Mem()) &&
+	(conn.Remote != nil ==> conn.Remote.Mem()) &&
 	(&conn.readMeta).Mem()
 }
 
@@ -674,10 +677,7 @@ func (c *connUDPIPv6) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err e
 // (tlino) Verified
 preserves c.Mem()
 func (c *connUDPBase) LocalAddr() *net.UDPAddr {
-	unfold c.Mem()
-	n := c.Listen
-	fold c.Mem()
-	return n
+	return unfolding c.Mem() in c.Listen
 }
 
 // (tlino) Verified
@@ -702,10 +702,7 @@ func (c *connUDPIPv6) LocalAddr() *net.UDPAddr {
 // (tlino) Verified
 preserves c.Mem()
 func (c *connUDPBase) RemoteAddr() *net.UDPAddr {
-	unfold c.Mem()
-	n := c.Remote
-	fold c.Mem()
-	return n
+	return unfolding c.Mem() in c.Remote
 }
 
 // (tlino) Verified
@@ -777,7 +774,7 @@ type ReadMeta struct {
 }
 
 pred (r *ReadMeta) Mem() {
-	acc(r) && (r.Src != nil ==> (&r.Src).Mem()) && (r.Local != nil ==> (&r.Local).Mem())
+	acc(r) && (r.Src != nil ==> r.Src.Mem()) && (r.Local != nil ==> r.Local.Mem())
 }
 
 pred ReadMetasAcc(m []ReadMeta) {
