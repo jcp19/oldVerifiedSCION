@@ -155,36 +155,29 @@ func (c *Config) getReceiveBufferSize() int {
 //
 // The config can be used to customize socket behavior. If config is nil,
 // default values are used.
-requires listen.Mem()
-requires remote.Mem()
-requires cfg.Mem()
+requires listen != nil ==> listen.Mem()
+requires remote != nil ==> remote.Mem()
+requires cfg != nil ==> cfg.Mem()
+requires listen != nil || remote != nil
 ensures err == nil ==> c.Mem()
 func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) {
-	unfold cfg.Mem()
-	unfold listen.Mem()
-	unfold remote.Mem()
 	if cfg == nil {
 		cfg = &Config{}
+		fold cfg.Mem()
 	}
 	a := listen
 	if remote != nil {
 		a = remote
 	}
 	if listen == nil && remote == nil {
-		fold cfg.Mem()
-		fold listen.Mem()
-		fold remote.Mem()
 		panic("either listen or remote must be set")
 	}
+	unfold a.Mem()
 	if a.IP.To4() != nil {
-		fold cfg.Mem()
-		fold listen.Mem()
-		fold remote.Mem()
+		fold a.Mem()
 		return newConnUDPIPv4(listen, remote, cfg)
 	}
-	fold cfg.Mem()
-	fold listen.Mem()
-	fold remote.Mem()
+	fold a.Mem()
 	return newConnUDPIPv6(listen, remote, cfg)
 }
 
@@ -204,8 +197,9 @@ pred (conn *connUDPIPv4) MemWithOutpconn() {
 // (tlino) TODO: add support for net.UDPConn.
 // (tlino) Problem: property error: *UDPConn is not assignable to ipv4.PacketConn (cc.conn as argument in NewPacketConn)
 // (tlino) Reason:  *UDPConn has no members with name SetWriteDeadline, SetDeadline, SetReadDeadline, LocalAddr, and Close
-requires listen.Mem()
-requires remote.Mem()
+requires listen != nil ==> listen.Mem()
+requires remote != nil ==> remote.Mem()
+requires listen != nil || remote != nil
 requires cfg.Mem()
 ensures err == nil ==> conn.Mem()
 func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4, err error) //{
@@ -295,8 +289,9 @@ pred (conn *connUDPIPv6) MemWithOutpconn() {
 // (tlino) TODO: add support for net.UDPConn.
 // (tlino) Problem: property error: *UDPConn is not assignable to ipv6.PacketConn (cc.conn as argument in NewPacketConn)
 // (tlino) Reason:  *UDPConn has no members with name SetWriteDeadline, SetDeadline, SetReadDeadline, LocalAddr, and Close
-requires listen.Mem()
-requires remote.Mem()
+requires listen != nil ==> listen.Mem()
+requires remote != nil ==> remote.Mem()
+requires listen != nil || remote != nil
 requires cfg.Mem()
 ensures err == nil ==> conn.Mem()
 func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6, err error) //{
@@ -402,8 +397,9 @@ pred (conn *connUDPBase) Mem() {
 // (tlino) sockctrl: unkonwn identifier SetsockoptInt, GetsockoptInt
 // (tlino) syscall: unkonwn identifier SOL_SOCKET, SO_RXQ_OVFL, SO_TIMESTAMPNS, SO_RCVBUF
 requires acc(cc)
-requires laddr.Mem()
-requires raddr.Mem()
+requires laddr != nil ==> laddr.Mem()
+requires raddr != nil ==> raddr.Mem()
+requires laddr != nil || raddr != nil
 requires cfg.Mem()
 ensures  err == nil ==> cc.Mem()
 ensures err != nil ==> acc(cc)
@@ -467,8 +463,9 @@ func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cf
 
 // (tlino) added method, since gobra doesn't support function promotion
 requires acc(c)
-requires laddr.Mem()
-requires raddr.Mem()
+requires laddr != nil ==> laddr.Mem()
+requires raddr != nil ==> raddr.Mem()
+requires laddr != nil || raddr != nil
 requires cfg.Mem()
 ensures err == nil ==> c.MemWithOutpconn()
 ensures err != nil ==> acc(c)
@@ -482,8 +479,9 @@ func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg
 
 // (tlino) added method, since gobra doesn't support function promotion
 requires acc(c)
-requires laddr.Mem()
-requires raddr.Mem()
+requires laddr != nil ==> laddr.Mem()
+requires raddr != nil ==> raddr.Mem()
+requires laddr != nil || raddr != nil
 requires cfg.Mem()
 ensures err == nil ==> c.MemWithOutpconn()
 ensures err != nil ==> acc(c)
