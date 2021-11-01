@@ -1008,7 +1008,7 @@ func translateBFDMemPred(b *layers.BFD) {
 }
 
 // (joao) THIS(2)
-// depends on issue #341
+// depends on issue #341, range stmt, "bytes" from stlib
 requires acc(DataPlaneMutexInvariant(d), _)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 	unfold DataPlaneMutexInvariant(d)
@@ -1772,7 +1772,7 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 
 // (joao) next: check how to avoid needing permission to rawPkt and s.MemSCION by stating that rawPkt is the packet in s.path
 // (joao) THIS(5)
-//func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
+func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error // {
 //	if err := buffer.Clear(); err != nil {
 //		return err
 //	}
@@ -1795,9 +1795,22 @@ type bfdSend struct {
 	ifID             uint16
 }
 
-//pure func (b *bfdSend) String() string {
-//	return b.srcAddr.String()
-//}
+pred (b *bfdSend) Mem() {
+	acc(b) &&
+	b.conn.Mem() &&
+	b.srcAddr.Mem() &&
+	b.dstAddr.Mem()
+}
+
+preserves acc(b.Mem(), 1/1000)
+func (b *bfdSend) String() string {
+	// (joao) old body
+	// return b.srcAddr.String()
+	unfold acc(b.Mem(), 1/1000)
+	tmp := b.srcAddr.String()
+	fold acc(b.Mem(), 1/1000)
+	return tmp
+}
 
 //func (b *bfdSend) Send(bfd *layers.BFD) error {
 //	scn := &slayers.SCION{
@@ -1866,6 +1879,14 @@ type scmpPacker struct {
 	scionL *slayers.SCION
 	buffer gopacket.SerializeBuffer
 	quote  []byte
+}
+
+pred (s scmpPacker) Mem() {
+	(forall i int :: 0 <= i && i < len(internalIP) ==> acc(&internalIP[i])) &&
+	(forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])) &&
+	scionL.Mem() &&
+	buffer.Mem() &&
+	(forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i]))
 }
 
 //func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
