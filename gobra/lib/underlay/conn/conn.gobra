@@ -819,8 +819,7 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 requires n >= 0
 ensures msgs.Mem()
 ensures len(msgs) == n
-func NewReadMessages(n int) (msgs Messages) 
-// {
+func NewReadMessages(n int) (msgs Messages) //{
 // 	m := make(Messages, n)
 // 	for i := range m {
 // 		// Allocate a single-element, to avoid allocations when setting the buffer.
@@ -837,12 +836,21 @@ func NewReadMessages(n int) (msgs Messages)
 requires n >= 0
 ensures msgs.Mem()
 ensures len(msgs) == n
-func NewWriteMessages(n int) (msgs Messages) //{
-//  	m := make(Messages, n)
-// 	for i := range m {
-// 		// Allocate a single-element, to avoid allocations when setting the buffer.
-// 		m[i].Buffers = make([][]byte, 1)
-// 		m[i].Addr = &net.UDPAddr{}
-// 	}
-// 	return m
-// }
+func NewWriteMessages(n int) (msgs Messages) {
+ 	m := make(Messages, n)
+	// (tlino) range not supported by Gobra 
+	// for i := range m {
+	// 	// Allocate a single-element, to avoid allocations when setting the buffer.
+	// 	m[i].Buffers = make([][]byte, 1)
+	// 	m[i].Addr = &net.UDPAddr{}
+	// }
+
+	invariant 0 <= i && i <= len(m)
+	invariant forall j int :: 0 <= j && j < len(m) ==> acc(&m[j])
+	for i := 0; i < len(m); i++ {
+		// Allocate a single-element, to avoid allocations when setting the buffer.
+		m[i].Buffers = make([][]byte, 1)
+		m[i].Addr = &net.UDPAddr{}
+	}
+	return m
+}
