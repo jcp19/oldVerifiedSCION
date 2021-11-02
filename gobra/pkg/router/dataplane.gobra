@@ -100,8 +100,13 @@ type bfdSession interface {
 // BatchConn is a connection that supports batch reads and writes.
 type BatchConn interface {
 	pred Mem()
-//	ReadBatch(underlayconn.Messages, []underlayconn.ReadMeta) (int, error)
-//	WriteBatch(underlayconn.Messages) (int, error)
+
+	//ReadBatch(underlayconn.Messages, []underlayconn.ReadMeta) (n int, err error)
+
+	preserves Mem()
+	preserves acc(msgs.Mem(), 1/1000)
+	ensures err == nil ==> 0 <= n && n <= len(msgs)
+	WriteBatch(msgs underlayconn.Messages) (n int, err error)
 
 	requires Mem()
 	Close() error
@@ -778,10 +783,25 @@ func (d *DataPlane) Run() error /* {
 */
 
 // (joao) Closure extracted from the body of the Run function
-func RunReadClosure(ingressID uint16, rd BatchConn) /* {
+requires rd.Mem()
+requires acc(DataPlaneMutexInvariant(d), _)
+func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
+	unfold acc(DataPlaneMutexInvariant(d), _)
 	msgs := conn.NewReadMessages(inputBatchCnt)
-	for _, msg := range msgs {
-			msg.Buffers[0] = make([]byte, bufSize)
+	unfold msgs.Mem()
+
+	// (tlino) range not supported by Gobra
+	// for _, msg := range msgs {
+	// 		msg.Buffers[0] = make([]byte, bufSize)
+	// }
+
+	invariant 0 <= i && i <= len(msgs)
+	invariant forall j int :: 0 <= j && j < len(msg) ==> acc(&msgs[j])
+	for i := 0; i < len(msgs); i++ {
+		msg := msgs[i]
+		unfold msgs.Mem()
+		(msg.Buffers)[0] = make([]byte, bufSize)
+		fold msgs.Mem()
 	}
 
 	var scmpErr scmpError
@@ -789,69 +809,93 @@ func RunReadClosure(ingressID uint16, rd BatchConn) /* {
 	spkt := slayers.SCION{}
 	buffer := gopacket.NewSerializeBuffer()
 	origPacket := make([]byte, bufSize)
-	for d.running {
-		pkts, err := rd.ReadBatch(msgs, metas)
-		if err != nil {
-			log.Debug("Failed to read batch", "err", err)
-			// error metric
-			continue
-		}
-		if pkts == 0 {
-			continue
-		}
-		for _, p := range msgs[:pkts] {
-			origPacket = origPacket[:p.N]
-			// TODO(karampok). Use meta for sanity checks.
-			p.Buffers[0] = p.Buffers[0][:p.N]
-			copy(origPacket[:p.N], p.Buffers[0])
+	// for d.running {
+	// 	pkts, err := rd.ReadBatch(msgs, metas)
+	// 	if err != nil {
+	// 		log.Debug("Failed to read batch", "err", err)
+	// 		// error metric
+	// 		continue
+	// 	}
+	// 	if pkts == 0 {
+	// 		continue
+	// 	}
+	// 	// (tlino) range not supported by Gobra
+	// 	// for _, p := range msgs[:pkts] {
+	// 	for i := 0; i < pkts; i++ {
+	// 		// added variable
+	// 		p := msgs[i]
+	// 		origPacket = origPacket[:p.N]
+	// 		// TODO(karampok). Use meta for sanity checks.
 
-			// input metric
-			inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
-			d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
-			d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
+	// 		// (tlino) added parentheses to make it parse
+	// 		// p.Buffers[0] = p.Buffers[0][:p.N]
+	// 		// copy(origPacket[:p.N], p.Buffers[0])
 
-			result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
-				buffer)
+	// 		(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
+	// 		copy((origPacket)[:p.N], (p.Buffers)[0])
 
-			switch {
-			case err == nil:
-			case errors.As(err, &scmpErr):
-				if !scmpErr.TypeCode.InfoMsg() {
-					log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
-				}
-				// SCMP go back the way they came.
-				result.OutAddr = p.Addr
-				result.OutConn = rd
-			default:
-				log.Debug("Error processing packet", "err", err)
-				d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
-				continue
-			}
-			if result.OutConn == nil { // e.g. BFD case no message is forwarded
-				continue
-			}
-			_, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
-				Buffers: [][]byte{result.OutPkt},
-				Addr:    result.OutAddr,
-			}}))
-			if err != nil {
-				log.Debug("Error writing packet", "err", err)
-				// error metric
-				continue
-			}
-			// ok metric
-			outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-			d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
-			d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-		}
+	// 		// (tlino) ignore the logging stuff for now
+	// 		// input metric
+	// 		// inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
+	// 		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
+	// 		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 
-		// Reset buffers to original capacity.
-		for _, p := range msgs[:pkts] {
-			p.Buffers[0] = p.Buffers[0][:bufSize]
-		}
-	}
+	// 		// (tlino) added parentheses to make it parse
+	// 		// result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
+	// 		//	buffer)
+
+	// 		result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
+	// 			buffer)
+
+	// 		switch {
+	// 		case err == nil:
+	// 		case errors.As(err, &scmpErr):
+	// 			if !scmpErr.TypeCode.InfoMsg() {
+	// 				log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
+	// 			}
+	// 			// SCMP go back the way they came.
+	// 			result.OutAddr = p.Addr
+	// 			result.OutConn = rd
+	// 		default:
+	// 			log.Debug("Error processing packet", "err", err)
+
+	// 			// (tlino) ignore the logging stuff for now
+	// 			// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
+	// 			continue
+	// 		}
+	// 		if result.OutConn == nil { // e.g. BFD case no message is forwarded
+	// 			continue
+	// 		}
+	// 		_, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
+	// 			Buffers: [][]byte{result.OutPkt},
+	// 			Addr:    result.OutAddr,
+	// 		}}))
+	// 		if err != nil {
+	// 			log.Debug("Error writing packet", "err", err)
+	// 			// error metric
+	// 			continue
+	// 		}
+
+	// 		// (tlino) ignore the logging stuff for now
+	// 		// ok metric
+	// 		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+	// 		// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
+	// 		// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+	// 	}
+
+	// 	// Reset buffers to original capacity.
+	// 	// (tlino) range no supported by Gobra
+	// 	// for _, p := range msgs[:pkts] {
+	// 	// 	p.Buffers[0] = p.Buffers[0][:bufSize]
+	// 	// }
+
+	// 	for i := 0; i < pkts; i++ {
+	// 		p := msgs[i]
+	// 		(p.Buffers)[0] = ((p.Buffers)[0])[:bufSize]
+	// 	}
+	// }
+	fold msgs.Mem()
 }
-*/
 
 requires DataPlaneMutexInvariant(d)
 ensures  DataPlaneMutexInvariant(d)

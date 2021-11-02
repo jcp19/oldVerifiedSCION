@@ -77,3 +77,10 @@ type SerializeBuffer interface {
 preserves w.Mem()
 preserves forall i int :: 0 <= i && i < len(layers) ==> acc(&layers[i]) && layers[i].Mem()
 func SerializeLayers(w SerializeBuffer, opts SerializeOptions, layers ...SerializableLayer) error 
+
+// (tlino) added stub
+// NewSerializeBuffer creates a new instance of the default implementation of
+// the SerializeBuffer interface.
+func NewSerializeBuffer() SerializeBuffer //{
+// 	return &serializeBuffer{}
+// }
