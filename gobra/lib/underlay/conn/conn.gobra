@@ -58,6 +58,10 @@ pred (m Messages) Mem() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
 }
 
+pred (m Messages) MemInitialzed() {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemInitialzed()
+}
+
 // Conn describes the API for an underlay socket with additional metadata on
 // reads.
 type Conn interface {
@@ -815,7 +819,7 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 // NewReadMessages allocates memory for reading IPv4 Linux network stack
 // messages.
 requires n >= 0
-ensures msgs.Mem()
+ensures msgs.MemInitialzed()
 ensures len(msgs) == n
 func NewReadMessages(n int) (msgs Messages) //{
 // 	m := make(Messages, n)

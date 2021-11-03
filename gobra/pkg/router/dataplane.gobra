@@ -788,7 +788,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	msgs := conn.NewReadMessages(inputBatchCnt)
-	unfold msgs.Mem()
+	unfold msgs.MemInitialzed()
 
 	// (tlino) range not supported by Gobra
 	// for _, msg := range msgs {
@@ -796,12 +796,11 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// }
 
 	invariant 0 <= i && i <= len(msgs)
-	invariant forall j int :: 0 <= j && j < len(msg) ==> acc(&msgs[j])
+	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).MemInitialzed()
 	for i := 0; i < len(msgs); i++ {
-		msg := msgs[i]
-		unfold msgs.Mem()
-		(msg.Buffers)[0] = make([]byte, bufSize)
-		fold msgs.Mem()
+		unfold (&msgs[i]).MemInitialzed()
+		(msgs[i].Buffers)[0] = make([]byte, bufSize)
+		fold (&msgs[i]).MemInitialzed()
 	}
 
 	var scmpErr scmpError
@@ -809,6 +808,9 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	spkt := slayers.SCION{}
 	buffer := gopacket.NewSerializeBuffer()
 	origPacket := make([]byte, bufSize)
+	
+	// (tlino) Verified until here
+
 	// for d.running {
 	// 	pkts, err := rd.ReadBatch(msgs, metas)
 	// 	if err != nil {
@@ -894,7 +896,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// 		(p.Buffers)[0] = ((p.Buffers)[0])[:bufSize]
 	// 	}
 	// }
-	fold msgs.Mem()
+	fold msgs.MemInitialzed()
 }
 
 requires DataPlaneMutexInvariant(d)
