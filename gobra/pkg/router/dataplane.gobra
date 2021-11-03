@@ -792,7 +792,8 @@ requires acc(DataPlaneMutexInvariant(d), _)
 func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) // {
 // 	unfold acc(DataPlaneMutexInvariant(d), _)
 
-// 	// InitReadClosureBuffer()
+// 	// (tlino) outlined code to separate function
+// 	msgs := InitReadClosureBuffer()
 
 // 	var scmpErr scmpError
 // 	metas := make([]conn.ReadMeta, inputBatchCnt)
@@ -801,6 +802,8 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) // {
 // 	origPacket := make([]byte, bufSize)
 	
 // 	// (tlino) Verified until here
+
+
 // 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).MemInitialzed()
 // 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
 // 	invariant rd.Mem()
@@ -815,88 +818,19 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) // {
 // 		if pkts == 0 {
 // 			continue
 // 		}
-// 		(tlino) range not supported by Gobra
-// 		for _, p := range msgs[:pkts] {
-// 		for i := 0; i < pkts; i++ {
-// 			// added variable
-// 			p := msgs[i]
-// 			origPacket = origPacket[:p.N]
-// 			// TODO(karampok). Use meta for sanity checks.
+// 		// (tlino) outlined code to separate function
+// 		processBatch()
 
-// 			// (tlino) added parentheses to make it parse
-// 			// p.Buffers[0] = p.Buffers[0][:p.N]
-// 			// copy(origPacket[:p.N], p.Buffers[0])
-
-// 			(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
-// 			copy((origPacket)[:p.N], (p.Buffers)[0])
-
-// 			// (tlino) ignore the logging stuff for now
-// 			// input metric
-// 			// inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
-// 			// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
-// 			// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
-
-// 			// (tlino) added parentheses to make it parse
-// 			// result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
-// 			//	buffer)
-
-// 			result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
-// 				buffer)
-
-// 			switch {
-// 			case err == nil:
-// 			case errors.As(err, &scmpErr):
-// 				if !scmpErr.TypeCode.InfoMsg() {
-// 					log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
-// 				}
-// 				// SCMP go back the way they came.
-// 				result.OutAddr = p.Addr
-// 				result.OutConn = rd
-// 			default:
-// 				log.Debug("Error processing packet", "err", err)
-
-// 				// (tlino) ignore the logging stuff for now
-// 				// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
-// 				continue
-// 			}
-// 			if result.OutConn == nil { // e.g. BFD case no message is forwarded
-// 				continue
-// 			}
-// 			_, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
-// 				Buffers: [][]byte{result.OutPkt},
-// 				Addr:    result.OutAddr,
-// 			}}))
-// 			if err != nil {
-// 				log.Debug("Error writing packet", "err", err)
-// 				// error metric
-// 				continue
-// 			}
-
-// 			// (tlino) ignore the logging stuff for now
-// 			// ok metric
-// 			// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-// 			// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
-// 			// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-// 		}
-
-// 		Reset buffers to original capacity.
-// 		(tlino) range no supported by Gobra
-// 		for _, p := range msgs[:pkts] {
-// 			p.Buffers[0] = p.Buffers[0][:bufSize]
-// 		}
-
-// 		for i := 0; i < pkts; i++ {
-// 			p := msgs[i]
-// 			(p.Buffers)[0] = ((p.Buffers)[0])[:bufSize]
-// 		}
+// 		// (tlino) outlined code to separate function
 // 	}
 // 	fold msgs.MemInitialzed()
 // }
 
+// (tlino) Verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 ensures msgs.MemInitialzed()
-func InitReadClosureBuffer() (msgs underlayconn.Messages) {
+func initReadClosureBuffer() (msgs underlayconn.Messages) {
 	msgs := conn.NewReadMessages(inputBatchCnt)
 	unfold msgs.MemInitialzed()
 
@@ -914,6 +848,104 @@ func InitReadClosureBuffer() (msgs underlayconn.Messages) {
 	}
 	fold msgs.MemInitialzed()
 }
+
+// (tlino) added function to simplify verification
+// (tlino) used to be part of the read closure
+preserves acc(DataPlaneMutexInvariant(d), _)
+preserves msgs.MemInitialzed()
+preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
+requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
+preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+preserves scmpErr != nil
+preserves buffer.Mem()
+preserves spkt.MemSCION()
+func processBatch(d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt *slayers.SCION) //{
+// 	unfold msgs.MemInitialzed()
+
+// 	//(tlino) range not supported by Gobra
+// 	// for _, p := range msgs[:pkts] {
+// 	invariant 0 <= i && i <= pkts
+// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).MemInitialzed()
+// 	for i := 0; i < pkts; i++ {
+// 		// added variable
+// 		p := msgs[i]
+// 		origPacket = origPacket[:p.N]
+// 		// TODO(karampok). Use meta for sanity checks.
+
+// 		// (tlino) added parentheses to make it parse
+// 		// p.Buffers[0] = p.Buffers[0][:p.N]
+// 		// copy(origPacket[:p.N], p.Buffers[0])
+
+// 		(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
+// 		copy((origPacket)[:p.N], (p.Buffers)[0])
+
+// 		// (tlino) ignore the logging stuff for now
+// 		// input metric
+// 		// inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
+// 		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
+// 		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
+
+// 		// (tlino) added parentheses to make it parse
+// 		// result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
+// 		//	buffer)
+
+// 		result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
+// 			buffer)
+
+// 		switch {
+// 		case err == nil:
+// 		case errors.As(err, &scmpErr):
+// 			if !scmpErr.TypeCode.InfoMsg() {
+// 				log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
+// 			}
+// 			// SCMP go back the way they came.
+// 			result.OutAddr = p.Addr
+// 			result.OutConn = rd
+// 		default:
+// 			log.Debug("Error processing packet", "err", err)
+
+// 			// (tlino) ignore the logging stuff for now
+// 			// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
+// 			continue
+// 		}
+// 		if result.OutConn == nil { // e.g. BFD case no message is forwarded
+// 			continue
+// 		}
+// 		_, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
+// 			Buffers: [][]byte{result.OutPkt},
+// 			Addr:    result.OutAddr,
+// 		}}))
+// 		if err != nil {
+// 			log.Debug("Error writing packet", "err", err)
+// 			// error metric
+// 			continue
+// 		}
+
+// 		// (tlino) ignore the logging stuff for now
+// 		// ok metric
+// 		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+// 		// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
+// 		// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+// 	}
+// }
+
+// (tlino) added function to simplify verification
+// (tlino) used to be part of the read closure
+preserves  msgs.MemInitialzed()
+func resetReadClosureBuffers(msgs underlayconn.Messages) //{
+	// Reset buffers to original capacity.
+// 		// (tlino) range no supported by Gobra
+// 		// for _, p := range msgs[:pkts] {
+// 		// 	p.Buffers[0] = p.Buffers[0][:bufSize]
+// 		// }
+
+// 		for i := 0; i < pkts; i++ {
+// 			p := msgs[i]
+// 			(p.Buffers)[0] = ((p.Buffers)[0])[:bufSize]
+// 		}
+// }
+
 
 requires DataPlaneMutexInvariant(d)
 ensures  DataPlaneMutexInvariant(d)
