@@ -102,7 +102,7 @@ type BatchConn interface {
 	pred Mem()
 
 	preserves Mem()
-	preserves msgs.MemInitialzed()
+	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta) (n int, err error)
@@ -843,40 +843,40 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) // {
 // (tlino) Verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
-ensures msgs.MemInitialzed()
+ensures msgs.Mem()
 ensures forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
-func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta) {
-	msgs := conn.NewReadMessages(inputBatchCnt)
-	unfold msgs.MemInitialzed()
+func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta) // {
+// 	msgs := conn.NewReadMessages(inputBatchCnt)
+// 	unfold msgs.Mem()
 
-	// (tlino) range not supported by Gobra
-	// for _, msg := range msgs {
-	// 		msg.Buffers[0] = make([]byte, bufSize)
-	// }
+// 	// (tlino) range not supported by Gobra
+// 	// for _, msg := range msgs {
+// 	// 		msg.Buffers[0] = make([]byte, bufSize)
+// 	// }
 
-	invariant 0 <= i && i <= len(msgs)
-	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).MemInitialzed()
-	for i := 0; i < len(msgs); i++ {
-		unfold (&msgs[i]).MemInitialzed()
-		(msgs[i].Buffers)[0] = make([]byte, bufSize)
-		fold (&msgs[i]).MemInitialzed()
-	}
-	fold msgs.MemInitialzed()
+// 	invariant 0 <= i && i <= len(msgs)
+// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
+// 	for i := 0; i < len(msgs); i++ {
+// 		unfold (&msgs[i]).Mem()
+// 		(msgs[i].Buffers)[0] = make([]byte, bufSize)
+// 		fold (&msgs[i]).Mem()
+// 	}
+// 	fold msgs.Mem()
 
-	metas := make([]conn.ReadMeta, inputBatchCnt)
-	// (tlino) added loop to initialize metas
-	invariant 0 <= i && i <= len(metas)
-	invariant forall j int :: i <= j && j < len(metas) ==> acc(&metas[j]) && metas[j].Src == nil && metas[j].Local == nil
-	invariant forall j int :: 0 <= j && j < i ==> (&metas[j]).Mem()
-	for i := 0; i < len(metas); i++ {
-		fold (&metas[i]).Mem()
-	}
-}
+// 	metas := make([]conn.ReadMeta, inputBatchCnt)
+// 	// (tlino) added loop to initialize metas
+// 	invariant 0 <= i && i <= len(metas)
+// 	invariant forall j int :: i <= j && j < len(metas) ==> acc(&metas[j]) && metas[j].Src == nil && metas[j].Local == nil
+// 	invariant forall j int :: 0 <= j && j < i ==> (&metas[j]).Mem()
+// 	for i := 0; i < len(metas); i++ {
+// 		fold (&metas[i]).Mem()
+// 	}
+// }
 
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 preserves acc(DataPlaneMutexInvariant(d), _)
-preserves msgs.MemInitialzed()
+preserves msgs.Mem()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
@@ -885,12 +885,12 @@ preserves buffer.Mem()
 preserves spkt.MemSCION()
 func processBatch(d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt *slayers.SCION) //{
-// 	unfold msgs.MemInitialzed()
+// 	unfold msgs.Mem()
 
 // 	//(tlino) range not supported by Gobra
 // 	// for _, p := range msgs[:pkts] {
 // 	invariant 0 <= i && i <= pkts
-// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).MemInitialzed()
+// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
 // 	for i := 0; i < pkts; i++ {
 // 		// added variable
 // 		p := msgs[i]
@@ -901,8 +901,10 @@ func processBatch(d *DataPlane, msgs underlayconn.Messages, metas []underlayconn
 // 		// p.Buffers[0] = p.Buffers[0][:p.N]
 // 		// copy(origPacket[:p.N], p.Buffers[0])
 
+// 		unfold p.Mem()
 // 		(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
 // 		copy((origPacket)[:p.N], (p.Buffers)[0])
+// 		fold p.Mem()
 
 // 		// (tlino) ignore the logging stuff for now
 // 		// input metric
@@ -957,10 +959,10 @@ func processBatch(d *DataPlane, msgs underlayconn.Messages, metas []underlayconn
 // (tlino) not verified yet
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
-preserves  msgs.MemInitialzed()
+preserves  msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs)
 func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) // {
-// 	unfold msgs.MemInitialzed()
+// 	unfold msgs.Mem()
 
 // 	// Reset buffers to original capacity.
 // 	// (tlino) range no supported by Gobra
@@ -969,13 +971,13 @@ func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) // {
 // 	// }
 
 // 	invariant 0 <= i && i <= pkts
-// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).MemInitialzed()
+// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
 // 	for i := 0; i < pkts; i++ {
-// 		unfold (&msgs[i]).MemInitialzed()
+// 		unfold (&msgs[i]).Mem()
 // 		// (msgs[i].Buffers)[0] = ((msgs[i].Buffers)[0])[:bufSize]
-// 		fold (&msgs[i]).MemInitialzed()
+// 		fold (&msgs[i]).Mem()
 // 	}
-// 	fold msgs.MemInitialzed()
+// 	fold msgs.Mem()
 // }
 
 
@@ -1006,6 +1008,13 @@ type processResult struct {
 	OutConn  BatchConn
 	OutAddr  net.Addr
 	OutPkt   []byte
+}
+
+pred (pr *processResult) Mem() {
+	acc(pr) &&
+	pr.OutConn.Mem() &&
+	pr.OutAddr.Mem() &&
+	(forall i int :: 0 <= i && i < len(pr.OutPkt) ==> acc(&(pr.OutPkt)[i]))
 }
 
 pure func isZeroSCION(s slayers.SCION) bool {

@@ -55,7 +55,7 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 type Messages []ipv4.Message
 
 pred (m Messages) Mem() {
-	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem() && (&m[i]).HasBuffersNonZeroLength()
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
 }
 
 // Conn describes the API for an underlay socket with additional metadata on
