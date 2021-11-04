@@ -79,7 +79,7 @@ type Conn interface {
 	// (tlino) The metadata is stored in metas.
 	// (tlino) Returns the number of read messages
 	preserves Mem()
-	preserves msgs.Mem()
+	preserves msgs.MemInitialzed()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 	ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error)
@@ -220,7 +220,7 @@ func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
 preserves c.Mem()
-preserves msgs.Mem()
+preserves msgs.MemInitialzed()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) // {
@@ -312,7 +312,7 @@ func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
 preserves c.Mem()
-preserves msgs.Mem()
+preserves msgs.MemInitialzed()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 func (c *connUDPIPv6) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) 

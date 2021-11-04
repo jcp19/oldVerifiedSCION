@@ -21,6 +21,11 @@ pred (m *Message) MemInitialzed() {
 	m.Addr.Mem()
 }
 
+requires acc(m.Mem(), _)
+pure func (m *Message) HasBuffersNonZeroLength() bool {
+	return unfolding acc(m.Mem(), _) in len(m.Buffers) >= 1
+}
+
 // A Message represents an IO message.
 type Message struct {
 	// When writing, the Buffers field must contain at least one
