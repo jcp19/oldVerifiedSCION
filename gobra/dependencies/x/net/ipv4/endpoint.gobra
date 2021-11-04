@@ -32,7 +32,7 @@ type genericOpt struct {
 //func (c *genericOpt) ok() bool { return c != nil && c.Conn != nil }
 
 // NewConn returns a new Conn.
-preserves c.Mem()
+requires c.Mem()
 ensures conn.Mem()
 func NewConn(c net.Conn) (conn *Conn) //{
 // 	cc, _ := socket.NewConn(c)
@@ -181,7 +181,6 @@ func (c *RawConn) Close() error //{
 // transport.
 requires c.Mem()
 ensures err == nil ==> r.Mem()
-ensures err != nil ==> c.Mem()
 func NewRawConn(c net.PacketConn) (r *RawConn, err error) //{
 // cc, err := socket.NewConn(c.(net.Conn))
 // if err != nil {

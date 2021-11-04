@@ -68,7 +68,7 @@ type Conn interface {
 	preserves Mem()
 	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 	ensures err == nil ==> 0 <= n && n <= len(b)
-	ensures r.Mem()
+	ensures err == nil ==> r.Mem()
 	Read(b common.RawBytes) (n int, r *ReadMeta, err error)
 
 	// (tlino) Reads a batch of messages and stores them in msgs.
@@ -143,6 +143,11 @@ pred (c *Config) Mem() {
 // (tlino) Verified
 preserves acc(c.Mem(), 1/1000)
 func (c *Config) getReceiveBufferSize() int {
+	// (tlino) original code
+	// if c.ReceiveBufferSize != 0 {
+	//	return c.ReceiveBufferSize
+	 // }
+	
 	s := unfolding acc(c.Mem(), 1/1000) in c.ReceiveBufferSize
 	if s != 0 {
 		return s
@@ -498,7 +503,7 @@ func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures err == nil ==> 0 <= n && n <= len(b)
-ensures r.Mem()
+ensures err == nil ==> r.Mem()
 func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) //{
 //	c.readMeta.reset()
 //	n, oobn, _, src, err := c.conn.ReadMsgUDP(b, c.oob)
@@ -523,7 +528,7 @@ func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) //
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures err == nil ==> 0 <= n && n <= len(b)
-ensures r.Mem()
+ensures err == nil ==> r.Mem()
 func (c *connUDPIPv4) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 	unfold c.Mem()
 	n, r, err := c.connUDPBase.Read(b)
@@ -535,7 +540,7 @@ func (c *connUDPIPv4) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 preserves c.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures err == nil ==> 0 <= n && n <= len(b)
-ensures r.Mem()
+ensures err == nil ==> r.Mem()
 func (c *connUDPIPv6) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
 	unfold c.Mem()
 	n, r, err := c.connUDPBase.Read(b)

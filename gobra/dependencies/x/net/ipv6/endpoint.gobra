@@ -47,7 +47,7 @@ func (c *Conn) PathMTU() (int, error) //{
 
 // NewConn returns a new Conn.
 
-preserves c.Mem()
+requires c.Mem()
 ensures conn.Mem()
 func NewConn(c net.Conn) (conn *Conn) //{
 // 	cc, _ := socket.NewConn(c)
