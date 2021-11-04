@@ -55,11 +55,7 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 type Messages []ipv4.Message
 
 pred (m Messages) Mem() {
-	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
-}
-
-pred (m Messages) MemInitialzed() {
-	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemInitialzed()
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem() && (&m[i]).HasBuffersNonZeroLength()
 }
 
 // Conn describes the API for an underlay socket with additional metadata on
@@ -79,7 +75,7 @@ type Conn interface {
 	// (tlino) The metadata is stored in metas.
 	// (tlino) Returns the number of read messages
 	preserves Mem()
-	preserves msgs.MemInitialzed()
+	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 	ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error)
@@ -225,7 +221,7 @@ func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
 preserves c.Mem()
-preserves msgs.MemInitialzed()
+preserves msgs.Mem()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) // {
@@ -317,7 +313,7 @@ func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
 preserves c.Mem()
-preserves msgs.MemInitialzed()
+preserves msgs.Mem()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 func (c *connUDPIPv6) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) 
@@ -820,7 +816,7 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 // NewReadMessages allocates memory for reading IPv4 Linux network stack
 // messages.
 requires n >= 0
-ensures msgs.MemInitialzed()
+ensures msgs.Mem()
 ensures len(msgs) == n
 func NewReadMessages(n int) (msgs Messages) //{
 // 	m := make(Messages, n)

@@ -6,18 +6,9 @@ import (
 
 pred (m *Message) Mem() {
 	acc(m) && 
-	(forall i int :: 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) && 
-	(forall i,j int :: 0 <= i && i < len(m.Buffers) && 0 <= j && j < len((m.Buffers)[i]) ==> acc(&(m.Buffers)[i][j])) && 
-	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
-	m.Addr.Mem()
-}
-
-pred (m *Message) MemInitialzed() {
-	acc(m) && 
-	(len(m.Buffers) >= 1) &&
-	(forall i int :: 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) && 
-	(forall i,j int :: 0 <= i && i < len(m.Buffers) && 0 <= j && j < len((m.Buffers)[i]) ==> acc(&(m.Buffers)[i][j])) && 
-	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
+	(forall i int :: { (m.Buffers)[i] } 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) && 
+	(forall i,j int :: { (m.Buffers)[i][j] } 0 <= i && i < len(m.Buffers) && 0 <= j && j < len((m.Buffers)[i]) ==> acc(&(m.Buffers)[i][j])) && 
+	(forall i int :: { (m.OOB)[i] } 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
 	m.Addr.Mem()
 }
 
