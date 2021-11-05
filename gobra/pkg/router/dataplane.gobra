@@ -793,7 +793,9 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) // {
 // 	// (tlino) outlined code to separate function
 // 	msgs, metas := initReadClosureBuffer()
 
-// 	var scmpErr *scmpError
+// 	// (tlino) use pointer
+// 	// var scmpErr scmpError
+// 	scmpErr := &scmpError{}
 // 	// (tlino) use pointer
 // 	// spkt := slayers.SCION{}
 // 	spkt := &slayers.SCION{}
@@ -807,9 +809,13 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) // {
 // 	isRunning := unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 
 // 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
-// 	invariant rd.Mem()
-// 	invariant msgs.MemInitialzed()
 // 	invariant acc(DataPlaneMutexInvariant(d), _)
+// 	invariant rd.Mem()
+// 	invariant msgs.Mem()
+// 	invariant acc(scmpErr)
+// 	invariant acc(spkt)
+// 	invariant buffer.Mem()
+// 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 // 	for isRunning {
 // 		pkts, err := rd.ReadBatch(msgs, metas)
 
@@ -880,9 +886,9 @@ preserves msgs.Mem()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-preserves scmpErr != nil
+preserves acc(scmpErr)
 preserves buffer.Mem()
-preserves spkt.MemSCION()
+preserves acc(spkt)
 func processBatch(d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt *slayers.SCION) //{
 // 	unfold msgs.Mem()

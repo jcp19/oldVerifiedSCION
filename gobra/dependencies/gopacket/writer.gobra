@@ -81,6 +81,7 @@ func SerializeLayers(w SerializeBuffer, opts SerializeOptions, layers ...Seriali
 // (tlino) added stub
 // NewSerializeBuffer creates a new instance of the default implementation of
 // the SerializeBuffer interface.
-func NewSerializeBuffer() SerializeBuffer //{
+ensures sb.Mem()
+func NewSerializeBuffer() (sb SerializeBuffer) //{
 // 	return &serializeBuffer{}
 // }
