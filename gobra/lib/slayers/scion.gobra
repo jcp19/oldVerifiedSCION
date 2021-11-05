@@ -296,21 +296,20 @@ pred (s *SCION) MemSCION() {
 	acc(s) &&
 	verifyutils.BytesAcc(s.RawSrcAddr) &&
 	verifyutils.BytesAcc(s.RawDstAddr) &&
-	validSrcAddr(s) &&
-	validDstAddr(s) &&
-	// The commented properties here are not enforced by the DecodeFromBytes function
-	// (s.SrcAddrLen == AddrLen4  ==> (s.SrcAddrType == T4Ip || s.SrcAddrType == T4Svc)) &&
-	// (s.SrcAddrLen == AddrLen16 ==> s.SrcAddrType == T16Ip) &&
-	// (s.DstAddrLen == AddrLen4  ==> (s.DstAddrType == T4Ip || s.DstAddrType == T4Svc)) &&
-	// (s.DstAddrLen == AddrLen16 ==> s.DstAddrType == T16Ip) &&
-	s.Path.Mem()
+	validAddrLen(s.SrcAddrLen) && len(s.RawSrcAddr) == addrBytes(s.SrcAddrLen) &&
+	validAddrLen(s.DstAddrLen) && len(s.RawDstAddr) == addrBytes(s.DstAddrLen) &&
+	s.Path.Mem() &&
+	// value of uint fields is non-negative (Gobra cannot prove this yet)
+	s.Version >= 0 &&
+	s.TrafficClass >= 0 &&
+	s.FlowID >= 0 &&
+	s.HdrLen >= 0 &&
+	s.PayloadLen >= 0
 	// TODO:
-	// - length of raw addresses should be even
 	// - Relation between PathType and Path
-	// - Payload
 }
 
-//(joao) Fails, as expected
+// (joao) Fails, as expected
 /*
 ghost
 requires s.MemSCION()
@@ -440,15 +439,13 @@ func (s *SCION) getSrcAddrLen() AddrLen {
 	return unfolding acc(s.MemSCION(), _) in s.SrcAddrLen
 }
 
-// (joao) Assumed
 pure
 requires acc(s.MemSCION(), _)
 ensures res == unfolding acc(s.MemSCION(), _) in len(s.RawSrcAddr)
-// (joao) TODO: add this property to the Invariant
 ensures res % 2 == 0
-func (s *SCION) getLenRawSrcAddr() (res int) // {
-//	return unfolding acc(s.MemSCION(), _) in len(s.RawSrcAddr)
-//}
+func (s *SCION) getLenRawSrcAddr() (res int) {
+	return unfolding acc(s.MemSCION(), _) in len(s.RawSrcAddr)
+}
 
 pure
 requires acc(s.MemSCION(), _)
@@ -456,16 +453,13 @@ func (s *SCION) getRawDstAddr() []byte {
 	return unfolding acc(s.MemSCION(), _) in s.RawDstAddr
 }
 
-// (joao) Assumed
 pure
 requires acc(s.MemSCION(), _)
 ensures res == unfolding acc(s.MemSCION(), _) in len(s.RawDstAddr)
-// (joao) cannot prove this postcondition if body is uncommented, but the proof of this
-//        is analogous to `proveLenRawSrcAddrHasEvenLen`
 ensures res % 2 == 0
-func (s *SCION) getLenRawDstAddr() (res int) // {
-//	return unfolding acc(s.MemSCION(), _) in len(s.RawDstAddr)
-//}
+func (s *SCION) getLenRawDstAddr() (res int) {
+	return unfolding acc(s.MemSCION(), _) in len(s.RawDstAddr)
+}
 
 pure
 requires acc(s.MemSCION(), _)
@@ -489,28 +483,6 @@ pure func addrBytes(addrLen AddrLen) (res int) {
 	return (int(addrLen) + 1) * LineLen
 }
 
-ghost
-pure func bogusIntMinAddrLen() int
-
-ghost
-requires validAddrLen(l)
-pure func minAddrLen(l AddrLen) int {
-	return l == AddrLen4? 4: (l == AddrLen8? 8: (l == AddrLen12? 12 : (l == AddrLen16? 16: bogusIntMinAddrLen())))
-}
-
-ghost
-requires acc(s, _)
-pure func validSrcAddr(s *SCION) bool {
-	return validAddrLen(s.SrcAddrLen) && len(s.RawSrcAddr) >= minAddrLen(s.SrcAddrLen)
-}
-
-ghost
-requires acc(s, _)
-pure func validDstAddr(s *SCION) bool {
-	return validAddrLen(s.DstAddrLen) && len(s.RawDstAddr) >= minAddrLen(s.DstAddrLen)
-}
-
-/* pure */
 pure
 func (s *SCION) LayerType() gopacket.LayerType {
 	// (joao) slayers.LayerTypeSCION is currently implemented as a pure function due to the lack of support for global variables
@@ -555,7 +527,7 @@ pure func (s *SCION) getPathLen() (ret int) /* {
 }
 */
 
-// (joao) Verified
+// (joao) Partially Verified
 requires s.MemSCION() && b.Mem()
 ensures  retErr == nil ==> s.MemSCION() && b.Mem()
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
@@ -564,6 +536,7 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 	if err != nil {
 		return err
 	}
+	// (joao) verify after adding support for magic wands
 	// (joao) this is safe but not proved atm. Verifying this requires introducing
 	//        a new pure function that returns the value of Bytes() and then proving that
 	//        Bytes() returns that value and permissions to the elements, and introduce a new variant
@@ -820,8 +793,8 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
 	ghost if err == nil {
-		assert validDstAddr(s) && len(s.RawDstAddr) >= minAddrLen(s.DstAddrLen)
-		assert (s.RawSrcAddr != nil ==> validSrcAddr(s))
+		assert validAddrLen(s.SrcAddrLen) && len(s.RawSrcAddr) == addrBytes(s.SrcAddrLen)
+		assert validAddrLen(s.DstAddrLen) && len(s.RawDstAddr) == addrBytes(s.DstAddrLen)
 		assert verifyutils.BytesAcc(s.RawSrcAddr) 
 		assert verifyutils.BytesAcc(s.RawDstAddr) 
 		fold s.MemSCION()
@@ -840,8 +813,8 @@ func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	unfold s.MemSCION()
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)
 	ghost if err == nil {
-		assert validSrcAddr(s) && len(s.RawSrcAddr) >= minAddrLen(s.SrcAddrLen)
-		assert (s.RawDstAddr != nil ==> validDstAddr(s))
+		assert validAddrLen(s.SrcAddrLen) && len(s.RawSrcAddr) == addrBytes(s.SrcAddrLen)
+		assert validAddrLen(s.DstAddrLen) && len(s.RawDstAddr) == addrBytes(s.DstAddrLen)
 		assert verifyutils.BytesAcc(s.RawSrcAddr) 
 		assert verifyutils.BytesAcc(s.RawDstAddr) 
 		fold s.MemSCION()
@@ -849,14 +822,8 @@ func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	return err
 }
 
-// (joao) Assumed
-// (joao) requires implementation proof that IPAddr implements Addr to verify the body
-/*
-requires addrLen == AddrLen4  ==> (addrType == T4Ip || addrType == T4Svc)
-requires addrLen == AddrLen16 ==> addrType == T16Ip
-*/
-requires addrLen == AddrLen4 ==> len(raw) >= 4
-requires addrLen == AddrLen16 ==> len(raw) >= 16
+requires addrLen == AddrLen4 ==> len(raw) == 4
+requires addrLen == AddrLen16 ==> len(raw) == 16
 requires acc(verifyutils.BytesAcc(raw), 1/200)
 ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
 ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
@@ -898,6 +865,7 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr
 }
 
 // (joao) Assumed
+// (joao) Verify this next
 // (joao) requires implementation proof that IPAddr implements Addr to verify the body
 requires hostAddr.Mem()
 ensures verifyutils.BytesAcc(s)
@@ -906,7 +874,7 @@ ensures verifyutils.BytesAcc(s)
 ensures (err == nil && addrLen == AddrLen4)  ==> (addrType == T4Svc || addrType == T4Ip)
 ensures (err == nil && addrLen == AddrLen16) ==> addrType == T16Ip
 // (joao) This post-condition may require additional-checks to hold 
-ensures err == nil ==> validAddrLen(addrLen) && len(s) >= minAddrLen(addrLen)
+ensures err == nil ==> validAddrLen(addrLen) && len(s) == addrBytes(addrLen)
 ensures err != nil ==> addrLen == 0 && addrType == 0 && s == nil
 func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) /* {
 	switch a := hostAddr.(type) {
@@ -914,7 +882,7 @@ func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, 
 		if ip := a.IP.To4(); ip != nil {
 			return AddrLen4, T4Ip, ip, nil
 		}
-		// (joao) possibly problematic! this does not guarantee that the length of the slice is bigger than minAddrLen(addrLen)
+		// (joao) requires ip.Mem() to make it succeed
 		return AddrLen16, T16Ip, a.IP, nil
 	case addr.HostSVC:
 		return AddrLen4, T4Svc, a.PackWithPad(2), nil
@@ -923,19 +891,15 @@ func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, 
 }
 */
 
-// (joao) Assumed
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
 requires acc(s.MemSCION(), _)
 ensures unfolding acc(s.MemSCION(), _) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
-// (joao) if the body of the function is uncommented, this post-condition will not verify because Gobra does not
-//        take into account that uint cannot be negative.
-ensures res >= 2*addr.IABytes
 ensures unfolding acc(s.MemSCION(), _) in addrBytes(s.DstAddrLen) >= 0
 ensures unfolding acc(s.MemSCION(), _) in addrBytes(s.SrcAddrLen) >= 0
-pure func (s *SCION) AddrHdrLen() (res int) /* {
+pure func (s *SCION) AddrHdrLen() (res int) {
 	return unfolding s.MemSCION() in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
-}*/
+}
 
 // (joao) Verified
 // SerializeAddrHdr serializes destination and source ISD-AS-Host address triples into the provided
@@ -1015,6 +979,7 @@ func copyRawSrcAddr(s *SCION, b []byte) /* {
 }
 */
 
+// (joao) TODO: remake this spec
 // (joao) Assumed for now
 // DecodeAddrHdr decodes the destination and source ISD-AS-Host address triples from the provided
 // buffer. The caller must ensure that the correct address types and lengths are set in the SCION
