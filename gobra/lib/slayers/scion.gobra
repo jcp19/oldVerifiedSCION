@@ -291,6 +291,7 @@ type SCION struct {
 	Path Path
 }
 
+// (joao) TODO: rename MemSCION to Mem
 pred (s *SCION) MemSCION() {
 	acc(s) &&
 	verifyutils.BytesAcc(s.RawSrcAddr) &&
@@ -861,25 +862,40 @@ ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
 ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
 ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200)
-func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) /* {
+func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) {
 	switch addrLen {
 	case AddrLen4:
 		switch addrType {
 		case T4Ip:
-			return &net.IPAddr{IP: net.IP(raw)}, nil
+			// (joao) previously:
+			// return &net.IPAddr{IP: net.IP(raw)}, nil
+			unfold acc(verifyutils.BytesAcc(raw), 1/200)
+			tmp := &net.IPAddr{IP: net.IP(raw)}
+			fold acc(tmp.Mem(), 1/200)
+			return tmp, nil
 		case T4Svc:
-			return addr.HostSVC(binary.BigEndian.Uint16(raw[:addr.HostLenSVC])), nil
+			// (joao) previously:
+			// return addr.HostSVC(binary.BigEndian.Uint16(raw[:addr.HostLenSVC])), nil
+			unfold acc(verifyutils.BytesAcc(raw), 1/200)
+			assert forall i int :: 0 <= i && i < addr.HostLenSVC ==> &raw[:addr.HostLenSVC][i] == &raw[i]
+			tmp := addr.HostSVC(binary.BigEndian.Uint16(raw[:addr.HostLenSVC]))
+			fold acc(tmp.Mem(), 1/200)
+			return tmp, nil
 		}
 	case AddrLen16:
 		switch addrType {
 		case T16Ip:
-			return &net.IPAddr{IP: net.IP(raw)}, nil
+			// (joao) previously:
+			// return &net.IPAddr{IP: net.IP(raw)}, nil
+			unfold acc(verifyutils.BytesAcc(raw), 1/200)
+			tmp := &net.IPAddr{IP: net.IP(raw)}
+			fold acc(tmp.Mem(), 1/200)
+			return tmp, nil
 		}
 	}
 	return nil, serrors.New("unsupported address type/length combination",
 		"type", addrType, "len", addrLen)
 }
-*/
 
 // (joao) Assumed
 // (joao) requires implementation proof that IPAddr implements Addr to verify the body
@@ -898,6 +914,7 @@ func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, 
 		if ip := a.IP.To4(); ip != nil {
 			return AddrLen4, T4Ip, ip, nil
 		}
+		// (joao) possibly problematic! this does not guarantee that the length of the slice is bigger than minAddrLen(addrLen)
 		return AddrLen16, T16Ip, a.IP, nil
 	case addr.HostSVC:
 		return AddrLen4, T4Svc, a.PackWithPad(2), nil
