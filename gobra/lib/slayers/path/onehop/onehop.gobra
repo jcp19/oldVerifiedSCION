@@ -192,6 +192,7 @@ func (o *Path) ToSCIONDecoded() (dec *scion.Decoded, err error) {
 //	}
 //	return p, nil
 }
+
 decreases
 func (o *Path) Reverse() error {
 	return serrors.New("OneHop path cannot be reversed")
