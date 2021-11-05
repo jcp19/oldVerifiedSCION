@@ -89,6 +89,7 @@ preserves forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/1000)
 ensures res == nil ==> HopFieldInv(h)
 ensures res != nil ==> acc(h)
 ensures len(raw) >= HopLen ==> res == nil
+decreases
 func (h *HopField) DecodeFromBytes(raw []byte) (res error) {
 	if len(raw) < HopLen {
 		return serrors.New("HopField raw too short", "expected", HopLen, "actual", len(raw))
@@ -139,6 +140,7 @@ func (h *HopField) DecodeFromBytes(raw []byte) (res error) {
 preserves acc(HopFieldInv(h), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures len(b) >= HopLen ==> err == nil
+decreases
 func (h *HopField) SerializeTo(b []byte) (err error) {
 	if len(b) < HopLen {
 		return serrors.New("buffer for HopField too short", "expected", MacLen, "actual", len(b))
@@ -171,12 +173,14 @@ func (h *HopField) SerializeTo(b []byte) (err error) {
 
 preserves forall i int :: (0 <= i && i < len(dst)) ==> acc(&dst[i])
 preserves forall i int :: (0 <= i && i < len(src)) ==> acc(&src[i], 1/2000)
+decreases
 func outlineCopy(dst, src []byte) {
 	copy(dst, src, perm(1/2000))
 }
 
 // ExpTimeToDuration calculates the relative expiration time in seconds.
 // Note that for a 0 value ExpTime, the minimal duration is expTimeUnit.
+decreases
 func ExpTimeToDuration(expTime uint8) time.Duration {
 	return (time.Duration(expTime) + 1) * time.Duration(expTimeUnit) * time.Second
 }
