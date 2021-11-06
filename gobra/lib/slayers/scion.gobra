@@ -540,6 +540,13 @@ func (s *SCION) LayerPayload() []byte {
 	return unfolding acc(s.MemSCION(), 1/10000) in (s.EmbeddedBaseLayer).Payload
 }
 
+requires s.MemSCION()
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+func (s *SCION) LayerPayloadWithPermission() (b []byte) {
+	unfold s.MemSCION()
+	return (s.EmbeddedBaseLayer).Payload
+} 
+
 // (joao) Flow not implemented
 //func (s *SCION) NetworkFlow() gopacket.Flow {
 //	// TODO(shitz): Investigate how we can use gopacket.Flow.
