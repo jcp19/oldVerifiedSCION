@@ -309,8 +309,8 @@ pred (s *SCION) MemSCION() {
 	// - Relation between PathType and Path
 }
 
-// (joao) Fails, as expected
 /*
+// (joao) Fails, as expected
 ghost
 requires s.MemSCION()
 func soundInvariantSCION1(s *SCION) {
@@ -397,35 +397,19 @@ func (s *SCION) getPathType() PathType {
 	return unfolding acc(s.MemSCION(), 1/1000) in s.PathType
 }
 
-// (joao) Assumed
-requires acc(s.MemSCION(), 1/1000)
+pure
+requires acc(s.MemSCION(), _)
 requires 0 <= i && i < s.getLenRawSrcAddr()
-ensures acc(s.MemSCION(), 1/1000)
-func (s *SCION) getRawSrcAddrIdx(i int) (res byte) /* {
-	// (joao) Gobra does not terminate when unfolding a predicate that contains
-	//        quantified permissions
-	assume false
-	unfold acc(s.MemSCION(), 1/10000)
-	res = verifyutils.BytesIndex(s.RawSrcAddr, i)
-	fold acc(s.MemSCION(), 1/10000)
-	return res
+func (s *SCION) getRawSrcAddrIdx(i int) (res byte) {
+	return unfolding acc(s.MemSCION(), _) in verifyutils.BytesIndex(s.RawSrcAddr, i)
 }
-*/
 
-// (joao) Assumed
-requires acc(s.MemSCION(), 1/1000)
+pure
+requires acc(s.MemSCION(), _)
 requires 0 <= i && i < s.getLenRawDstAddr()
-ensures acc(s.MemSCION(), 1/1000)
-func (s *SCION) getRawDstAddrIdx(i int) (res byte) /* {
-	// (joao) Gobra does not terminate when unfolding a predicate that contains
-	//        quantified permissions
-	assume false
-	unfold acc(s.MemSCION(), 1/10000)
-	res = verifyutils.BytesIndex(s.RawDstAddr, i)
-	fold acc(s.MemSCION(), 1/10000)
-	return res
+func (s *SCION) getRawDstAddrIdx(i int) (res byte) {
+	return unfolding acc(s.MemSCION(), _) in verifyutils.BytesIndex(s.RawDstAddr, i)
 }
-*/
 
 pure
 requires acc(s.MemSCION(), _)
@@ -443,9 +427,9 @@ pure
 requires acc(s.MemSCION(), _)
 ensures res == unfolding acc(s.MemSCION(), _) in len(s.RawSrcAddr)
 ensures res % 2 == 0
-func (s *SCION) getLenRawSrcAddr() (res int) {
-	return unfolding acc(s.MemSCION(), _) in len(s.RawSrcAddr)
-}
+func (s *SCION) getLenRawSrcAddr() (res int) // {
+//	return unfolding acc(s.MemSCION(), _) in len(s.RawSrcAddr)
+//}
 
 pure
 requires acc(s.MemSCION(), _)
