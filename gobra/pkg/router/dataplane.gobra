@@ -1045,7 +1045,8 @@ pure func isZeroSCION(s slayers.SCION) bool {
 		s.Path == nil
 }
 
-// (tlino) partially verified
+// (tlino) Verified
+// (tlino) TODO: permission to rawPkt is lost after DecodeFromBytes
 // (joao) THIS(1)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires isZeroSCION(s)
@@ -1089,15 +1090,33 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader(),
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 	case slayers.PathTypeOneHop:
-		assume false
+		// (tlino) use sNew instead of s and use getters
 		// if s.NextHdr == common.L4BFD {
-		//	ohp, ok := s.Path.(*onehop.Path)
-		//	if !ok {
-		//		return processResult{}, malformedPath
-		//	}
-		//	return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
-		//}
+		if sNew.getNextHdr() == common.L4BFD {
+			// (tlino) use sNew instead of s and use getters
+			// ohp, ok := s.Path.(*onehop.Path)
+			// if !ok {
+			// 	return processResult{}, malformedPath
+			// }
+			// (tlino) use getter to return path and payload
+			path, payload := sNew.GetPathAndPayload()
+			// (tlino) use path instead of s.Path
+			// ohp, ok := s.Path.(*onehop.Path)
+			ohp, ok := path.(*onehop.Path)
+			// (tlino) globals aren't supported yet
+			// if !ok {
+			// 	return processResult{}, malformedPath
+			// }
+			if !ok {
+				return processResult{}, malformedPath()
+			}
+			// (tlino) use result from getter
+			// return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
+			return processResult{}, d.processInterBFD(ingressID, ohp, payload)
+		}
+		// (tlino) use sNew instead of s
 		// return d.processOHP(ingressID, rawPkt, s, buffer)
+		return d.processOHP(ingressID, rawPkt, sNew, buffer)
 	case slayers.PathTypeSCION:
 		assert acc(DataPlaneMutexInvariant(d), _)
 		assert forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
@@ -1844,7 +1863,6 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
-requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
 preserves acc(s.MemSCION(), _)
 preserves buffer.Mem()
 // (tlino) s is now a *slayers.SCION

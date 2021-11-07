@@ -545,7 +545,15 @@ ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func (s *SCION) LayerPayloadWithPermission() (b []byte) {
 	unfold s.MemSCION()
 	return (s.EmbeddedBaseLayer).Payload
-} 
+}
+
+requires s.MemSCION()
+ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures p.Mem()
+func (s *SCION) GetPathAndPayload() (p Path, b []byte) {
+	unfold s.MemSCION()
+	return s.Path, (s.EmbeddedBaseLayer).Payload
+}
 
 // (joao) Flow not implemented
 //func (s *SCION) NetworkFlow() gopacket.Flow {
