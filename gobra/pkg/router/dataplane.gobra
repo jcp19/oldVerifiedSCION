@@ -849,33 +849,33 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) //{
 // (tlino) used to be part of the read closure
 ensures msgs.Mem()
 ensures forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
-func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta) // {
-// 	msgs := conn.NewReadMessages(inputBatchCnt)
-// 	unfold msgs.Mem()
+func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta) {
+	msgs := conn.NewReadMessages(inputBatchCnt)
+	unfold msgs.Mem()
 
-// 	// (tlino) range not supported by Gobra
-// 	// for _, msg := range msgs {
-// 	// 		msg.Buffers[0] = make([]byte, bufSize)
-// 	// }
+	// (tlino) range not supported by Gobra
+	// for _, msg := range msgs {
+	// 		msg.Buffers[0] = make([]byte, bufSize)
+	// }
 
-// 	invariant 0 <= i && i <= len(msgs)
-// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
-// 	for i := 0; i < len(msgs); i++ {
-// 		unfold (&msgs[i]).Mem()
-// 		(msgs[i].Buffers)[0] = make([]byte, bufSize)
-// 		fold (&msgs[i]).Mem()
-// 	}
-// 	fold msgs.Mem()
+	invariant 0 <= i && i <= len(msgs)
+	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
+	for i := 0; i < len(msgs); i++ {
+		unfold (&msgs[i]).Mem()
+		(msgs[i].Buffers)[0] = make([]byte, bufSize)
+		fold (&msgs[i]).Mem()
+	}
+	fold msgs.Mem()
 
-// 	metas := make([]conn.ReadMeta, inputBatchCnt)
-// 	// (tlino) added loop to initialize metas
-// 	invariant 0 <= i && i <= len(metas)
-// 	invariant forall j int :: i <= j && j < len(metas) ==> acc(&metas[j]) && metas[j].Src == nil && metas[j].Local == nil
-// 	invariant forall j int :: 0 <= j && j < i ==> (&metas[j]).Mem()
-// 	for i := 0; i < len(metas); i++ {
-// 		fold (&metas[i]).Mem()
-// 	}
-// }
+	metas := make([]conn.ReadMeta, inputBatchCnt)
+	// (tlino) added loop to initialize metas
+	invariant 0 <= i && i <= len(metas)
+	invariant forall j int :: i <= j && j < len(metas) ==> acc(&metas[j]) && metas[j].Src == nil && metas[j].Local == nil
+	invariant forall j int :: 0 <= j && j < i ==> (&metas[j]).Mem()
+	for i := 0; i < len(metas); i++ {
+		fold (&metas[i]).Mem()
+	}
+}
 
 // (tlino) not verified yet
 // (tlino) added function to simplify verification
@@ -1121,7 +1121,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		assert acc(DataPlaneMutexInvariant(d), _)
 		assert forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 		assert buffer.Mem()
-		assert sNew.MemSCION()
+		assert sNew.Mem()
 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
 		return d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
 	default:
@@ -1242,7 +1242,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error  // {
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 requires buffer.Mem()
-requires s.MemSCION()
+requires s.Mem()
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
@@ -1388,14 +1388,14 @@ ensures ok ==> s.Mem()
 func havocRaw() (s *scion.Raw, ok bool)
 
 requires acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
-requires (p.scionLayer).MemSCION()
+requires (p.scionLayer).Mem()
 ensures  acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
-ensures  (p.scionLayer).MemSCION()
+ensures  (p.scionLayer).Mem()
 ensures  errRet == nil ==> (acc(p.infoField) && path.HopFieldInv(p.hopField))
 func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) {
 	var ok bool
 	// (joao) this line depends on the proof that *scion.Raw implements Path. However, adding that to the code
-	//        causes verification to take a very long time. Nonetheless, should be uncommented on the final version of this. Also, we should use a smart way to avoid unfolding MemSCION
+	//        causes verification to take a very long time. Nonetheless, should be uncommented on the final version of this. Also, we should use a smart way to avoid unfolding Mem
 	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
 	p.path, ok = havocRaw()
 	if !ok {
@@ -1403,8 +1403,8 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 		// return processResult{}, malformedPath
 		return processResult{}, malformedPath()
 	}
-	// (joao) here, p.path.Mem() holds without unfolding (p.scionLayer).MemSCION() because we use havocRaw. We would need to convert (p.scionLayer).MemSCION() into
-	// (p.scionLayer).MemSCIONWithoutPath() && p.path.Len() or else, remove path.Len() from MemSCION
+	// (joao) here, p.path.Mem() holds without unfolding (p.scionLayer).Mem() because we use havocRaw. We would need to convert (p.scionLayer).Mem() into
+	// (p.scionLayer).MemWithoutPath() && p.path.Len() or else, remove path.Len() from Mem
 	var err error
 	p.hopField, err = p.path.GetCurrentHopField()
 	if err != nil {
@@ -1550,17 +1550,17 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error /* {
 */
 
 // (tlino) Verified
-requires acc(&p.scionLayer, 1/1000) && acc(p.scionLayer.MemSCION(), 1/1000)
-pure func (p *scionPacketProcessor) currentInfoPointer() uint16 //{
-// 	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
-// 		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.MemSCION(), 1/1000) in p.path.PathMeta.CurrINF))
-// }
+requires acc(&p.scionLayer, 1/1000) && acc(p.scionLayer.Mem(), 1/1000)
+pure func (p *scionPacketProcessor) currentInfoPointer() uint16 {
+	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
+		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.Mem(), 1/1000) in p.path.PathMeta.CurrINF))
+}
 
 // (tlino) Verified
-pure func (p *scionPacketProcessor) currentHopPointer() uint16 //{
-// 	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
-// 		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
-// }
+pure func (p *scionPacketProcessor) currentHopPointer() uint16 {
+	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
+		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
+}
 
 /* (joao) currently not supported
 func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) {
@@ -1759,8 +1759,8 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 
 // next: packSCMP, 
 // THIS(4)
-requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
-ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
+requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).Mem(), 1/100)
+ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).Mem(), 1/100)
 func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 	// (joao) adapted to avoid unfolding predicates
 	// if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
@@ -1786,7 +1786,7 @@ requires acc(p)
 requires acc(DataPlaneMutexInvariant(p.d), _)
 requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
 requires (p.buffer).Mem()
-requires (p.scionLayer).MemSCION()
+requires (p.scionLayer).Mem()
 func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
@@ -1863,7 +1863,7 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
-preserves acc(s.MemSCION(), _)
+preserves acc(s.Mem(), _)
 preserves buffer.Mem()
 // (tlino) s is now a *slayers.SCION
 // func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
@@ -1978,7 +1978,7 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 }
 */
 
-// (joao) next: check how to avoid needing permission to rawPkt and s.MemSCION by stating that rawPkt is the packet in s.path
+// (joao) next: check how to avoid needing permission to rawPkt and s.Mem by stating that rawPkt is the packet in s.path
 // (joao) THIS(5)
 //func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 //	if err := buffer.Clear(); err != nil {

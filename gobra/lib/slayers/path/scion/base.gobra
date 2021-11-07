@@ -52,6 +52,7 @@ requires acc(s)
 preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
 ensures res != nil ==> acc(s)
 ensures res == nil ==> BaseInvariant(s)
+decreases
 func (s *Base) DecodeFromBytes(data []byte) (res error) {
 	// PathMeta takes care of bounds check.
 	err := s.PathMeta.DecodeFromBytes(data)
@@ -64,6 +65,7 @@ func (s *Base) DecodeFromBytes(data []byte) (res error) {
 	invariant -1 <= i && i <= 2
 	invariant acc(s)
 	invariant s.NumHops >= 0 && s.NumINF >= 0 && s.NumINF <= 3 // && s.NumHops <= 64
+	decreases i
 	for i := 2; i >= 0; i-- {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 		if (s.PathMeta.SegLen)[i] == 0 && s.NumINF > 0 {
@@ -88,6 +90,7 @@ func (s *Base) DecodeFromBytes(data []byte) (res error) {
 // IncPath increases the currHF index and currINF index if appropriate.
 requires BaseInvariant(s)
 ensures BaseInvariant(s)
+decreases
 func (s *Base) IncPath() error {
 	unfold BaseInvariant(s)
 	if s.NumINF == 0 {
@@ -108,6 +111,7 @@ func (s *Base) IncPath() error {
 
 // IsXover returns whether we are at a crossover point.
 preserves acc(BaseInvariant(s), 1/100)
+decreases
 func (s *Base) IsXover() bool {
 // (joao) tmp was introduced by me to simplify the unfoldings of BaseInvariant(s)
 	unfold acc(BaseInvariant(s), 1/100)
@@ -120,6 +124,7 @@ func (s *Base) IsXover() bool {
 // https://ethz.ch/content/dam/ethz/special-interest/infk/chair-program-method/pm/documents/Education/Theses/Sascha_Forster_BA_report(3).pdf
 requires acc(BaseInvariant(s), _)
 ensures res >= 0 && res <= 3
+decreases
 pure func getNumINF(s *Base) (res int) {
 	return unfolding acc(BaseInvariant(s), _) in s.NumINF
 }
@@ -127,12 +132,14 @@ pure func getNumINF(s *Base) (res int) {
 // (joao) introduced to reduce verification time
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
+decreases
 pure func getNumHops(s *Base) (res int) {
 	return unfolding acc(BaseInvariant(s), _) in s.NumHops
 }
 
 // (joao) introduced to reduce verification time
 requires acc(BaseInvariant(s), _)
+decreases
 pure func getCurrHF(s *Base) (res uint8) {
 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
 }
@@ -141,11 +148,13 @@ pure func getCurrHF(s *Base) (res uint8) {
 // requires acc(BaseInvariant(s), p)
 // ensures acc(BaseInvariant(s), p)
 preserves acc(s, 1/1000) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
+decreases
 func (s *Base) infIndexForHF(hf uint8) uint8 {
 	left := uint8(0)
 
 	invariant acc(s, 1/1000) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
 	invariant 0 <= i && i <= 3
+	decreases s.NumINF-i
 	for i := 0; i < s.NumINF; i++ {
 		if hf >= left {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
@@ -167,6 +176,7 @@ requires acc(BaseInvariant(s), _)
 // this property
 ensures res >= MetaLen
 ensures res == unfolding acc(BaseInvariant(s), _) in MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
+decreases
 pure func (s *Base) Len() (res int) // {
 //	return unfolding acc(BaseInvariant(s), _) in MetaLen + int(s.NumINF)*path.InfoLen + int(s.NumHops)*path.HopLen
 // }
@@ -186,6 +196,7 @@ requires acc(m)
 requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/100)
 ensures acc(m)
 ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/100)
+decreases
 func (m *MetaHdr) DecodeFromBytes(raw []byte) error {
 	if len(raw) < MetaLen {
 		return serrors.New("MetaHdr raw too short", "expected", MetaLen, "actual", len(raw))
@@ -207,6 +218,7 @@ preserves acc(m, 1/100)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures len(b) >= MetaLen ==> res == nil
 ensures len(b) < MetaLen ==> res != nil
+decreases
 func (m *MetaHdr) SerializeTo(b []byte) (res error) {
 	if len(b) < MetaLen {
 		return serrors.New("buffer for MetaHdr too short", "expected", MetaLen, "actual", len(b))
@@ -227,6 +239,7 @@ preserves acc(BaseInvariant(s), 1/100)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures len(b) >= MetaLen ==> res == nil
 ensures len(b) < MetaLen ==> res != nil
+decreases
 func (s *Base) SerializePathMetaTo(b []byte) (res error) {
 	unfold acc(BaseInvariant(s), 1/100)
 	res = s.PathMeta.SerializeTo(b)
