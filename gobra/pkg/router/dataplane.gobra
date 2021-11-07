@@ -1133,11 +1133,16 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 // (tlino) Verified
 // (joao) `oh` is not used anywhere in the function
-requires acc(DataPlaneMutexInvariant(d), _)
+preserves acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	if len(d.bfdSessions) == 0 {
+	// (tlino) adapt if clause as below
+	// if len(d.bfdSessions) == 0 {
+	// 	return noBFDSessionConfigured
+	// }
+
+	hasNoBFDSessions := unfolding acc(DataPlaneMutexInvariant(d), _) in len(d.bfdSessions) == 0
+	if hasNoBFDSessions {
 		// (joao) no globals
 		// return noBFDSessionConfigured
 		return noBFDSessionConfigured()
@@ -1157,11 +1162,19 @@ func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []by
 
 	translateBFDMemPred(p)
 
-	// (joao) add parentheses surrounding `d.bfdSessions`
+	// (tlino) added parantheses and unfolding
+	// if v, ok := d.bfdSessions[ingressID]; ok {
+	// 	v.Messages() <- p
+	// 	return nil
+	// }
+
+	unfold acc(DataPlaneMutexInvariant(d), _)
 	if v, ok := (d.bfdSessions)[ingressID]; ok {
 		v.Messages() <- p
+		fold acc(DataPlaneMutexInvariant(d), _)
 		return nil
 	}
+	fold acc(DataPlaneMutexInvariant(d), _)
 
 	// (joao) no globals
 	// return noBFDSessionFound
