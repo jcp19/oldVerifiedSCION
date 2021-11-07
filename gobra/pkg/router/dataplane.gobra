@@ -1550,13 +1550,14 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error /* {
 */
 
 // (tlino) Verified
-requires acc(&p.scionLayer, 1/1000) && acc(p.scionLayer.Mem(), 1/1000)
+requires acc(p.Mem(), 1/1000)
 pure func (p *scionPacketProcessor) currentInfoPointer() uint16 {
 	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
 		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.Mem(), 1/1000) in p.path.PathMeta.CurrINF))
 }
 
 // (tlino) Verified
+requires acc(p.Mem(), 1/1000)
 pure func (p *scionPacketProcessor) currentHopPointer() uint16 {
 	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
 		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
