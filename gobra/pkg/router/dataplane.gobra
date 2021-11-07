@@ -1193,11 +1193,15 @@ func translateBFDMemPred(b *layers.BFD) {
 // depends on issue #341
 requires src.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-requires acc(DataPlaneMutexInvariant(d), _)
-func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error  // {
-// 	unfold acc(DataPlaneMutexInvariant(d), _)
-// 	if len(d.bfdSessions) == 0 {
-// 		fold acc(DataPlaneMutexInvariant(d), _)
+preserves acc(DataPlaneMutexInvariant(d), _)
+func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error //{
+// 	// (tlino) add unfolding
+// 	// if len(d.bfdSessions) == 0 {
+// 	// 	return noBFDSessionConfigured
+// 	// }
+
+// 	hasNoBFDSessions := unfolding acc(DataPlaneMutexInvariant(d), _) in len(d.bfdSessions) == 0
+// 	if hasNoBFDSessions {
 // 		// (tlino) golbals not supported
 // 		// return noBFDSessionConfigured
 // 		return noBFDSessionConfigured()
@@ -1221,7 +1225,6 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error  // {
 // 	ifID := uint16(0)
 // 	srcUDPAddr, ok := src.(*net.UDPAddr)
 // 	if !ok {
-// 		fold acc(DataPlaneMutexInvariant(d), _)
 // 		// (joao) No support for fmt
 // 		// return serrors.New("type assertion failure", "from", fmt.Sprintf("%v(%T)", src, src),
 // 		//	"expected", "*net.IPAddr")
@@ -1240,13 +1243,19 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error  // {
 // //		}
 // //	}
 
-// // (joao) introduced parentheses surrounding b.bfdSessions
-// //	if v, ok := d.bfdSessions[ifID]; ok {
+// 	// (tlino) added unfolding
+// 	// if v, ok := d.bfdSessions[ifID]; ok {
+// 	// 	v.Messages() <- p
+// 	// 	return nil
+// 	// }
+
+// 	unfold acc(DataPlaneMutexInvariant(d), _)
 // 	if v, ok := (d.bfdSessions)[ifID]; ok {
 // 		// v.Messages() <- p
 // 		fold acc(DataPlaneMutexInvariant(d), _)
 // 		return nil
 // 	}
+// 	fold acc(DataPlaneMutexInvariant(d), _)
 // 	// (tlino) golbals not supported
 // 	// return noBFDSessionFound
 // 	return noBFDSessionFound()
