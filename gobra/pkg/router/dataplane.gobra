@@ -1882,11 +1882,11 @@ type scmpPacker struct {
 }
 
 pred (s scmpPacker) Mem() {
-	(forall i int :: 0 <= i && i < len(internalIP) ==> acc(&internalIP[i])) &&
-	(forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])) &&
-	scionL.Mem() &&
-	buffer.Mem() &&
-	(forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i]))
+	(forall i int :: 0 <= i && i < len(s.internalIP) ==> acc(&(s.internalIP)[i])) &&
+	(forall i int :: 0 <= i && i < len(s.origPacket) ==> acc(&(s.origPacket)[i])) &&
+	(s.scionL).Mem() &&
+	(s.buffer).Mem() &&
+	(forall i int :: 0 <= i && i < len(s.quote) ==> acc(&(s.quote)[i]))
 }
 
 //func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
