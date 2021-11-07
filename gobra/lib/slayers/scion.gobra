@@ -575,14 +575,12 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 	b.CombinePrependBytesMem(buf)
 }
 
-requires acc(s.Mem(), 1/1000)
-requires forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
-ensures  acc(s.Mem(), 1/1000)
-ensures  forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+preserves s.Mem()
+preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
 func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
-	unfold acc(s.Mem(), 1/1000)
+	unfold s.Mem()
 	ret := s.Path.SerializeTo(buf)
-	fold acc(s.Mem(), 1/1000)
+	fold s.Mem()
 	return ret
 }
 */
