@@ -74,6 +74,7 @@ requires o.UninitializedMem()
 preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
 ensures err == nil ==> o.Mem()
 // ensures err != nil ==> acc(o)
+decreases
 func (o *Path) DecodeFromBytes(data []byte) (err error) {
 	if len(data) < PathLen {
 		return serrors.New("buffer too short for OneHop path", "expected", PathLen, "actual",
@@ -110,6 +111,7 @@ func (o *Path) DecodeFromBytes(data []byte) (err error) {
 
 preserves acc(o.Mem(), 1/100)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+decreases
 func (o *Path) SerializeTo(b []byte) error {
 	if len(b) < PathLen {
 		return serrors.New("buffer too short for OneHop path", "expected", PathLen, "actual",
@@ -142,6 +144,7 @@ func (o *Path) SerializeTo(b []byte) error {
 requires acc(o.Mem(), 1/100)
 ensures acc(o.Mem(), 1/100)
 ensures err == nil ==> scion.DecodedInvariant(dec)
+decreases
 func (o *Path) ToSCIONDecoded() (dec *scion.Decoded, err error) {
 	unfold acc(o.Mem(), 1/100)
 	unfold acc(path.HopFieldInv(&o.SecondHop), 1/1000)
@@ -190,12 +193,14 @@ func (o *Path) ToSCIONDecoded() (dec *scion.Decoded, err error) {
 //	return p, nil
 }
 
+decreases
 func (o *Path) Reverse() error {
 	return serrors.New("OneHop path cannot be reversed")
 }
 
 pure
 ensures ret >= 0
+decreases
 func (o *Path) Len() (ret int) {
 	return PathLen
 }

@@ -76,7 +76,7 @@ pred (s *SCMP) Mem() {
 	acc(s) &&
 	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Contents) ==> acc(&(s.BaseLayerEmbedded.Contents)[i])) &&
 	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i])) &&
-	(s.scn != nil ==> s.scn.MemSCION())
+	(s.scn != nil ==> s.scn.Mem())
 }
 
 // LayerType returns LayerTypeSCMP.
@@ -211,7 +211,7 @@ func (s *SCMP) String() string /* {
 // This is needed for computing the checksum when serializing,
 requires acc(s) && l.Mem()
 ensures  acc(s)
-ensures  err == nil ==> s.scn.MemSCION()
+ensures  err == nil ==> s.scn.Mem()
 func (s *SCMP) SetNetworkLayerForChecksum(l gopacket.NetworkLayer) (err error) /* {
 	if l == nil {
 		return serrors.New("cannot use nil layer type for scmp checksum network layer")

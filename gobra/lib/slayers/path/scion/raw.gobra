@@ -47,6 +47,7 @@ requires acc(s)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures res == nil ==> s.Mem()
 ensures res != nil ==> acc(s)
+decreases
 func (s *Raw) DecodeFromBytes(data []byte) (res error) {
 	if err := s.Base.DecodeFromBytes(data); err != nil {
 		return err
@@ -72,6 +73,7 @@ func (s *Raw) DecodeFromBytes(data []byte) (res error) {
 //        it modifies the underlying buffer
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+decreases
 func (s *Raw) SerializeTo(b []byte) error {
 	unfold s.Mem()
 	if s.Raw == nil {
@@ -104,6 +106,7 @@ func (s *Raw) SerializeTo(b []byte) error {
 // Reverse reverses the path such that it can be used in the reverse direction.
 requires s.Mem()
 ensures res == nil ==> s.Mem()
+decreases
 func (s *Raw) Reverse() (res error) {
 	// XXX(shitz): The current implementation is not the most performant, since it parses the entire
 	// path first. If this becomes a performance bottleneck, the implementation should be changed to
@@ -127,6 +130,7 @@ func (s *Raw) Reverse() (res error) {
 // ToDecoded transforms a scion.Raw to a scion.Decoded.
 preserves s.Mem()
 ensures resErr == nil ==> DecodedInvariant(resDecoded)
+decreases
 func (s *Raw) ToDecoded() (resDecoded *Decoded, resErr error) {
 	unfold s.Mem()
 	assert forall i int :: 0 <= i && i < MetaLen ==> &(s.Raw)[:MetaLen][i] == &(s.Raw)[i]
@@ -151,6 +155,7 @@ requires 0 <= idx
 preserves  acc(s.Mem(), 1/100)
 ensures retErr != nil ==> retInfo == nil
 ensures retErr == nil ==> acc(retInfo)
+decreases
 func (s *Raw) GetInfoField(idx int) (retInfo *path.InfoField, retErr error) {
 	unfold acc(s.Mem(), 1/100)
 	unfold acc(BaseInvariant(&s.Base), 1/100)
@@ -180,6 +185,7 @@ func (s *Raw) GetInfoField(idx int) (retInfo *path.InfoField, retErr error) {
 preserves acc(s.Mem(), 1/100)
 ensures retErr != nil ==> retInfo == nil
 ensures retErr == nil ==> acc(retInfo)
+decreases
 func (s *Raw) GetCurrentInfoField() (retInfo *path.InfoField, retErr error) {
 	// (joao) introduced idx to store an intermediate value
 	unfold acc(s.Mem(), 1/100)
@@ -195,6 +201,7 @@ func (s *Raw) GetCurrentInfoField() (retInfo *path.InfoField, retErr error) {
 // SetInfoField updates the InfoField at a given index.
 requires idx >= 0
 preserves s.Mem() && acc(info, 1/1000)
+decreases
 func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
 	unfold s.Mem()
 	unfold BaseInvariant(&s.Base)
@@ -225,6 +232,7 @@ requires 0 <= idx
 preserves acc(s.Mem(), 1/100)
 ensures retErr != nil ==> retHop == nil
 ensures retErr == nil ==> path.HopFieldInv(retHop)
+decreases
 func (s *Raw) GetHopField(idx int) (retHop *path.HopField, retErr error) {
 	unfold acc(s.Mem(), 1/100)
 	unfold acc(BaseInvariant(&s.Base), 1/100)
@@ -254,6 +262,7 @@ func (s *Raw) GetHopField(idx int) (retHop *path.HopField, retErr error) {
 preserves acc(s.Mem(), 1/100)
 ensures retErr != nil ==> retHop == nil
 ensures retErr == nil ==> path.HopFieldInv(retHop)
+decreases
 func (s *Raw) GetCurrentHopField() (retHop *path.HopField, retErr error) {
 	// (joao) introduced idx to store an intermediate value
 	unfold acc(s.Mem(), 1/100)
@@ -271,7 +280,7 @@ requires idx >= 0
 preserves s.Mem() 
 preserves hop != nil ==> acc(path.HopFieldInv(hop), 1/100)
 // preserves hop != nil && forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i], 1/100)
-// (joao) verified but commented for performance reasons
+decreases
 func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
 	unfold s.Mem()
 	unfold acc(BaseInvariant(&s.Base), 1/2) 
@@ -302,6 +311,7 @@ func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
 
 requires r.Mem()
 ensures  acc(r)
+decreases
 func (r *Raw) ExchangePerms() {
 	unfold r.Mem()
 	unfold BaseInvariant(&r.Base)
@@ -310,6 +320,7 @@ func (r *Raw) ExchangePerms() {
 // (joao) this method did not exist before but it is required to handle
 // with Gobra's bugs with embedded fields + interfaces 
 requires acc(BaseInvariant(&r.Base), _)
+decreases
 pure func (r*Raw) Len() int {
 	return (&r.Base).Len()
 }
