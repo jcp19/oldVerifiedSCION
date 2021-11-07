@@ -786,63 +786,64 @@ func (d *DataPlane) Run() error /* {
 }
 */
 
+// (tlino) Verified
 // (joao) Closure extracted from the body of the Run function
 requires rd.Mem()
 requires acc(DataPlaneMutexInvariant(d), _)
-func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) //{
-// 	// (tlino) outlined code to separate function
-// 	msgs, metas := initReadClosureBuffer()
+func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
+	// (tlino) outlined code to separate function
+	msgs, metas := initReadClosureBuffer()
 
-// 	// (tlino) use pointer
-// 	// var scmpErr scmpError
-// 	scmpErr := &scmpError{}
-// 	spkt := slayers.SCION{}
-// 	buffer := gopacket.NewSerializeBuffer()
-// 	origPacket := make([]byte, bufSize)
+	// (tlino) use pointer
+	// var scmpErr scmpError
+	scmpErr := &scmpError{}
+	spkt := slayers.SCION{}
+	buffer := gopacket.NewSerializeBuffer()
+	origPacket := make([]byte, bufSize)
 
-// 	// (tlino) change structure of loop
-// 	// for d.running {
+	// (tlino) change structure of loop
+	// for d.running {
 	
-// 	// (tlino) added variable 
-// 	isRunning := unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
+	// (tlino) added variable 
+	isRunning := unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 
-// 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
-// 	invariant acc(DataPlaneMutexInvariant(d), _)
-// 	invariant rd.Mem()
-// 	invariant msgs.Mem()
-// 	invariant acc(scmpErr)
-// 	invariant isZeroSCION(spkt)
-// 	invariant buffer.Mem()
-// 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
-// 	for isRunning {
-// 		pkts, err := rd.ReadBatch(msgs, metas)
+	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
+	invariant acc(DataPlaneMutexInvariant(d), _)
+	invariant rd.Mem()
+	invariant msgs.Mem()
+	invariant acc(scmpErr)
+	invariant isZeroSCION(spkt)
+	invariant buffer.Mem()
+	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
+	for isRunning {
+		pkts, err := rd.ReadBatch(msgs, metas)
 
-// 		// (tlino) added
-// 		isRunning = unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
+		// (tlino) added
+		isRunning = unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 
-// 		// (tlino) continue not supported by gobra
-// 		// if err != nil {
-// 		// 	log.Debug("Failed to read batch", "err", err)
-// 		// 	// error metric
-// 		// 	continue
-// 		// }
-// 		// if pkts == 0 {
-// 		// 	continue
-// 		// }
+		// (tlino) continue not supported by gobra
+		// if err != nil {
+		// 	log.Debug("Failed to read batch", "err", err)
+		// 	// error metric
+		// 	continue
+		// }
+		// if pkts == 0 {
+		// 	continue
+		// }
 
-// 		if err != nil {
-// 			// (tlino) log not supported yet
-// 			// log.Debug("Failed to read batch", "err", err)
-// 			// error metric
-// 		} else if pkts > 0 {
-// 			// (tlino) outlined code to separate function
-// 			processBatch(ingressID, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt)
+		if err != nil {
+			// (tlino) log not supported yet
+			// log.Debug("Failed to read batch", "err", err)
+			// error metric
+		} else if pkts > 0 {
+			// (tlino) outlined code to separate function
+			processBatch(ingressID, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt)
 
-// 			// (tlino) outlined code to separate function
-// 			resetReadClosureBuffers(msgs, pkts)
-// 		}
-// 	}
-// }
+			// (tlino) outlined code to separate function
+			resetReadClosureBuffers(msgs, pkts)
+		}
+	}
+}
 
 // (tlino) Verified
 // (tlino) added function to simplify verification
@@ -1549,19 +1550,17 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error /* {
 }
 */
 
-// (tlino) Verified
-requires acc(p.Mem(), 1/1000)
-pure func (p *scionPacketProcessor) currentInfoPointer() uint16 {
-	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
-		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.Mem(), 1/1000) in p.path.PathMeta.CurrINF))
-}
+requires acc(&p.scionLayer, 1/1000) && acc(p.scionLayer.Mem(), 1/1000)
+pure func (p *scionPacketProcessor) currentInfoPointer() uint16 //{
+// 	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
+// 		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.Mem(), 1/1000) in p.path.PathMeta.CurrINF))
+// }
 
-// (tlino) Verified
 requires acc(p.Mem(), 1/1000)
-pure func (p *scionPacketProcessor) currentHopPointer() uint16 {
-	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
-		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
-}
+pure func (p *scionPacketProcessor) currentHopPointer() uint16 //{
+// 	return  uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
+// 		scion.MetaLen + path.InfoLen*p.path.NumINF + path.HopLen*int(p.path.PathMeta.CurrHF))
+// }
 
 /* (joao) currently not supported
 func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) {
