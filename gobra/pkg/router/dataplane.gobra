@@ -967,24 +967,25 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 // (tlino) used to be part of the read closure
 preserves  msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs)
-func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) // {
-// 	unfold msgs.Mem()
+func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
+	unfold msgs.Mem()
 
-// 	// Reset buffers to original capacity.
-// 	// (tlino) range no supported by Gobra
-// 	// for _, p := range msgs[:pkts] {
-// 	// 	p.Buffers[0] = p.Buffers[0][:bufSize]
-// 	// }
+	// Reset buffers to original capacity.
+	// (tlino) range no supported by Gobra
+	// for _, p := range msgs[:pkts] {
+	// 	p.Buffers[0] = p.Buffers[0][:bufSize]
+	// }
 
-// 	invariant 0 <= i && i <= pkts
-// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
-// 	for i := 0; i < pkts; i++ {
-// 		unfold (&msgs[i]).Mem()
-// 		// (msgs[i].Buffers)[0] = ((msgs[i].Buffers)[0])[:bufSize]
-// 		fold (&msgs[i]).Mem()
-// 	}
-// 	fold msgs.Mem()
-// }
+	invariant 0 <= i && i <= pkts
+	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
+	for i := 0; i < pkts; i++ {
+		unfold (&msgs[i]).Mem()
+		b := (msgs[i].Buffers)[0]
+		(msgs[i].Buffers)[0] = b[:bufSize]
+		fold (&msgs[i]).Mem()
+	}
+	fold msgs.Mem()
+}
 
 
 requires DataPlaneMutexInvariant(d)
@@ -1053,7 +1054,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires isZeroSCION(s)
 requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
 requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-requires srcAddr.Mem()
+preserves srcAddr.Mem()
 requires buffer.Mem()
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
@@ -1191,7 +1192,7 @@ func translateBFDMemPred(b *layers.BFD) {
 
 // (tlino) partially verified 
 // depends on issue #341
-requires src.Mem()
+preserves src.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 preserves acc(DataPlaneMutexInvariant(d), _)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error //{
