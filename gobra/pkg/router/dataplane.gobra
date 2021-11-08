@@ -852,7 +852,7 @@ ensures msgs.Mem()
 ensures forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta) {
 	msgs := conn.NewReadMessages(inputBatchCnt)
-	unfold msgs.Mem()
+	unfold msgs.MemPartiallyInitialized()
 
 	// (tlino) range not supported by Gobra
 	// for _, msg := range msgs {
@@ -860,9 +860,10 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 	// }
 
 	invariant 0 <= i && i <= len(msgs)
-	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
+	invariant forall j int :: 0 <= j && j < i ==> (&msgs[j]).Mem()
+	invariant forall j int :: i <= j && j < len(msgs) ==> (&msgs[j]).MemPartiallyInitialized()
 	for i := 0; i < len(msgs); i++ {
-		unfold (&msgs[i]).Mem()
+		unfold (&msgs[i]).MemPartiallyInitialized()
 		(msgs[i].Buffers)[0] = make([]byte, bufSize)
 		fold (&msgs[i]).Mem()
 	}
@@ -965,26 +966,26 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 // (tlino) not verified yet
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
-preserves  msgs.Mem()
+preserves msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs)
-func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) // {
-// 	unfold msgs.Mem()
+func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
+	unfold msgs.Mem()
 
-// 	// Reset buffers to original capacity.
-// 	// (tlino) range no supported by Gobra
-// 	// for _, p := range msgs[:pkts] {
-// 	// 	p.Buffers[0] = p.Buffers[0][:bufSize]
-// 	// }
+	// Reset buffers to original capacity.
+	// (tlino) range no supported by Gobra
+	// for _, p := range msgs[:pkts] {
+	// 	p.Buffers[0] = p.Buffers[0][:bufSize]
+	// }
 
-// 	invariant 0 <= i && i <= pkts
-// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
-// 	for i := 0; i < pkts; i++ {
-// 		unfold (&msgs[i]).Mem()
-// 		// (msgs[i].Buffers)[0] = ((msgs[i].Buffers)[0])[:bufSize]
-// 		fold (&msgs[i]).Mem()
-// 	}
-// 	fold msgs.Mem()
-// }
+	invariant 0 <= i && i <= pkts
+	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
+	for i := 0; i < pkts; i++ {
+		unfold (&msgs[i]).Mem()
+		(msgs[i].Buffers)[0] = ((msgs[i].Buffers)[0])[:bufSize]
+		fold (&msgs[i]).Mem()
+	}
+	fold msgs.Mem()
+}
 
 
 requires DataPlaneMutexInvariant(d)

@@ -4,11 +4,25 @@ import (
 	"net"
 )
 
+const (
+	bufSize = 9000
+)
+
+pred (m *Message) MemPartiallyInitialized() {
+	acc(m) &&
+	(len(m.Buffers) == 1) &&
+	(forall i int :: 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) &&
+	(forall j,k int :: 0 <= j && j < len(m.Buffers) && 0 <= k && k < cap((m.Buffers)[j]) ==> acc(&(m.Buffers)[j][k])) &&
+	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
+	m.Addr.Mem()
+}
+
 pred (m *Message) Mem() {
 	acc(m) &&
-	(len(m.Buffers) >= 1) &&
-	(forall i int :: 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) && 
-	(forall i,j int :: 0 <= i && i < len(m.Buffers) && 0 <= j && j < len((m.Buffers)[i]) ==> acc(&(m.Buffers)[i][j])) && 
+	(len(m.Buffers) == 1) &&
+	(forall i int :: 0 <= i && i < len(m.Buffers) ==> acc(&(m.Buffers)[i])) &&
+	(forall i int :: 0 <= i && i < len(m.Buffers) ==> cap((m.Buffers)[i]) == bufSize) &&
+	(forall j,k int :: 0 <= j && j < len(m.Buffers) && 0 <= k && k < cap((m.Buffers)[j]) ==> acc(&(m.Buffers)[j][k])) &&
 	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
 	m.Addr.Mem()
 }
