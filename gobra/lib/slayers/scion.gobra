@@ -493,21 +493,23 @@ func (s *SCION) LayerPayload() []byte {
 }
 
 // (tlino) give up access to s to get access to Payload
+// (tlino) TODO implement method
 requires s.Mem()
 ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (s *SCION) LayerPayloadWithPermission() (b []byte) {
-	unfold s.Mem()
-	return (s.EmbeddedBaseLayer).Payload
-}
+func (s *SCION) LayerPayloadWithPermission() (b []byte) //{
+// 	unfold s.Mem()
+// 	return (s.EmbeddedBaseLayer).Payload
+// }
 
 // (tlino) give up access to s to get access to Payload and Path
+// (tlino) TODO implement method
 requires s.Mem()
 ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures p.Mem()
-func (s *SCION) GetPathAndPayload() (p Path, b []byte) {
-	unfold s.Mem()
-	return s.Path, (s.EmbeddedBaseLayer).Payload
-}
+func (s *SCION) GetPathAndPayload() (p Path, b []byte) //{
+// 	unfold s.Mem()
+// 	return s.Path, (s.EmbeddedBaseLayer).Payload
+// }
 
 // (joao) Flow not implemented
 //func (s *SCION) NetworkFlow() gopacket.Flow {

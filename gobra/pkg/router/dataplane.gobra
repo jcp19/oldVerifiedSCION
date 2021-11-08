@@ -963,7 +963,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 // 	}
 // }
 
-// (tlino) not verified yet
+// (tlino) Verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 preserves msgs.Mem()
