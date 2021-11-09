@@ -1054,6 +1054,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires isZeroSCION(s)
 requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
 requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+requires cap(rawPkt) == bufSize
 preserves srcAddr.Mem()
 requires buffer.Mem()
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
@@ -1249,9 +1250,12 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error //{
 // 	return noBFDSessionFound()
 // }
 
+// (tlino) Verified
 // (joao) THIS(2)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+requires cap(rawPkt) == bufSize
 requires buffer.Mem()
 requires s.Mem()
 // (joao) s is now a *slayers.SCION
@@ -1970,6 +1974,8 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 // THIS(3)
 // (tlino) TODO d.svc not supported yet
+// requires acc(DataPlaneMutexInvariant(d), _)
+// preserves acc(s.Mem(), 1/100)
 func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 // 	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 // 	dst, err := s.DstAddr()
@@ -1980,11 +1986,12 @@ func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 // 	if v, ok := dst.(addr.HostSVC); ok {
 // 		// For map lookup use the Base address, i.e. strip the multi cast
 // 		// information, because we only register base addresses in the map.
-// 		a, ok := d.svc.Any(v.Base())
-// 		if !ok {
-// 			return nil, noSVCBackend
-// 		}
-// 		return a, nil
+// 		// (tlino) svc not supported yet
+// 		// a, ok := d.svc.Any(v.Base())
+// 		// if !ok {
+// 		// 	return nil, noSVCBackend
+// 		// }
+// 		// return a, nil
 // 	}
 // 	return addEndhostPort(dst), nil
 // }
