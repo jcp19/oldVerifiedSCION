@@ -144,6 +144,14 @@ pure func getCurrHF(s *Base) (res uint8) {
 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
 }
 
+// (tlino) introduced to reduce verification time
+requires acc(BaseInvariant(s), _)
+ensures res >= 0
+decreases
+pure func GetCurrINF(s *Base) (res uint8) {
+	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrINF
+}
+
 // (joao) spec in terms of implementation details not problematic because it is not exported
 // requires acc(BaseInvariant(s), p)
 // ensures acc(BaseInvariant(s), p)
