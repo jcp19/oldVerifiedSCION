@@ -1544,6 +1544,7 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 // THIS(4)
 preserves acc(p, 1/100) && p.path.Mem() && acc(p.infoField, 1/1) && acc(path.HopFieldInv(p.hopField), 1/100) && p.buffer.Mem()
 preserves forall i int :: 0 <= i && i < len(p.rawPkt) ==> acc(&(p.rawPkt)[i])
+preserves cap(p.rawPkt) == bufSize
 preserves p.scionLayer.Mem()
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error {
 	// against construction dir the ingress router updates the SegID, ifID == 0
@@ -1995,6 +1996,7 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 // (joao) next: check how to avoid needing permission to rawPkt and s.Mem by stating that rawPkt is the packet in s.path
 // (joao) THIS(5)
 preserves forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+preserves cap(rawPkt) == bufSize
 preserves s.Mem()
 preserves buffer.Mem()
 // (tlino) use *slayers.SCION instead of slayers.SCION
@@ -2013,10 +2015,9 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 // 	unfold verifyutils.BytesAcc(rawContents)
 // 	// (tlino) add ghost variable
 // 	// copy(rawPkt[:len(rawContents)], rawContents)
-// 	l := len(rawContents)
 // 	assert (forall i int :: 0 <= i && i < len(rawContents) ==> acc(&rawContents[i]))
 // 	assert (forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i]))
-// 	assert (forall i int :: 0 <= i && i < l ==> &(rawPkt[:l])[i] == &rawPkt[i])
+// 	assert (forall i int :: 0 <= i && i < len(rawContents) ==> &(rawPkt[:len(rawContents)])[i] == &rawPkt[i])
 
 // 	copy(rawPkt[:len(rawContents)], rawContents, perm(1/1))
 // 	return nil
