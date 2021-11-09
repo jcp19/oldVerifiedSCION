@@ -1440,6 +1440,7 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 	return processResult{}, nil
 }
 
+// (tlino) partially verified
 // TODO: next. add "slayers.scmp" and "packSCMP"
 // THIS(5)
 requires acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
@@ -1467,6 +1468,7 @@ func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) {
 //	)
 }
 
+// (tlino) partially verified
 // TODO: next. packSCMP
 // THIS(5)
 requires acc(p, 1/1000)
@@ -1972,40 +1974,46 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 // 	return processResult{}, nil
 // }
 
-// THIS(3)
+// (tlino) partially verified
 // (tlino) TODO d.svc not supported yet
-// requires acc(DataPlaneMutexInvariant(d), _)
-// preserves acc(s.Mem(), 1/100)
-func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
-// 	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
-// 	dst, err := s.DstAddr()
-// 	if err != nil {
-// 		// TODO parameter problem. // (joao) this is an original comment from SCION
-// 		return nil, err
-// 	}
-// 	if v, ok := dst.(addr.HostSVC); ok {
-// 		// For map lookup use the Base address, i.e. strip the multi cast
-// 		// information, because we only register base addresses in the map.
-// 		// (tlino) svc not supported yet
-// 		// a, ok := d.svc.Any(v.Base())
-// 		// if !ok {
-// 		// 	return nil, noSVCBackend
-// 		// }
-// 		// return a, nil
-// 	}
-// 	return addEndhostPort(dst), nil
-// }
-
-// (joao) depends on issue #341
-requires dst.Mem()
-ensures  ret.Mem()
-func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
-	if ip, ok := dst.(*net.IPAddr); ok {
-		return &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
+// THIS(3)
+requires acc(s.Mem(), 1/100)
+requires acc(DataPlaneMutexInvariant(d), _)
+ensures acc(s.Mem(), 1/200)
+// (tlino) use *slayers.SCION instead of *slayers.SCION
+// func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) 
+func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (net.Addr, error) {
+	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
+	dst, err := s.DstAddr()
+	if err != nil {
+		// TODO parameter problem. // (joao) this is an original comment from SCION
+		return nil, err
 	}
-	return dst
+	// if v, ok := dst.(addr.HostSVC); ok {
+	// 	// For map lookup use the Base address, i.e. strip the multi cast
+	// 	// information, because we only register base addresses in the map.
+	// 	// (tlino) svc not supported yet
+	// 	// a, ok := d.svc.Any(v.Base())
+	// 	// if !ok {
+	// 	// 	return nil, noSVCBackend
+	// 	// }
+	// 	// return a, nil
+	// }
+	address, ok := addEndhostPort(dst, perm(1/200))
+	return address, nil
 }
-*/
+
+// (tlino) partially verified
+// (joao) depends on issue #341
+requires p >= 0
+preserves acc(dst.Mem(), p)
+ensures isNew ==> ret.Mem()
+func addEndhostPort(dst net.Addr, ghost p perm) (ret net.Addr, ghost isNew bool) //{
+// 	if ip, ok := dst.(*net.IPAddr); ok {
+// 		return &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
+// 	}
+// 	return dst
+// }
 
 // (joao) next: check how to avoid needing permission to rawPkt and s.Mem by stating that rawPkt is the packet in s.path
 // (joao) THIS(5)
