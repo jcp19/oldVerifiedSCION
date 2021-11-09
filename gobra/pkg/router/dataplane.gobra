@@ -1579,8 +1579,9 @@ pure func (p *scionPacketProcessor) currentHopPointer() uint16 //{
 
 // (tlino) not verified yet
 // (joao) currently not supported
-preserves acc(p) && acc(p.infoField) && path.HopFieldInv(p.hopField)
+requires acc(p) && acc(p.infoField) && path.HopFieldInv(p.hopField)
 requires acc(DataPlaneMutexInvariant(p.d), _)
+ensures acc(p) && acc(p.infoField) && path.HopFieldInv(p.hopField)
 func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) //{
 // 	if err := path.VerifyMAC(p.d.macFactory(), p.infoField, p.hopField); err != nil {
 // 		return p.packSCMP(
@@ -1706,21 +1707,25 @@ func (p *scionPacketProcessor) validateEgressUp() (processResult, error) /*{
 }
 */
 
+// (tlino) Verified
 // THIS(4)
-preserves acc(&p.ingressID)
-preserves p.ingressID != 0 ==>
-	acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert) &&
-	acc(&p.infoField) && acc(&p.infoField.ConsDir)
+requires acc(&p.ingressID, 1/1000)
+requires p.ingressID != 0 ==> acc(&p.hopField) && path.HopFieldInv(p.hopField) && acc(&p.infoField) && acc(p.infoField)
+ensures acc(&p.ingressID, 1/1000)
+ensures p.ingressID != 0 ==>  acc(&p.hopField) && path.HopFieldInv(p.hopField) && acc(&p.infoField) && acc(p.infoField)
 func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error) {
 	if p.ingressID == 0 {
 		return processResult{}, nil
 	}
+	unfold path.HopFieldInv(p.hopField)
 	ingressAlert := (!p.infoField.ConsDir && p.hopField.EgressRouterAlert) ||
 		(p.infoField.ConsDir && p.hopField.IngressRouterAlert)
 	if !ingressAlert {
+		fold path.HopFieldInv(p.hopField)
 		return processResult{}, nil
 	}
 	p.hopField.IngressRouterAlert = false
+	fold path.HopFieldInv(p.hopField)
 	return p.handleSCMPTraceRouteRequest(p.ingressID)
 }
 
@@ -1802,6 +1807,8 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 requires acc(p)
 requires acc(DataPlaneMutexInvariant(p.d), _)
 requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
+requires forall i int :: 0 <= i && i < len(p.rawPkt) ==> acc(&(p.rawPkt)[i])
+requires cap(p.rawPkt) == bufSize
 requires (p.buffer).Mem()
 requires (p.scionLayer).Mem()
 func (p *scionPacketProcessor) process() (processResult, error) {
@@ -1815,12 +1822,12 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 	// if err := p.updateNonConsDirIngressSegID(); err != nil {
 	// 	return processResult{}, err
 	// }
-	// if r, err := p.verifyCurrentMAC(); err != nil {
-	// 	return r, err
-	// }
-	// if r, err := p.handleIngressRouterAlert(); err != nil {
-	// 	return r, err
-	// }
+	if r, err := p.verifyCurrentMAC(); err != nil {
+		return r, err
+	}
+	if r, err := p.handleIngressRouterAlert(); err != nil {
+		return r, err
+	}
 
 	// // Inbound: pkts destined to the local IA.
 	// if p.scionLayer.DstIA.Equal(p.d.localIA) && int(p.path.PathMeta.CurrHF)+1 == p.path.NumHops {
