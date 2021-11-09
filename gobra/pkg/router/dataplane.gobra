@@ -1181,7 +1181,7 @@ func translateBFDMemPred(b *layers.BFD) {
 // depends on issue #341
 preserves src.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-preserves acc(DataPlaneMutexInvariant(d), _)
+requires acc(DataPlaneMutexInvariant(d), _)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error //{
 // 	// (tlino) add unfolding
 // 	// if len(d.bfdSessions) == 0 {
@@ -1876,7 +1876,7 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 	*/
 }
 
-preserves acc(DataPlaneMutexInvariant(d), _)
+requires acc(DataPlaneMutexInvariant(d), _)
 preserves acc(s.Mem(), _)
 preserves buffer.Mem()
 // (tlino) s is now a *slayers.SCION
@@ -1961,7 +1961,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 // THIS(3)
 // (tlino) TODO d.svc not supported yet
-preserves acc(DataPlaneMutexInvariant(d), _)
 func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 // 	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 // 	dst, err := s.DstAddr()
