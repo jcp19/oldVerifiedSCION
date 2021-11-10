@@ -139,20 +139,18 @@ pure func getNumHops(s *Base) (res int) {
 
 // (joao) introduced to reduce verification time
 requires acc(BaseInvariant(s), _)
-ensures res >= 0
 decreases
 pure func getCurrHF(s *Base) (res uint8) {
 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
 }
 
-// (tlino) legacy function, use tho other one 
-// (tlino) introduced to reduce verification time
-// (tlino) prove this method
+// (tlino) TODO: verify body
+// (joao) introduced to reduce verification time
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
 decreases
-pure func GetCurrINF(s *Base) (res uint8) //{
-// 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrINF
+pure func GetCurrHF(s *Base) (res uint8) //{
+// 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
 // }
 
 // (tlino) introduced to reduce verification time
@@ -160,7 +158,7 @@ pure func GetCurrINF(s *Base) (res uint8) //{
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
 decreases
-pure func (s *Base) GetCurrINF() (res uint8) //{
+pure func GetCurrINF(s *Base) (res uint8) //{
 // 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrINF
 // }
 

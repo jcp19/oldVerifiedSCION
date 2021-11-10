@@ -882,7 +882,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) not verified yet
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
-preserves acc(DataPlaneMutexInvariant(d), _)
+requires acc(DataPlaneMutexInvariant(d), _)
 preserves msgs.Mem()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
@@ -1310,7 +1310,10 @@ pred (p *scionPacketProcessor) Mem() {
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!> &&
 	verifyutils.BytesAcc(p.origPacket) &&
 	p.path.Mem() &&
-	acc(p.infoField)
+	acc(p.infoField) &&
+	path.HopFieldInv(p.hopField) &&
+	p.buffer.Mem() &&
+	p.scionLayer.Mem()
 }
 
 // (tlino) partially verified
@@ -1364,28 +1367,38 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	if err := p.path.SetInfoField(p.infoField, int( unfolding p.path.Mem() in scion.GetCurrINF(&(p.path.Base)))); err != nil {
 		return processResult{}, serrors.WrapStr("update info field", err)
 	}
-	assert acc(p.infoField)
+
+	// (tlino) use getter to reduce verification overhead
+	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
+	if err := p.path.SetHopField(p.hopField, int( unfolding p.path.Mem() in scion.GetCurrHF(&(p.path.Base)))); err != nil {
+		return processResult{}, serrors.WrapStr("update hop field", err)
+	}
+
+	if err := p.buffer.Clear(); err != nil {
+		return processResult{}, err
+	}
+
+	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
+		return processResult{}, err
+	}
+	// quoteLen is used to limit the size of the quote buffer, the final quote
+	// length is calculated inside the scmpPacker.
+	quoteLen := len(p.origPacket)
+	if quoteLen > slayers.MaxSCMPPacketLen {
+		quoteLen = slayers.MaxSCMPPacketLen
+	}
+	quote@ := make([]byte, quoteLen)
+	updated := p.buffer.Bytes()
+	unfold verifyutils.BytesAcc(updated)
 
 	// (tlino) verified until here
 
-	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
-	// 	return processResult{}, serrors.WrapStr("update hop field", err)
-	// }
-	// if err := p.buffer.Clear(); err != nil {
-	// 	return processResult{}, err
-	// }
-	// if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
-	// 	return processResult{}, err
-	// }
-	// // quoteLen is used to limit the size of the quote buffer, the final quote
-	// // length is calculated inside the scmpPacker.
-	// quoteLen := len(p.origPacket)
-	// if quoteLen > slayers.MaxSCMPPacketLen {
-	// 	quoteLen = slayers.MaxSCMPPacketLen
-	// }
-	// quote := make([]byte, quoteLen)
-	// updated := p.buffer.Bytes()
+	// (tlino) use Gobra's copy function
 	// copy(quote[:len(updated)], updated)
+	// assert forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
+	// assert forall i int :: 0 <= i && i < len(updated) ==> acc(&updated[i], 1/2)
+	// assert forall i int :: 0 <= i && i < len(updated) ==> &(quote[:len(updated)])[i] == &quote[i]
+	// copy(quote[:len(updated)], updated, perm(1/2))
 	// copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
 
 	// _, external := p.d.external[p.ingressID]
@@ -1409,6 +1422,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 ensures ok ==> s.Mem()
 func havocRaw() (s *scion.Raw, ok bool)
 
+// (tlino) TODO: replace havocRaw()
 requires acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
 requires (p.scionLayer).Mem()
 ensures  acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
@@ -2149,8 +2163,17 @@ type scmpPacker struct {
 	quote  []byte
 }
 
-//func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-//	incPath bool, cause error) ([]byte, error) {
+// pred (s *scmpPacker) Mem() {
+// 	acc(s) &&
+// 	s.internalIP.Mem() &&
+// 	(forall i int :: 0 <= i && i < len(s.origPacket) ==> acc(&(s.origPacket)[i])) &&
+// 	s.scionLayer.Mem() &&
+// 	s.buffer.Mem() &&
+// 	(forall i int :: 0 <= i && i < len(s.quote) ==> acc(&(s.quote)[i]))
+// }
+
+func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
+	incPath bool, cause error) ([]byte, error) //{
 //
 //	// We use the original packet but put the already updated path, because usually a router will
 //	// not keep a copy of the original/unmodified packet around.
