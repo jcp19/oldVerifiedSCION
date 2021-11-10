@@ -1603,7 +1603,7 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) //{
 // 	return processResult{}, nil
 // }
 
-// (tlino) only verified contracts
+// (tlino) partially verified
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
 // THIS(4)
@@ -1614,22 +1614,23 @@ requires acc(DataPlaneMutexInvariant(p.d), _)
 ensures acc(&p.d)
 ensures acc(&p.scionLayer)
 ensures acc(p.scionLayer.Mem(), 1/200)
-ensures err == nil ==> acc(address.Mem(), _)
-func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, err error) //{
-// 	a, err := p.d.resolveLocalDst(p.scionLayer)
-// 	switch {
-// 	case errors.Is(err, noSVCBackend):
-// 		r, err := p.packSCMP(
-// 			&slayers.SCMP{
-// 				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeDestinationUnreachable,
-// 					slayers.SCMPCodeNoRoute),
-// 			},
-// 			&slayers.SCMPDestinationUnreachable{}, err)
-// 		return nil, r, err
-// 	default:
-// 		return a, processResult{}, nil
-// 	}
-// }
+ensures resolveLocalDstErr == nil && e == nil ==> acc(address.Mem(), _)
+func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, e error, ghost resolveLocalDstErr error) {
+	a, err := p.d.resolveLocalDst(p.scionLayer)
+	resolveLocalDstErr := err
+	switch {
+	// case errors.Is(err, noSVCBackend):
+	// 	r, err := p.packSCMP(
+	// 		&slayers.SCMP{
+	// 			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeDestinationUnreachable,
+	// 				slayers.SCMPCodeNoRoute),
+	// 		},
+	// 		&slayers.SCMPDestinationUnreachable{}, err)
+	// 	return nil, r, err
+	default:
+		return a, processResult{}, nil, resolveLocalDstErr
+	}
+}
 
 func (p *scionPacketProcessor) processEgress() error // {
 //	// we are the egress router and if we go in construction direction we
@@ -1846,6 +1847,7 @@ func (p *scionPacketProcessor) process() (processResult, error) {
 		return r, err
 	}
 
+	// (tlino) TODO: needs p.path.Mem()
 	// // Inbound: pkts destined to the local IA.
 	// if p.scionLayer.DstIA.Equal(p.d.localIA) && int(p.path.PathMeta.CurrHF)+1 == p.path.NumHops {
 	// 	a, r, err := p.resolveInbound()
