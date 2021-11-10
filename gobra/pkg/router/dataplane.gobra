@@ -1307,17 +1307,19 @@ pred (p *scionPacketProcessor) Mem() {
 	acc(p) &&
 	acc(&p.d.mtx, _) &&
 	p.d.mtx.LockP() &&
-	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
+	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!> &&
+	verifyutils.BytesAcc(p.origPacket)
 }
 
+// (tlino) partially verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 // TODO: switch to scionPacketProcessorInvariant() eventually
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 // requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
 // requires verifyutils.BytesAcc(p.origPacket)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	cause error) (processResult, error) /*{
-
+	cause error) (processResult, error) {
+	unfold p.Mem()
 	// parse everything to see if the original packet was an SCMP error.
 	var (
 		scionLayer slayers.SCION
@@ -1354,50 +1356,51 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
 	}
 
-	assume false
-	// the quoted packet is the packet in its current state
-	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
-		return processResult{}, serrors.WrapStr("update info field", err)
-	}
+	fold p.Mem()
+	// (tlino) verified until here
+	// assume false
+	// // the quoted packet is the packet in its current state
+	// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+	// 	return processResult{}, serrors.WrapStr("update info field", err)
+	// }
 
-	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
-		return processResult{}, serrors.WrapStr("update hop field", err)
-	}
-	if err := p.buffer.Clear(); err != nil {
-		return processResult{}, err
-	}
-	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
-		return processResult{}, err
-	}
-	// quoteLen is used to limit the size of the quote buffer, the final quote
-	// length is calculated inside the scmpPacker.
-	quoteLen := len(p.origPacket)
-	if quoteLen > slayers.MaxSCMPPacketLen {
-		quoteLen = slayers.MaxSCMPPacketLen
-	}
-	quote := make([]byte, quoteLen)
-	updated := p.buffer.Bytes()
-	copy(quote[:len(updated)], updated)
-	copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
+	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
+	// 	return processResult{}, serrors.WrapStr("update hop field", err)
+	// }
+	// if err := p.buffer.Clear(); err != nil {
+	// 	return processResult{}, err
+	// }
+	// if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
+	// 	return processResult{}, err
+	// }
+	// // quoteLen is used to limit the size of the quote buffer, the final quote
+	// // length is calculated inside the scmpPacker.
+	// quoteLen := len(p.origPacket)
+	// if quoteLen > slayers.MaxSCMPPacketLen {
+	// 	quoteLen = slayers.MaxSCMPPacketLen
+	// }
+	// quote := make([]byte, quoteLen)
+	// updated := p.buffer.Bytes()
+	// copy(quote[:len(updated)], updated)
+	// copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
 
-	_, external := p.d.external[p.ingressID]
-	rawSCMP, err := scmpPacker{
-		internalIP: p.d.internalIP,
-		localIA:    p.d.localIA,
-		origPacket: p.origPacket,
-		ingressID:  p.ingressID,
-		scionL:     &p.scionLayer,
-		buffer:     p.buffer,
-		quote:      quote,
-	}.prepareSCMP(
-		scmpH,
-		scmpP,
-		external,
-		cause,
-	)
-	return processResult{OutPkt: rawSCMP}, err
+	// _, external := p.d.external[p.ingressID]
+	// rawSCMP, err := scmpPacker{
+	// 	internalIP: p.d.internalIP,
+	// 	localIA:    p.d.localIA,
+	// 	origPacket: p.origPacket,
+	// 	ingressID:  p.ingressID,
+	// 	scionL:     &p.scionLayer,
+	// 	buffer:     p.buffer,
+	// 	quote:      quote,
+	// }.prepareSCMP(
+	// 	scmpH,
+	// 	scmpP,
+	// 	external,
+	// 	cause,
+	// )
+	// return processResult{OutPkt: rawSCMP}, err
 }
-*/
 
 ensures ok ==> s.Mem()
 func havocRaw() (s *scion.Raw, ok bool)
@@ -2048,15 +2051,16 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 // 	// TODO(lukedirtwalker): We should add a method to the scion layers
 // 	// which can write into the existing buffer, see also the discussion in
 // 	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
-// 	rawContents := buffer.Bytes()
+// 	rawContents@ := buffer.Bytes()
 // 	unfold verifyutils.BytesAcc(rawContents)
 // 	// (tlino) add ghost variable
 // 	// copy(rawPkt[:len(rawContents)], rawContents)
-// 	assert (forall i int :: 0 <= i && i < len(rawContents) ==> acc(&rawContents[i]))
-// 	assert (forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i]))
-// 	assert (forall i int :: 0 <= i && i < len(rawContents) ==> &(rawPkt[:len(rawContents)])[i] == &rawPkt[i])
+// 	assert forall i int :: { rawContents[i] } (0 <= i && i < len(rawContents)) ==> acc(&rawContents[i], 1/2)
+// 	assert forall i int :: { rawPkt[i] } (0 <= i && i < len(rawPkt)) ==> acc(&rawPkt[i], 1/2)
+// 	assert forall i int :: { rawPkt[i] } (0 <= i && i < len(rawPkt) && (forall j int :: 0 <= j && j < len(rawContents) ==> &rawPkt[i] != &rawContents[j])) ==> acc(&rawPkt[i], 1/2)
+// 	assert forall i int :: 0 <= i && i < len(rawContents) ==> &(rawPkt[:len(rawContents)])[i] == &rawPkt[i]
 
-// 	copy(rawPkt[:len(rawContents)], rawContents, perm(1/1))
+// 	copy(rawPkt[:len(rawContents)], rawContents, perm(1/2))
 // 	return nil
 // }
 
