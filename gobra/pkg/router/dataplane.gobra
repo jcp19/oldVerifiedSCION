@@ -1603,22 +1603,33 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) //{
 // 	return processResult{}, nil
 // }
 
+// (tlino) only verified contracts
+// (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
+// (tlino) for now we assume this method catches all possible errors from resolveLocalDst
 // THIS(4)
-func (p *scionPacketProcessor) resolveInbound() (net.Addr, processResult, error) // {
-//	a, err := p.d.resolveLocalDst(p.scionLayer)
-//	switch {
-//	case errors.Is(err, noSVCBackend):
-//		r, err := p.packSCMP(
-//			&slayers.SCMP{
-//				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeDestinationUnreachable,
-//					slayers.SCMPCodeNoRoute),
-//			},
-//			&slayers.SCMPDestinationUnreachable{}, err)
-//		return nil, r, err
-//	default:
-//		return a, processResult{}, nil
-//	}
-//}
+requires acc(&p.d)
+requires acc(&p.scionLayer)
+requires acc(p.scionLayer.Mem(), 1/100)
+requires acc(DataPlaneMutexInvariant(p.d), _)
+ensures acc(&p.d)
+ensures acc(&p.scionLayer)
+ensures acc(p.scionLayer.Mem(), 1/200)
+ensures err == nil ==> acc(address.Mem(), _)
+func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, err error) //{
+// 	a, err := p.d.resolveLocalDst(p.scionLayer)
+// 	switch {
+// 	case errors.Is(err, noSVCBackend):
+// 		r, err := p.packSCMP(
+// 			&slayers.SCMP{
+// 				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeDestinationUnreachable,
+// 					slayers.SCMPCodeNoRoute),
+// 			},
+// 			&slayers.SCMPDestinationUnreachable{}, err)
+// 		return nil, r, err
+// 	default:
+// 		return a, processResult{}, nil
+// 	}
+// }
 
 func (p *scionPacketProcessor) processEgress() error // {
 //	// we are the egress router and if we go in construction direction we
@@ -1980,9 +1991,10 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 requires acc(s.Mem(), 1/100)
 requires acc(DataPlaneMutexInvariant(d), _)
 ensures acc(s.Mem(), 1/200)
+ensures err == nil ==> acc(res.Mem(), _)
 // (tlino) use *slayers.SCION instead of *slayers.SCION
 // func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) 
-func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (net.Addr, error) {
+func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, err error) {
 	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 	dst, err := s.DstAddr()
 	if err != nil {
@@ -1999,15 +2011,16 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (net.Addr, error) {
 	// 	// }
 	// 	// return a, nil
 	// }
-	address, ok := addEndhostPort(dst, perm(1/200))
-	return address, nil
+	res, isNew := addEndhostPort(dst, perm(1/200))
+	return res, nil
 }
 
 // (tlino) partially verified
 // (joao) depends on issue #341
 requires p >= 0
-preserves acc(dst.Mem(), p)
+requires acc(dst.Mem(), p)
 ensures isNew ==> ret.Mem()
+ensures !isNew ==> acc(ret.Mem(), p)
 func addEndhostPort(dst net.Addr, ghost p perm) (ret net.Addr, ghost isNew bool) //{
 // 	if ip, ok := dst.(*net.IPAddr); ok {
 // 		return &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
