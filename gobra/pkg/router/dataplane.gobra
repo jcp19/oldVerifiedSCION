@@ -1308,7 +1308,9 @@ pred (p *scionPacketProcessor) Mem() {
 	acc(&p.d.mtx, _) &&
 	p.d.mtx.LockP() &&
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!> &&
-	verifyutils.BytesAcc(p.origPacket)
+	verifyutils.BytesAcc(p.origPacket) &&
+	p.path.Mem() &&
+	acc(p.infoField)
 }
 
 // (tlino) partially verified
@@ -1356,13 +1358,15 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
 	}
 
-	fold p.Mem()
-	// (tlino) verified until here
-	// assume false
-	// // the quoted packet is the packet in its current state
+	// the quoted packet is the packet in its current state
+	// (tlino) use getter to reduce verification overhead
 	// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
-	// 	return processResult{}, serrors.WrapStr("update info field", err)
-	// }
+	if err := p.path.SetInfoField(p.infoField, int( unfolding p.path.Mem() in scion.GetCurrINF(&(p.path.Base)))); err != nil {
+		return processResult{}, serrors.WrapStr("update info field", err)
+	}
+	assert acc(p.infoField)
+
+	// (tlino) verified until here
 
 	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
 	// 	return processResult{}, serrors.WrapStr("update hop field", err)
