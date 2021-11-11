@@ -966,8 +966,9 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 // (tlino) Verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
-preserves msgs.Mem()
+requires msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs)
+ensures msgs.Mem()
 func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
 	unfold msgs.Mem()
 
@@ -1047,7 +1048,7 @@ pure func isZeroSCION(s slayers.SCION) bool {
 		s.Path == nil
 }
 
-// (tlino) Verified
+// (tlino) TODO find unsoundness
 // (tlino) TODO: permission to rawPkt is lost after DecodeFromBytes
 // (joao) THIS(1)
 requires acc(DataPlaneMutexInvariant(d), _)
@@ -1058,80 +1059,83 @@ requires cap(rawPkt) == bufSize
 preserves srcAddr.Mem()
 requires buffer.Mem()
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
-	// (joao) `s` should always have the zero value of slayers.SCION;
-	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
-	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
-	//        that gets mutated
-	sNew := &slayers.SCION{}
+	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) //{
+// 	// (joao) `s` should always have the zero value of slayers.SCION;
+// 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
+// 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
+// 	//        that gets mutated
+// 	sNew := &slayers.SCION{}
 
-	fold (gopacket.NilDecodeFeedback{}).Mem()
-	// (joao) Adapted to conform to changes in gopacket and sNew
-	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
-	if err := sNew.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback{}); err != nil {
-		return processResult{}, err
-	}
-	// (joao) already lost access to rawPkt here
-	if err := buffer.Clear(); err != nil {
-		return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
-	}
+// 	fold (gopacket.NilDecodeFeedback{}).Mem()
+// 	// (joao) Adapted to conform to changes in gopacket and sNew
+// 	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
+// 	if err := sNew.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback{}); err != nil {
+// 		return processResult{}, err
+// 	}
+	
+// 	// (joao) already lost access to rawPkt here
+// 	if err := buffer.Clear(); err != nil {
+// 		return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
+// 	}
 
-	// (tlino) use sNew.getPathType() instead of s
-	// switch s.PathType {
-	switch sNew.getPathType() {
-	case slayers.PathTypeEmpty:
-		// (tlino) use sNew instead of s and use getters
-		// if s.NextHdr == common.L4BFD {
-		//	return processResult{}, d.processIntraBFD(srcAddr, s.Payload)
-		// }
-		if sNew.getNextHdr() == common.L4BFD {
-			return processResult{}, d.processIntraBFD(srcAddr, sNew.LayerPayloadWithPermission())
-		}
-		// (tlino) use sNew instead of s and use getters
-		// return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader,
-		// 	"type", s.PathType, "header", s.NextHdr)
-		return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader(),
-		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
-	case slayers.PathTypeOneHop:
-		// (tlino) use sNew instead of s and use getters
-		// if s.NextHdr == common.L4BFD {
-		if sNew.getNextHdr() == common.L4BFD {
-			// (tlino) use sNew instead of s and use getters
-			// ohp, ok := s.Path.(*onehop.Path)
-			// if !ok {
-			// 	return processResult{}, malformedPath
-			// }
-			// (tlino) use getter to return path and payload
-			path, payload := sNew.GetPathAndPayload()
-			// (tlino) use path instead of s.Path
-			// ohp, ok := s.Path.(*onehop.Path)
-			ohp, ok := path.(*onehop.Path)
-			// (tlino) globals aren't supported yet
-			// if !ok {
-			// 	return processResult{}, malformedPath
-			// }
-			if !ok {
-				return processResult{}, malformedPath()
-			}
-			// (tlino) use result from getter
-			// return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
-			return processResult{}, d.processInterBFD(ingressID, ohp, payload)
-		}
-		// (tlino) use sNew instead of s
-		// return d.processOHP(ingressID, rawPkt, s, buffer)
-		return d.processOHP(ingressID, rawPkt, sNew, buffer)
-	case slayers.PathTypeSCION:
-		assert acc(DataPlaneMutexInvariant(d), _)
-		assert forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-		assert buffer.Mem()
-		assert sNew.Mem()
-		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
-		return d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
-	default:
-		// return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
-		return processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
-	}
-}
+// 	// (tlino) use sNew.getPathType() instead of s
+// 	// switch s.PathType {
+// 	switch sNew.getPathType() {
+// 	case slayers.PathTypeEmpty:
+// 		// (tlino) use sNew instead of s and use getters
+// 		// if s.NextHdr == common.L4BFD {
+// 		//	return processResult{}, d.processIntraBFD(srcAddr, s.Payload)
+// 		// }
+// 		if sNew.getNextHdr() == common.L4BFD {
+// 			return processResult{}, d.processIntraBFD(srcAddr, sNew.LayerPayloadWithPermission())
+// 		}
+// 		// (tlino) use sNew instead of s and use getters
+// 		// return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader,
+// 		// 	"type", s.PathType, "header", s.NextHdr)
+// 		return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader(),
+// 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
+// 	case slayers.PathTypeOneHop:
+// 		// (tlino) use sNew instead of s and use getters
+// 		// if s.NextHdr == common.L4BFD {
+// 		if sNew.getNextHdr() == common.L4BFD {
+// 			// (tlino) use sNew instead of s and use getters
+// 			// ohp, ok := s.Path.(*onehop.Path)
+// 			// if !ok {
+// 			// 	return processResult{}, malformedPath
+// 			// }
+// 			// (tlino) use getter to return path and payload
+// 			path, payload := sNew.GetPathAndPayload()
+// 			// (tlino) use path instead of s.Path
+// 			// ohp, ok := s.Path.(*onehop.Path)
+// 			ohp, ok := path.(*onehop.Path)
+// 			// (tlino) globals aren't supported yet
+// 			// if !ok {
+// 			// 	return processResult{}, malformedPath
+// 			// }
+// 			if !ok {
+// 				return processResult{}, malformedPath()
+// 			}
+// 			// (tlino) use result from getter
+// 			// return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
+// 			return processResult{}, d.processInterBFD(ingressID, ohp, payload)
+// 		}
+// 		// (tlino) use sNew instead of s
+// 		// return d.processOHP(ingressID, rawPkt, s, buffer)
+// 		// assert forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+// 		return d.processOHP(ingressID, rawPkt, sNew, buffer)
+// 	case slayers.PathTypeSCION:
+// 		assert acc(DataPlaneMutexInvariant(d), _)
+// 		assert forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+// 		assert buffer.Mem()
+// 		assert sNew.Mem()
+// 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
+// 		// assert forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+// 		return d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
+// 	default:
+// 		// return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
+// 		return processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
+// 	}
+// }
 
 // (tlino) Verified
 // (joao) `oh` is not used anywhere in the function
@@ -1569,11 +1573,14 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 // (tlino) Verified
 // (joao) next: updateSCIONLayer
 // THIS(4)
-preserves acc(p, 1/100) && p.path.Mem() && acc(p.infoField, 1/1) && acc(path.HopFieldInv(p.hopField), 1/100) && p.buffer.Mem()
-preserves forall i int :: 0 <= i && i < len(p.rawPkt) ==> acc(&(p.rawPkt)[i])
-preserves cap(p.rawPkt) == bufSize
-preserves p.scionLayer.Mem()
-func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error {
+requires acc(p, 1/100) && p.path.Mem() && acc(p.infoField) && acc(path.HopFieldInv(p.hopField), 1/100) && p.buffer.Mem() &&  p.scionLayer.Mem()
+requires forall i int :: 0 <= i && i < len(p.rawPkt) ==> acc(&(p.rawPkt)[i])
+requires cap(p.rawPkt) == bufSize
+ensures acc(p, 1/100) && p.path.Mem() && acc(p.infoField) && acc(path.HopFieldInv(p.hopField), 1/100) && p.buffer.Mem()
+ensures forall i int :: 0 <= i && i < len(p.rawPkt) ==> acc(&(p.rawPkt)[i])
+ensures cap(p.rawPkt) == bufSize
+ensures err == nil ==> p.scionLayer.Mem()
+func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 	// against construction dir the ingress router updates the SegID, ifID == 0
 	// means this comes from this AS itself, so nothing has to be done.
 	// TODO(lukedirtwalker): For packets destined to peer links this shouldn't
@@ -1842,6 +1849,7 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 	*/
 }
 
+// (tlino) partially Verified
 // THIS(3)
 requires acc(p)
 requires acc(DataPlaneMutexInvariant(p.d), _)
@@ -2051,15 +2059,21 @@ func addEndhostPort(dst net.Addr, ghost p perm) (ret net.Addr, ghost isNew bool)
 // 	return dst
 // }
 
+// (tlino) partially verified, cannot verify ensures buffer.Mem() yet
+// (tlino) TODO: add magic wands
 // (joao) next: check how to avoid needing permission to rawPkt and s.Mem by stating that rawPkt is the packet in s.path
 // (joao) THIS(5)
-preserves forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
-preserves cap(rawPkt) == bufSize
-preserves s.Mem()
-preserves buffer.Mem()
+requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+requires cap(rawPkt) == bufSize
+requires s.Mem()
+requires buffer.Mem()
+ensures forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+ensures cap(rawPkt) == bufSize
+ensures buffer.Mem()
+ensures err == nil ==> s.Mem()
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
-func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) error //{
+func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) //{
 // 	if err := buffer.Clear(); err != nil {
 // 		return err
 // 	}
@@ -2071,14 +2085,16 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 // 	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
 // 	rawContents@ := buffer.Bytes()
 // 	unfold verifyutils.BytesAcc(rawContents)
-// 	// (tlino) add ghost variable
+// 	// (tlino) use Gobra's copy
 // 	// copy(rawPkt[:len(rawContents)], rawContents)
-// 	assert forall i int :: { rawContents[i] } (0 <= i && i < len(rawContents)) ==> acc(&rawContents[i], 1/2)
-// 	assert forall i int :: { rawPkt[i] } (0 <= i && i < len(rawPkt)) ==> acc(&rawPkt[i], 1/2)
-// 	assert forall i int :: { rawPkt[i] } (0 <= i && i < len(rawPkt) && (forall j int :: 0 <= j && j < len(rawContents) ==> &rawPkt[i] != &rawContents[j])) ==> acc(&rawPkt[i], 1/2)
-// 	assert forall i int :: 0 <= i && i < len(rawContents) ==> &(rawPkt[:len(rawContents)])[i] == &rawPkt[i]
 
-// 	copy(rawPkt[:len(rawContents)], rawContents, perm(1/2))
+// 	assume len(rawContents) <= len(rawPkt)
+// 	assert forall i int :: { rawContents[i] } (0 <= i && i < len(rawContents)) ==> acc(&rawContents[i], 1/100000)
+// 	assert forall i int :: { rawPkt[i] } (0 <= i && i < len(rawPkt)) ==> acc(&rawPkt[i])
+// 	assert forall i int :: 0 <= i && i < len(rawContents) ==> &(rawPkt[:len(rawContents)])[i] == &rawPkt[i]
+// 	assert forall i int :: 0 <= i && i < len(rawContents) ==> acc(&(rawPkt[:len(rawContents)])[i])
+
+// 	verifyutils.OutlineMemorySafeCopy(rawPkt[:len(rawContents)], rawContents)
 // 	return nil
 // }
 

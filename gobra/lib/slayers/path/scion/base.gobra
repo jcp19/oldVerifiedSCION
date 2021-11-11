@@ -144,8 +144,9 @@ pure func getCurrHF(s *Base) (res uint8) {
 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
 }
 
+// (tlino) introduced to reduce verification time
+// (tlino) TODO: adapt BaseInvariant accordingly
 // (tlino) TODO: verify body
-// (joao) introduced to reduce verification time
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
 decreases
@@ -154,7 +155,8 @@ pure func GetCurrHF(s *Base) (res uint8) //{
 // }
 
 // (tlino) introduced to reduce verification time
-// (tlino) prove this method
+// (tlino) TODO: adapt BaseInvariant accordingly
+// (tlino) TODO: verify body
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
 decreases
