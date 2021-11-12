@@ -26,7 +26,9 @@ import (
 //	"unsafe"
 
 //	"golang.org/x/net/ipv4"
+	"gobra/dependencies/x/net/ipv4"
 //	"golang.org/x/net/ipv6"
+	"gobra/dependencies/x/net/ipv6"
 
 //	"github.com/scionproto/scion/go/lib/common"
 	"gobra/lib/common"
@@ -34,6 +36,7 @@ import (
 	"gobra/lib/serrors"
 //	"github.com/scionproto/scion/go/lib/sockctrl"
 //	"github.com/scionproto/scion/go/lib/topology/underlay"
+	"gobra/lib/topology/underlay"
 )
 
 // ReceiveBufferSize is the default size, in bytes, of receive buffers for
@@ -49,21 +52,80 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 
 // Messages is a list of ipX.Messages. It is necessary to hide the type alias
 // between ipv4.Message, ipv6.Message and socket.Message.
-// type Messages []ipv4.Message
+type Messages []ipv4.Message
+
+pred (m Messages) Mem() {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
+}
 
 // Conn describes the API for an underlay socket with additional metadata on
 // reads.
 type Conn interface {
-	Read(common.RawBytes) (int, *ReadMeta, error)
-//	ReadBatch(Messages, []ReadMeta) (int, error)
-	Write(common.RawBytes) (int, error)
-//	WriteTo(common.RawBytes, *net.UDPAddr) (int, error)
-//	WriteBatch(Messages) (int, error)
-//	LocalAddr() *net.UDPAddr
-//	RemoteAddr() *net.UDPAddr
+	pred Mem()
+
+	// (tlino) Reads a message and copies the payload into b.
+	// (tlino) Returns the number of read bytes n and the metadata
+	preserves Mem()
+	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	ensures err == nil ==> 0 <= n && n <= len(b)
+	ensures err == nil ==> r.Mem()
+	Read(b common.RawBytes) (n int, r *ReadMeta, err error)
+
+	// (tlino) Reads a batch of messages and stores them in msgs.
+	// (tlino) The metadata is stored in metas.
+	// (tlino) Returns the number of read messages
+	preserves Mem()
+	preserves msgs.Mem()
+	preserves ReadMetasAcc(metas)
+	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
+	ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error)
+
+	// (tlino) Writes the bytes in b to the receiver
+	preserves Mem()
+	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+	Write(b common.RawBytes) (n int, err error)
+
+	// (tlino) Writes bytes in b to dst
+	preserves Mem()
+	preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+	preserves acc(dst.Mem(), 1/1000)
+	WriteTo(b common.RawBytes, dst *net.UDPAddr) (int, error)
+
+	// (tlino) Writes a batch of messages
+	// (tlino) Returns the number of written messages
+	preserves Mem()
+	preserves acc(msgs.Mem(), 1/1000)
+	ensures err == nil ==> 0 <= n && n <= len(msgs)
+	WriteBatch(msgs Messages) (n int, err error)
+
+	// (tlino) Returns local address
+	// (tlino) TODO: will change in the future to something like:
+	// (tlino) requires Mem()
+	// (tlino) ensures acc(ret.Mem(), 1/1000) && acc(ret.Mem(), 1/1000) --* Mem()
+	preserves Mem()
+	LocalAddr() *net.UDPAddr
+
+	// (tlino) Returns remote address
+	// (tlino) TODO: will change in the future to something like:
+	// (tlino) requires Mem()
+	// (tlino) ensures acc(ret.Mem(), 1/1000) && acc(ret.Mem(), 1/1000) --* Mem()
+	preserves Mem()
+	RemoteAddr() *net.UDPAddr
+
+	// (tlino) Sets the read deadline
+	preserves Mem()
 	SetReadDeadline(time.Time) error
+
+	// (tlino) Sets the write deadline
+	preserves Mem()
 	SetWriteDeadline(time.Time) error
+
+	// (tlino) sets the read and write deadlines 
+	preserves Mem()
 	SetDeadline(time.Time) error
+
+	// (tlino) closes the connection
+	preserves Mem()
 	Close() error
 }
 
@@ -74,222 +136,375 @@ type Config struct {
 	ReceiveBufferSize int
 }
 
-requires p > 0
-requires acc(c, p)
-ensures acc(c, p)
-func (c *Config) getReceiveBufferSize(ghost p perm) int {
-	if c.ReceiveBufferSize != 0 {
-		return c.ReceiveBufferSize
+pred (c *Config) Mem() {
+	acc(c)
+}
+
+// (tlino) Verified
+preserves acc(c.Mem(), 1/1000)
+func (c *Config) getReceiveBufferSize() int {
+	// (tlino) original code
+	// if c.ReceiveBufferSize != 0 {
+	//	return c.ReceiveBufferSize
+	 // }
+	
+	s := unfolding acc(c.Mem(), 1/1000) in c.ReceiveBufferSize
+	if s != 0 {
+		return s
 	}
 	return ReceiveBufferSize
 }
 
+// (tlino) Verified
 // New opens a new underlay socket on the specified addresses.
 //
 // The config can be used to customize socket behavior. If config is nil,
 // default values are used.
-//func New(listen, remote *net.UDPAddr, cfg *Config) (Conn, error) {
-//	if cfg == nil {
-//		cfg = &Config{}
-//	}
-//	a := listen
-//	if remote != nil {
-//		a = remote
-//	}
-//	if listen == nil && remote == nil {
-//		panic("either listen or remote must be set")
-//	}
-//	if a.IP.To4() != nil {
-//		return newConnUDPIPv4(listen, remote, cfg)
-//	}
-//	return newConnUDPIPv6(listen, remote, cfg)
-//}
+requires listen != nil ==> listen.Mem()
+requires remote != nil ==> remote.Mem()
+requires cfg != nil ==> cfg.Mem()
+requires listen != nil || remote != nil
+ensures err == nil ==> c.Mem()
+func New(listen, remote *net.UDPAddr, cfg *Config) (c Conn, err error) {
+	if cfg == nil {
+		cfg = &Config{}
+		fold cfg.Mem()
+	}
+	a := listen
+	if remote != nil {
+		a = remote
+	}
+	if listen == nil && remote == nil {
+		panic("either listen or remote must be set")
+	}
+	unfold a.Mem()
+	if a.IP.To4() != nil {
+		fold a.Mem()
+		return newConnUDPIPv4(listen, remote, cfg)
+	}
+	fold a.Mem()
+	return newConnUDPIPv6(listen, remote, cfg)
+}
 
 type connUDPIPv4 struct {
-//	connUDPBase
-//	pconn *ipv4.PacketConn
+	connUDPBase
+	pconn *ipv4.PacketConn
 }
 
-//func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (*connUDPIPv4, error) {
-//	cc := &connUDPIPv4{}
-//	if err := cc.initConnUDP("udp4", listen, remote, cfg); err != nil {
-//		return nil, err
-//	}
-//	cc.pconn = ipv4.NewPacketConn(cc.conn)
-//	return cc, nil
-//}
+pred (conn *connUDPIPv4) Mem() {
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (conn.pconn).Mem()
+}
 
+pred (conn *connUDPIPv4) MemWithOutpconn() {
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn)
+}
+
+// (tlino) TODO: add support for net.UDPConn.
+// (tlino) Problem: property error: *UDPConn is not assignable to ipv4.PacketConn (cc.conn as argument in NewPacketConn)
+// (tlino) Reason:  *UDPConn has no members with name SetWriteDeadline, SetDeadline, SetReadDeadline, LocalAddr, and Close
+requires listen != nil ==> listen.Mem()
+requires remote != nil ==> remote.Mem()
+requires listen != nil || remote != nil
+requires cfg.Mem()
+ensures err == nil ==> conn.Mem()
+func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4, err error) //{
+// 	cc := &connUDPIPv4{}
+// 	if err := cc.initConnUDP("udp4", listen, remote, cfg); err != nil {
+// 		return nil, err
+// 	}
+// 	cc.pconn = ipv4.NewPacketConn(cc.conn)
+// 	return cc, nil
+// }
+
+// (tlino) TODO: add support for underlay, and syscall
+// (tlino) Problem: got unknown identifier ReadBatch, syscall, syscall.MSG_WAITFORONE
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
-// func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (int, error) {
-//	for i := range metas {
-//		metas[i].reset()
-//	}
-//	n, err := c.pconn.ReadBatch(msgs, syscall.MSG_WAITFORONE)
-//	readTime := time.Now()
-//	for i := 0; i < n; i++ {
-//		msg := msgs[i]
-//		meta := &metas[i]
-//		if msg.NN > 0 {
-//			c.handleCmsg(msg.OOB[:msg.NN], meta, readTime)
-//		}
-//		meta.setSrc(c.Remote, msg.Addr.(*net.UDPAddr), underlay.UDPIPv4)
-//	}
-//	return n, err
-//}
+preserves c.Mem()
+preserves msgs.Mem()
+preserves ReadMetasAcc(metas)
+ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
+func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) // {
+// 	for i := range metas {
+// 		metas[i].reset()
+// 	}
+// 	n, err := c.pconn.ReadBatch(msgs, syscall.MSG_WAITFORONE)
+// 	readTime := time.Now()
+// 	for i := 0; i < n; i++ {
+// 		msg := msgs[i]
+// 		meta := &metas[i]
+// 		if msg.NN > 0 {
+// 			c.handleCmsg((msg.OOB)[:msg.NN], meta, readTime)
+// 		}
+// 		meta.setSrc(c.Remote, (msg.Addr).(*net.UDPAddr), underlay.UDPIPv4)
+// 	}
+// 	return n, err
+// }
 
-// func (c *connUDPIPv4) WriteBatch(msgs Messages) (int, error) {
-//	return c.pconn.WriteBatch(msgs, 0)
-//}
+// (tlino) Verified
+preserves c.Mem()
+preserves acc(msgs.Mem(), 1/1000)
+ensures err == nil ==> 0 <= n && n <= len(msgs)
+func (c *connUDPIPv4) WriteBatch(msgs Messages) (n int, err error) {
+	unfold c.Mem()
+	unfold acc(msgs.Mem(), 1/1000)
+	n, err := c.pconn.WriteBatch(msgs, 0)
+	fold acc(msgs.Mem(), 1/1000)
+	fold c.Mem()
+}
 
+// (tlino) Verified
 // SetReadDeadline sets the read deadline associated with the endpoint.
-requires acc(c)
-ensures acc(c)
-func (c *connUDPIPv4) SetReadDeadline(t time.Time) error // {
-//	return c.pconn.SetReadDeadline(t)
-//}
+preserves c.Mem()
+func (c *connUDPIPv4) SetReadDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetReadDeadline(t)
+	fold c.Mem()
+}
 
-requires acc(c)
-ensures acc(c)
-func (c *connUDPIPv4) SetWriteDeadline(t time.Time) error // {
-//	return c.pconn.SetWriteDeadline(t)
-//}
+// (tlino) Verified
+preserves c.Mem()
+func (c *connUDPIPv4) SetWriteDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetWriteDeadline(t)
+	fold c.Mem()
+}
 
-requires acc(c)
-ensures acc(c)
-func (c *connUDPIPv4) SetDeadline(t time.Time) error // {
-//	return c.pconn.SetDeadline(t)
-//}
+// (tlino) Verified
+preserves c.Mem()
+func (c *connUDPIPv4) SetDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetDeadline(t)
+	fold c.Mem()
+}
 
 type connUDPIPv6 struct {
-//	connUDPBase
-//	pconn *ipv6.PacketConn
+	connUDPBase
+	pconn *ipv6.PacketConn
 }
 
-//func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (*connUDPIPv6, error) {
-//	cc := &connUDPIPv6{}
-//	if err := cc.initConnUDP("udp6", listen, remote, cfg); err != nil {
-//		return nil, err
-//	}
-//	cc.pconn = ipv6.NewPacketConn(cc.conn)
-//	return cc, nil
-//}
+pred (conn *connUDPIPv6) Mem() {
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn) && (conn.pconn).Mem()
+}
 
+pred (conn *connUDPIPv6) MemWithOutpconn() {
+	(&conn.connUDPBase).Mem() && acc(&conn.pconn)
+}
+
+// (tlino) TODO: add support for net.UDPConn.
+// (tlino) Problem: property error: *UDPConn is not assignable to ipv6.PacketConn (cc.conn as argument in NewPacketConn)
+// (tlino) Reason:  *UDPConn has no members with name SetWriteDeadline, SetDeadline, SetReadDeadline, LocalAddr, and Close
+requires listen != nil ==> listen.Mem()
+requires remote != nil ==> remote.Mem()
+requires listen != nil || remote != nil
+requires cfg.Mem()
+ensures err == nil ==> conn.Mem()
+func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6, err error) //{
+// 	cc := &connUDPIPv6{}
+// 	if err := cc.initConnUDP("udp6", listen, remote, cfg); err != nil {
+// 		return nil, err
+// 	}
+// 	cc.pconn = ipv6.NewPacketConn(cc.conn)
+// 	return cc, nil
+// }
+
+// (tlino) TODO: add support for underlay, and syscall
+// (tlino) Problem: got unknown identifier ReadBatch, syscall, syscall.MSG_WAITFORONE
 // ReadBatch reads up to len(msgs) packets, and stores them in msgs, with their
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
-// func (c *connUDPIPv6) ReadBatch(msgs Messages, metas []ReadMeta) (int, error) {
-//	for i := range metas {
-//		metas[i].reset()
-//	}
-//	n, err := c.pconn.ReadBatch(msgs, syscall.MSG_WAITFORONE)
-//	readTime := time.Now()
-//	for i := 0; i < n; i++ {
-//		msg := msgs[i]
-//		meta := &metas[i]
-//		if msg.NN > 0 {
-//			c.handleCmsg(msg.OOB[:msg.NN], meta, readTime)
-//		}
-//		meta.setSrc(c.Remote, msg.Addr.(*net.UDPAddr), underlay.UDPIPv6)
-//	}
-//	return n, err
-//}
+preserves c.Mem()
+preserves msgs.Mem()
+preserves ReadMetasAcc(metas)
+ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
+func (c *connUDPIPv6) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) 
+// {
+// 	for i := range metas {
+// 		metas[i].reset()
+// 	}
+// 	n, err := c.pconn.ReadBatch(msgs, syscall.MSG_WAITFORONE)
+// 	readTime := time.Now()
+// 	for i := 0; i < n; i++ {
+// 		msg := msgs[i]
+// 		meta := &metas[i]
+// 		if msg.NN > 0 {
+// 			c.handleCmsg(msg.OOB[:msg.NN], meta, readTime)
+// 		}
+// 		meta.setSrc(c.Remote, msg.Addr.(*net.UDPAddr), underlay.UDPIPv6)
+// 	}
+// 	return n, err
+// }
 
-// func (c *connUDPIPv6) WriteBatch(msgs Messages) (int, error) {
-//	return c.pconn.WriteBatch(msgs, 0)
-//}
+// (tlino) Verified
+preserves c.Mem()
+preserves acc(msgs.Mem(), 1/1000)
+ensures err == nil ==> 0 <= n && n <= len(msgs)
+func (c *connUDPIPv6) WriteBatch(msgs Messages) (n int, err error) {
+	unfold c.Mem()
+	unfold acc(msgs.Mem(), 1/1000)
+	n, err := c.pconn.WriteBatch(msgs, 0)
+	fold c.Mem()
+	fold acc(msgs.Mem(), 1/1000)
+	return n, err
+}
 
+// (tlino) Verified
 // SetReadDeadline sets the read deadline associated with the endpoint.
-requires acc(c)
-ensures acc(c)
-func (c *connUDPIPv6) SetReadDeadline(t time.Time) error // {
-//	return c.pconn.SetReadDeadline(t)
-//}
+preserves c.Mem()
+func (c *connUDPIPv6) SetReadDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetReadDeadline(t)
+	fold c.Mem()
+	return err
+}
 
-requires acc(c)
-ensures acc(c)
-func (c *connUDPIPv6) SetWriteDeadline(t time.Time) error // {
-//	return c.pconn.SetWriteDeadline(t)
-//}
+// (tlino) Verified
+preserves c.Mem()
+func (c *connUDPIPv6) SetWriteDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetWriteDeadline(t)
+	fold c.Mem()
+	return err
+}
 
-requires acc(c)
-ensures acc(c)
-func (c *connUDPIPv6) SetDeadline(t time.Time) error // {
-//	return c.pconn.SetDeadline(t)
-//}
+// (tlino) Verified
+preserves c.Mem()
+func (c *connUDPIPv6) SetDeadline(t time.Time) error {
+	unfold c.Mem()
+	err := c.pconn.SetDeadline(t)
+	fold c.Mem()
+	return err
+}
 
 type connUDPBase struct {
-//	conn     *net.UDPConn
-//	Listen   *net.UDPAddr
-//	Remote   *net.UDPAddr
+	conn     *net.UDPConn
+	Listen   *net.UDPAddr
+	Remote   *net.UDPAddr
 	oob      common.RawBytes
 	closed   bool
 	readMeta ReadMeta
 }
 
-//func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) error {
-//	var c *net.UDPConn
-//	var err error
-//	if laddr == nil {
-//		return serrors.New("listen address must be specified")
-//	}
-//	if raddr == nil {
-//		if c, err = net.ListenUDP(network, laddr); err != nil {
-//			return common.NewBasicError("Error listening on socket", err,
-//				"network", network, "listen", laddr)
-//		}
-//	} else {
-//		if c, err = net.DialUDP(network, laddr, raddr); err != nil {
-//			return common.NewBasicError("Error setting up connection", err,
-//				"network", network, "listen", laddr, "remote", raddr)
-//		}
-//	}
-//	// Set reporting socket options
-//	if err := sockctrl.SetsockoptInt(c, syscall.SOL_SOCKET, syscall.SO_RXQ_OVFL, 1); err != nil {
-//		return common.NewBasicError("Error setting SO_RXQ_OVFL socket option", err,
-//			"listen", laddr, "remote", raddr)
-//	}
-//	if err := sockctrl.SetsockoptInt(c, syscall.SOL_SOCKET, syscall.SO_TIMESTAMPNS, 1); err != nil {
-//		return common.NewBasicError("Error setting SO_TIMESTAMPNS socket option", err,
-//			"listen", laddr, "remote", raddr)
-//	}
-//	// Set and confirm receive buffer size
-//	before, err := sockctrl.GetsockoptInt(c, syscall.SOL_SOCKET, syscall.SO_RCVBUF)
-//	if err != nil {
-//		return common.NewBasicError("Error getting SO_RCVBUF socket option (before)", err,
-//			"listen", laddr, "remote", raddr)
-//	}
-//	if err = c.SetReadBuffer(cfg.getReceiveBufferSize()); err != nil {
-//		return common.NewBasicError("Error setting recv buffer size", err,
-//			"listen", laddr, "remote", raddr)
-//	}
-//	after, err := sockctrl.GetsockoptInt(c, syscall.SOL_SOCKET, syscall.SO_RCVBUF)
-//	if err != nil {
-//		return common.NewBasicError("Error getting SO_RCVBUF socket option (after)", err,
-//			"listen", laddr, "remote", raddr)
-//	}
-//	if after/2 != ReceiveBufferSize {
-//		msg := "Receive buffer size smaller than requested"
-//		ctx := []interface{}{"expected", ReceiveBufferSize, "actual", after / 2,
-//			"before", before / 2}
-//		if !*sizeIgnore {
-//			return common.NewBasicError(common.ErrMsg(msg), nil, ctx...)
-//		}
-//		log.Info(msg, ctx...)
-//	}
-//	oob := make(common.RawBytes, oobSize)
-//	cc.conn = c
-//	cc.Listen = laddr
-//	cc.Remote = raddr
-//	cc.oob = oob
-//	return nil
-//}
+pred (conn *connUDPBase) Mem() {
+	acc(&conn.conn) &&
+	acc(&conn.Listen) &&
+	acc(&conn.Remote) &&
+	acc(&conn.oob) &&
+	acc(&conn.closed) &&
+	(forall i int :: 0 <= i && i < len(conn.oob) ==> acc(&(conn.oob)[i])) &&
+	conn.conn.Mem() &&
+	(conn.Listen != nil ==> conn.Listen.Mem()) &&
+	(conn.Remote != nil ==> conn.Remote.Mem()) &&
+	(&conn.readMeta).Mem()
+}
 
+// (tlino) TODO: add support for features of sockctrl, syscall, net
+// (tlino) net: unknown identifier ListenUDP
+// (tlino) sockctrl: unkonwn identifier SetsockoptInt, GetsockoptInt
+// (tlino) syscall: unkonwn identifier SOL_SOCKET, SO_RXQ_OVFL, SO_TIMESTAMPNS, SO_RCVBUF
+requires acc(cc)
+requires laddr != nil ==> laddr.Mem()
+requires raddr != nil ==> raddr.Mem()
+requires laddr != nil || raddr != nil
+requires cfg.Mem()
+ensures  err == nil ==> cc.Mem()
+ensures err != nil ==> acc(cc)
+func (cc *connUDPBase) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) (err error) //{
+// 	var c *net.UDPConn
+// 	var err error
+// 	if laddr == nil {
+// 		return serrors.New("listen address must be specified")
+// 	}
+// 	if raddr == nil {
+// 		if c, err = net.ListenUDP(network, laddr); err != nil {
+// 			return common.NewBasicError("Error listening on socket", err,
+// 				"network", network, "listen", laddr)
+// 		}
+// 	} else {
+// 		if c, err = net.DialUDP(network, laddr, raddr); err != nil {
+// 			return common.NewBasicError("Error setting up connection", err,
+// 				"network", network, "listen", laddr, "remote", raddr)
+// 		}
+// 	}
+// 	// Set reporting socket options
+// 	if err := sockctrl.SetsockoptInt(c, syscall.SOL_SOCKET, syscall.SO_RXQ_OVFL, 1); err != nil {
+// 		return common.NewBasicError("Error setting SO_RXQ_OVFL socket option", err,
+// 			"listen", laddr, "remote", raddr)
+// 	}
+// 	if err := sockctrl.SetsockoptInt(c, syscall.SOL_SOCKET, syscall.SO_TIMESTAMPNS, 1); err != nil {
+// 		return common.NewBasicError("Error setting SO_TIMESTAMPNS socket option", err,
+// 			"listen", laddr, "remote", raddr)
+// 	}
+// 	// Set and confirm receive buffer size
+// 	before, err := sockctrl.GetsockoptInt(c, syscall.SOL_SOCKET, syscall.SO_RCVBUF)
+// 	if err != nil {
+// 		return common.NewBasicError("Error getting SO_RCVBUF socket option (before)", err,
+// 			"listen", laddr, "remote", raddr)
+// 	}
+// 	if err = c.SetReadBuffer(cfg.getReceiveBufferSize()); err != nil {
+// 		return common.NewBasicError("Error setting recv buffer size", err,
+// 			"listen", laddr, "remote", raddr)
+// 	}
+// 	after, err := sockctrl.GetsockoptInt(c, syscall.SOL_SOCKET, syscall.SO_RCVBUF)
+// 	if err != nil {
+// 		return common.NewBasicError("Error getting SO_RCVBUF socket option (after)", err,
+// 			"listen", laddr, "remote", raddr)
+// 	}
+// 	if after/2 != ReceiveBufferSize {
+// 		msg := "Receive buffer size smaller than requested"
+// 		ctx := []interface{}{"expected", ReceiveBufferSize, "actual", after / 2,
+// 			"before", before / 2}
+// 		if !*sizeIgnore {
+// 			return common.NewBasicError(common.ErrMsg(msg), nil, ctx...)
+// 		}
+// 		log.Info(msg, ctx...)
+// 	}
+// 	oob := make(common.RawBytes, oobSize)
+// 	cc.conn = c
+// 	cc.Listen = laddr
+// 	cc.Remote = raddr
+// 	cc.oob = oob
+// 	return nil
+// }
+
+// (tlino) added method, since gobra doesn't support function promotion
 requires acc(c)
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures acc(c)
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures acc(rMeta)
-func (c *connUDPBase) Read(b common.RawBytes) (int, rMeta *ReadMeta, error) // {
+requires laddr != nil ==> laddr.Mem()
+requires raddr != nil ==> raddr.Mem()
+requires laddr != nil || raddr != nil
+requires cfg.Mem()
+ensures err == nil ==> c.MemWithOutpconn()
+ensures err != nil ==> acc(c)
+func (c *connUDPIPv4) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) (err error) {
+	err := c.connUDPBase.initConnUDP(network, laddr, raddr, cfg)
+	if err == nil {
+		fold c.MemWithOutpconn()
+	}
+	return err
+}
+
+// (tlino) added method, since gobra doesn't support function promotion
+requires acc(c)
+requires laddr != nil ==> laddr.Mem()
+requires raddr != nil ==> raddr.Mem()
+requires laddr != nil || raddr != nil
+requires cfg.Mem()
+ensures err == nil ==> c.MemWithOutpconn()
+ensures err != nil ==> acc(c)
+func (c *connUDPIPv6) initConnUDP(network string, laddr, raddr *net.UDPAddr, cfg *Config) (err error) {
+	err := c.connUDPBase.initConnUDP(network, laddr, raddr, cfg)
+	if err == nil {
+		fold c.MemWithOutpconn()
+	}
+	return err
+}
+
+// (tlino) TODO: add support for ReadMsgUDP to net.UDPConn
+// (tlino) Problem: unknown identifier ReadMsgUDP
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures err == nil ==> 0 <= n && n <= len(b)
+ensures err == nil ==> r.Mem()
+func (c *connUDPBase) Read(b common.RawBytes) (n int, r *ReadMeta, err error) //{
 //	c.readMeta.reset()
 //	n, oobn, _, src, err := c.conn.ReadMsgUDP(b, c.oob)
 //	readTime := time.Now()
@@ -307,13 +522,37 @@ func (c *connUDPBase) Read(b common.RawBytes) (int, rMeta *ReadMeta, error) // {
 //	}
 //	return n, &c.readMeta, err
 //}
-requires acc(c)
-requires forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
-requires acc(meta)
-ensures acc(c)
-ensures forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
-ensures acc(meta)
-func (c *connUDPBase) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime time.Time) // {
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures err == nil ==> 0 <= n && n <= len(b)
+ensures err == nil ==> r.Mem()
+func (c *connUDPIPv4) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
+	unfold c.Mem()
+	n, r, err := c.connUDPBase.Read(b)
+	fold c.Mem()
+}
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures err == nil ==> 0 <= n && n <= len(b)
+ensures err == nil ==> r.Mem()
+func (c *connUDPIPv6) Read(b common.RawBytes) (n int, r *ReadMeta, err error) {
+	unfold c.Mem()
+	n, r, err := c.connUDPBase.Read(b)
+	fold c.Mem()
+}
+
+// (tlino) TODO add support for the syscall stuff
+// (tlino) Problem: unkown identifiers SOL_SOCKET, SO_TIMESTAMPNS, Cmsghdr, SizeofCmsghdr, CmsgLen and many others
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
+preserves meta.Mem()
+func (c *connUDPBase) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime time.Time) //{
 //	// Based on https://github.com/golang/go/blob/release-branch.go1.8/src/syscall/sockcmsg_unix.go#L49
 //	// and modified to remove most allocations.
 //	sizeofCmsgHdr := syscall.CmsgLen(0)
@@ -347,37 +586,176 @@ func (c *connUDPBase) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime t
 //	}
 //}
 
-requires acc(c)
-requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures acc(c)
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (c *connUDPBase) Write(b common.RawBytes) (int, error) // {
-//	return c.conn.Write(b)
-//}
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
+preserves meta.Mem()
+func (c *connUDPIPv4) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime time.Time) {
+	unfold c.Mem()
+	c.connUDPBase.handleCmsg(oob, meta, readTime)
+	fold c.Mem()
+}
 
-//func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (int, error) // {
-//	if c.Remote != nil {
-//		return c.conn.Write(b)
-//	}
-//	return c.conn.WriteTo(b, dst)
-//}
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(oob) ==> acc(&oob[i])
+preserves meta.Mem()
+func (c *connUDPIPv6) handleCmsg(oob common.RawBytes, meta *ReadMeta, readTime time.Time) {
+	unfold c.Mem()
+	c.connUDPBase.handleCmsg(oob, meta, readTime)
+	fold c.Mem()
+}
 
-//func (c *connUDPBase) LocalAddr() *net.UDPAddr {
-//	return c.Listen
-//}
+// (tlino) TODO: unkown identifier UDPConn.Write
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+func (c *connUDPBase) Write(b common.RawBytes) (int, error) //{
+// 	return c.conn.Write(b)
+// }
 
-//func (c *connUDPBase) RemoteAddr() *net.UDPAddr {
-//	return c.Remote
-//}
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+func (c *connUDPIPv4) Write(b common.RawBytes) (int, error) {
+	unfold c.Mem()
+	n, err := c.connUDPBase.Write(b)
+	fold c.Mem()
+	return n, err
+}
 
-requires acc(c)
-ensures acc(c)
-func (c *connUDPBase) Close() error {
-	if c.closed {
-		return nil
-	}
-	c.closed = true
-	// return c.conn.Close()
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+func (c *connUDPIPv6) Write(b common.RawBytes) (int, error) {
+	unfold c.Mem()
+	n, err := c.connUDPBase.Write(b)
+	fold c.Mem()
+	return n, err
+}
+
+// (tlino) TODO: unkown identifier UDPConn.Write
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+preserves acc(dst.Mem(), 1/1000)
+func (c *connUDPBase) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error)
+// {
+// 	unfold c.Mem()
+// 	if c.Remote != nil {
+// 		n, err := c.conn.Write(b)
+// 		fold c.Mem()
+// 		return
+// 	}
+// 	n, err := c.conn.WriteTo(b, dst)
+// 	fold c.Mem()
+// 	return
+// }
+
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+preserves acc(dst.Mem(), 1/1000)
+func (c *connUDPIPv4) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error) {
+	unfold c.Mem()
+	n, err := c.connUDPBase.WriteTo(b, dst)
+	fold c.Mem()
+	return n, err
+}
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+preserves acc(dst.Mem(), 1/1000)
+func (c *connUDPIPv6) WriteTo(b common.RawBytes, dst *net.UDPAddr) (n int, err error) {
+	unfold c.Mem()
+	n, err := c.connUDPBase.WriteTo(b, dst)
+	fold c.Mem()
+	return n, err
+}
+
+// (tlino) Verified
+preserves c.Mem()
+func (c *connUDPBase) LocalAddr() *net.UDPAddr {
+	return unfolding c.Mem() in c.Listen
+}
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+func (c *connUDPIPv4) LocalAddr() *net.UDPAddr {
+	unfold c.Mem()
+	n := c.connUDPBase.LocalAddr()
+	fold c.Mem()
+	return n
+}
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+func (c *connUDPIPv6) LocalAddr() *net.UDPAddr {
+	unfold c.Mem()
+	n := c.connUDPBase.LocalAddr()
+	fold c.Mem()
+}
+
+// (tlino) Verified
+preserves c.Mem()
+func (c *connUDPBase) RemoteAddr() *net.UDPAddr {
+	return unfolding c.Mem() in c.Remote
+}
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+func (c *connUDPIPv4) RemoteAddr() *net.UDPAddr {
+	unfold c.Mem()
+	n := c.connUDPBase.RemoteAddr()
+	fold c.Mem()
+	return n
+}
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+func (c *connUDPIPv6) RemoteAddr() *net.UDPAddr {
+	unfold c.Mem()
+	n := c.connUDPBase.RemoteAddr()
+	fold c.Mem()
+	return n
+}
+
+// (tlino) TODO: unkown identifier UDPConn.Close()
+preserves c.Mem()
+func (c *connUDPBase) Close() error //{
+// 	if c.closed {
+// 		return nil
+// 	}
+// 	c.closed = true
+// 	// return c.conn.Close()
+// }
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+func (c *connUDPIPv4) Close() error {
+	unfold c.Mem()
+	err := c.connUDPBase.Close()
+	fold c.Mem()
+	return err
+}
+
+// (tlino) Verified
+// (tlino) added method, since gobra doesn't support function promotion
+preserves c.Mem()
+func (c *connUDPIPv6) Close() error {
+	unfold c.Mem()
+	err := c.connUDPBase.Close()
+	fold c.Mem()
+	return err
 }
 
 // ReadMeta contains extra information about socket reads.
@@ -398,47 +776,87 @@ type ReadMeta struct {
 	ReadDelay time.Duration
 }
 
-requires acc(m)
-ensures acc(m)
+pred (r *ReadMeta) Mem() {
+	acc(r) && (r.Src != nil ==> r.Src.Mem()) && (r.Local != nil ==> r.Local.Mem())
+}
+
+pred ReadMetasAcc(m []ReadMeta) {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
+}
+
+// (tlino) Verifed
+preserves m.Mem()
 func (m *ReadMeta) reset() {
-//	m.Src = nil
+	unfold m.Mem()
+	m.Src = nil
 	m.RcvOvfl = 0
 	m.Recvd = time.Unix(0, 0)
 	m.ReadDelay = 0
+	fold m.Mem()
 }
 
-//func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) {
-//	if a != nil {
-//		m.Src = a
-//	} else {
-//		m.Src = &net.UDPAddr{
-//			IP:   raddr.IP,
-//			Port: raddr.Port,
-//			Zone: raddr.Zone,
-//		}
-//	}
-//}
+// (tlino) Verified
+preserves m.Mem()
+requires a != nil ==> a.Mem()
+requires raddr.Mem()
+func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) {
+	unfold m.Mem()
+	unfold raddr.Mem()
+	if a != nil {
+		unfold a.Mem()
+		m.Src = a
+	} else {
+		m.Src = &net.UDPAddr{
+			IP:   raddr.IP,
+			Port: raddr.Port,
+			Zone: raddr.Zone,
+		}
+	}
+	fold (&m.Src).Mem()
+	fold m.Mem()
+}
 
+// (tlino) TODO: oobSize depends on syscall stuff
 // NewReadMessages allocates memory for reading IPv4 Linux network stack
 // messages.
-// func NewReadMessages(n int) Messages {
-//	m := make(Messages, n)
-//	for i := range m {
-//		// Allocate a single-element, to avoid allocations when setting the buffer.
-//		m[i].Buffers = make([][]byte, 1)
-//		m[i].OOB = make(common.RawBytes, oobSize)
-//	}
-//	return m
-//}
+requires n >= 0
+ensures msgs.Mem()
+ensures len(msgs) == n
+func NewReadMessages(n int) (msgs Messages) //{
+// 	m := make(Messages, n)
+// 	for i := range m {
+// 		// Allocate a single-element, to avoid allocations when setting the buffer.
+// 		m[i].Buffers = make([][]byte, 1)
+// 		m[i].OOB = make(common.RawBytes, oobSize)
+// 	}
+// 	return m
+// }
 
+// (tlino) Verified
 // NewWriteMessages allocates memory for writing IPv4 Linux network stack
 // messages.
-// func NewWriteMessages(n int) Messages {
-//	m := make(Messages, n)
-//	for i := range m {
-//		// Allocate a single-element, to avoid allocations when setting the buffer.
-//		m[i].Buffers = make([][]byte, 1)
-//		m[i].Addr = &net.UDPAddr{}
-//	}
-//	return m
-//}
+requires n >= 0
+ensures msgs.Mem()
+ensures len(msgs) == n
+func NewWriteMessages(n int) (msgs Messages) {
+ 	m := make(Messages, n)
+	// (tlino) range not supported by Gobra 
+	// for i := range m {
+	// 	// Allocate a single-element, to avoid allocations when setting the buffer.
+	// 	m[i].Buffers = make([][]byte, 1)
+	// 	m[i].Addr = &net.UDPAddr{}
+	// }
+
+	invariant 0 <= i && i <= len(m)
+	invariant forall j int :: i <= j && j < len(m) ==> acc(&m[j]) && (forall k int :: 0 <= k && k < len(m[j].OOB) ==> acc(&((m[j].OOB)[k])))
+	invariant forall j int :: 0 <= j && j < i ==> (&m[j]).Mem()
+	for i := 0; i < len(m); i++ {
+		// Allocate a single-element, to avoid allocations when setting the buffer.
+		m[i].Buffers = make([][]byte, 1)
+		m[i].Addr = &net.UDPAddr{}
+		fold (m[i].Addr).Mem()
+		fold (&m[i]).Mem()
+	}
+	fold m.Mem()
+	return m
+}

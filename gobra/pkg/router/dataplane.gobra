@@ -64,6 +64,8 @@ import (
 	"gobra/pkg/router/bfd"
 	// "github.com/scionproto/scion/go/pkg/router/control"
 	"gobra/pkg/router/control"
+
+	"gobra/verifyutils"
 )
 
 const (
@@ -82,8 +84,16 @@ const (
 )
 
 type bfdSession interface {
-	Run() error
-//	Messages() chan<- *layers.BFD
+	pred Mem()
+
+	requires Mem()
+	Run() (err error)
+
+	requires acc(Mem(), _)
+	ensures  acc(c.SendChannel(), _) && c.SendGivenPerm() == (*layers.BFD).Mem!<_!>;
+	Messages() (c chan<- *layers.BFD)
+
+	requires acc(Mem(), 1/1000)
 	IsUp() bool
 }
 
@@ -135,7 +145,8 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
 	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
 	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
-	(d.bfdSessions != nil ==> acc(d.bfdSessions))
+	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
+	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem())
 }
 
 ghost
@@ -197,20 +208,20 @@ func errBFDDisabled() (e error) { return serrors.New("BFD is disabled") }
 /** End of Globals **/
 
 type scmpError struct {
-//	TypeCode slayers.SCMPTypeCode
+	TypeCode slayers.SCMPTypeCode
 	Cause    error
 }
 
-func (e scmpError) Error() string // {
-//	return serrors.New("scmp", "typecode", e.TypeCode, "cause", e.Cause).Error()
-//}
+func (e scmpError) Error() string {
+	return (serrors.New("scmp", "typecode", e.TypeCode, "cause", e.Cause)).Error()
+}
 
 // (joao) Verified
 // SetIA sets the local IA for the dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) SetIA(ia addr.IA) error /* {
+func (d *DataPlane) SetIA(ia addr.IA) error {
 	d.mtx.Lock()
 	// (joao) no support for defer
 	// defer d.mtx.Unlock()
@@ -244,7 +255,7 @@ func (d *DataPlane) SetIA(ia addr.IA) error /* {
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
-} */
+}
 
 // (joao) Partially Verified
 // SetKey sets the key used for MAC verification. The key provided here should
@@ -252,7 +263,7 @@ func (d *DataPlane) SetIA(ia addr.IA) error /* {
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) SetKey(key []byte) error /* {
+func (d *DataPlane) SetKey(key []byte) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	// (joao) no support for defer
@@ -291,7 +302,6 @@ func (d *DataPlane) SetKey(key []byte) error /* {
 	d.mtx.Unlock()
 	return nil
 }
-*/
 
 // (joao) Verified
 // AddInternalInterface sets the interface the data-plane will use to
@@ -301,7 +311,7 @@ func (d *DataPlane) SetKey(key []byte) error /* {
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error /* {
+func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	// (joao) no support for defer
@@ -337,7 +347,6 @@ func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error /* {
 	d.mtx.Unlock()
 	return nil
 }
-*/
 
 // (joao) Verified
 // AddExternalInterface adds the inter AS connection for the given interface ID.
@@ -346,7 +355,7 @@ func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error /* {
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error /* {
+func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	// (joao) no support for defer
@@ -386,7 +395,6 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error /* {
 	d.mtx.Unlock()
 	return nil
 }
-*/
 
 // (joao) Verified
 // AddNeighborIA adds the neighboring IA for a given interface ID. If an IA for
@@ -395,7 +403,7 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error /* {
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error /*{
+func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	// (joao) defer not supported
@@ -436,7 +444,6 @@ func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error /*{
 	d.mtx.Unlock()
 	return nil
 }
-*/
 
 // (joao) Verified
 // AddLinkType adds the link type for a given interface ID. If a link type for
@@ -444,7 +451,7 @@ func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error /*{
 // be called on a not yet running dataplane.
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
-func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error /* {
+func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 	// (joao) original code (changed below):
 	// if _, exists := d.linkTypes[ifID]; exists {
 	// 	return serrors.WithCtx(alreadySet, "ifID", ifID)
@@ -462,7 +469,6 @@ func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error /* 
 	fold DataPlaneMutexInvariant(d)
 	return nil
 }
-*/
 
 // (joao) Partially Verified
 // AddExternalInterfaceBFD adds the inter AS connection BFD session.
@@ -470,7 +476,7 @@ requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
-	src, dst control.LinkEnd, cfg control.BFD) error /* {
+	src, dst control.LinkEnd, cfg control.BFD) error {
 	d.mtx.Lock()
 	// defer d.mtx.Unlock()
 	unfold DataPlaneMutexInvariant!<d!>()
@@ -517,19 +523,19 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	// return d.addBFDController(ifID, s, cfg, m)
 	// changed code:
 	fold DataPlaneMutexInvariant(d)
-	res := d.addBFDController(ifID, s, cfg, /* m *//*)
+	res := d.addBFDController(ifID, s, cfg /*, m */)
 	unfold DataPlaneMutexInvariant(d)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return res
 }
-*/
 
 // (joao) Partially Verified
+// TODO: specify `rand`
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
-	/* metrics bfd.Metrics */) error /* {
+	/* metrics bfd.Metrics */) error {
 	unfold DataPlaneMutexInvariant(d)
 	if cfg.Disable {
 		fold DataPlaneMutexInvariant(d)
@@ -559,7 +565,6 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	fold DataPlaneMutexInvariant(d)
 	return nil
 }
-*/
 
 // (joao) Partially Verified
 // AddSvc adds the address for the given service. This can be called multiple
@@ -568,7 +573,7 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error /* {
+func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	// defer d.mtx.Unlock()
@@ -591,14 +596,13 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error /* {
 	d.mtx.Unlock()
 	return nil
 }
-*/
 
 // (joao) Partially Verified
 // DelSvc deletes the address for the given service.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error /* {
+func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	d.mtx.Lock()
 	// defer d.mtx.Unlock()
 	if a == nil {
@@ -616,7 +620,6 @@ func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error /* {
 	// }
 	return nil
 }
-*/
 
 // (joao) Verified
 // AddNextHop sets the next hop address for the given interface ID. If the
@@ -625,7 +628,7 @@ func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error /* {
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
-func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error /*{
+func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	d.mtx.Lock()
 	// (joao) defer not supported
 	// defer d.mtx.Unlock()
@@ -664,8 +667,8 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error /*{
 	d.mtx.Unlock()
 	return nil
 }
-*/
 
+// (joao) Partially Verified
 // AddNextHopBFD adds the BFD session for the next hop address.
 // If the remote ifID belongs to an existing address, the existing
 // BFD session will be re-used.
@@ -673,54 +676,63 @@ requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg control.BFD,
-	sibling string) error /* {
+	sibling string) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	// defer d.mtx.Unlock()
 	if d.running {
+		// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 		// return modifyExisting
 		return modifyExisting()
 	}
 
 	if dst == nil {
+		// (joao) Unlock explictly added, no support for defer
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 		// return emptyValue
 		return emptyValue()
 	}
 
-	// for k, v := range d.internalNextHops {
-	// 	if v.String() == dst.String() {
-	//		if c, ok := d.bfdSessions[k]; ok {
-	//			d.bfdSessions[ifID] = c
-	//			return nil
-	//		}
-	//	}
-	// }
-	// var m bfd.Metrics
-	// if d.Metrics != nil {
-	// 	labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
-	// 	m = bfd.Metrics{
-	// 		Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
-	// 			With(labels...),
-	// 		StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
-	// 			With(labels...),
-	// 		PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
-	// 			With(labels...),
-	// 		PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
-	// 			With(labels...),
-	// 	}
-	// }
-	// s := &bfdSend{
-	// 	conn:       d.internal,
-	// 	srcAddr:    src,
-	// 	dstAddr:    dst,
-	// 	srcIA:      d.localIA,
-	// 	dstIA:      d.localIA,
-	// 	ifID:       0,
-	// 	macFactory: d.macFactory,
-	// }
-	// return d.addBFDController(ifID, s, cfg, m)
+	assume false
+	// (joao) the following code is still not supported
+	/*
+	for k, v := range d.internalNextHops {
+		if v.String() == dst.String() {
+			if c, ok := d.bfdSessions[k]; ok {
+				d.bfdSessions[ifID] = c
+				return nil
+			}
+		}
+	}
+	var m bfd.Metrics
+	if d.Metrics != nil {
+		labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
+		m = bfd.Metrics{
+			Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
+				With(labels...),
+			StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
+				With(labels...),
+			PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
+				With(labels...),
+			PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
+				With(labels...),
+		}
+	}
+	s := &bfdSend{
+		conn:       d.internal,
+		srcAddr:    src,
+		dstAddr:    dst,
+		srcIA:      d.localIA,
+		dstIA:      d.localIA,
+		ifID:       0,
+		macFactory: d.macFactory,
+	}
+	return d.addBFDController(ifID, s, cfg, m)
+	*/
 }
-*/
 
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
@@ -735,32 +747,32 @@ func (d *DataPlane) Run() error /* {
 
 	// (joao) At this point, there used to be a closure definition, saved in a variable called "read"
 
-	// for k, v := range d.bfdSessions {
-	// 	go func(ifID uint16, c bfdSession) {
-	// 		defer log.HandlePanic()
-	// 		if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
-	// 			log.Error("BFD session failed to start", "ifID", ifID, "err", err)
-	// 		}
-	// 	}(k, v)
-	// }
-	// for ifID, v := range d.external {
-	// 	go func(i uint16, c BatchConn) {
-	// 		defer log.HandlePanic()
-	// 		read(i, c)
-	// 	}(ifID, v)
-	// }
-	// go func(c BatchConn) {
-	// 	defer log.HandlePanic()
-	// 	read(0, c)
-	// }(d.internal)
-	//
- 	// // (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
-	// //        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
-	// //        the lock invariant.
-	// d.mtx.Unlock()
-	// for d.running {
-	// 	time.Sleep(time.Second)
-	// }
+	for k, v := range d.bfdSessions {
+		go func(ifID uint16, c bfdSession) {
+			defer log.HandlePanic()
+			if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
+				log.Error("BFD session failed to start", "ifID", ifID, "err", err)
+			}
+		}(k, v)
+	}
+	for ifID, v := range d.external {
+		go func(i uint16, c BatchConn) {
+			defer log.HandlePanic()
+			read(i, c)
+		}(ifID, v)
+	}
+	go func(c BatchConn) {
+		defer log.HandlePanic()
+		read(0, c)
+	}(d.internal)
+	
+ 	// (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
+	//        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
+	//        the lock invariant.
+	d.mtx.Unlock()
+	for d.running {
+		time.Sleep(time.Second)
+	}
 	return nil
 }
 */
@@ -841,6 +853,8 @@ func RunReadClosure(ingressID uint16, rd BatchConn) /* {
 }
 */
 
+requires DataPlaneMutexInvariant(d)
+ensures  DataPlaneMutexInvariant(d)
 func (d *DataPlane) initMetrics() /* {
 	labels := interfaceToMetricLabels(0, d.localIA, d.neighborIAs)
 	d.Metrics.InputBytesTotal.With(labels).Add(0)
@@ -896,7 +910,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires isZeroSCION(s)
 requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
 requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-requires srcAddr.mem()
+requires srcAddr.Mem()
 requires buffer.Mem()
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
@@ -939,7 +953,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		assert acc(DataPlaneMutexInvariant(d), _)
 		assert forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 		assert buffer.Mem()
-		assert sNew.MemSCION()
+		assert sNew.Mem()
 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
 		return d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
 	default:
@@ -949,27 +963,52 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 }
 
 // (joao) THIS(2)
-// next: layers.BFD, v.Messages()
-//func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
-//	if len(d.bfdSessions) == 0 {
-//		return noBFDSessionConfigured
-//	}
-//
-//	p := &layers.BFD{}
-//	if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
-//		return err
-//	}
-//
-//	if v, ok := d.bfdSessions[ingressID]; ok {
-//		v.Messages() <- p
-//		return nil
-//	}
-//
-//	return noBFDSessionFound
-//}
+// (joao) `oh` is not used anywhere in the function
+requires acc(DataPlaneMutexInvariant(d), _)
+requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	if len(d.bfdSessions) == 0 {
+		// (joao) no globals
+		// return noBFDSessionConfigured
+		return noBFDSessionConfigured()
+	}
+
+	p := &layers.BFD{}
+	// (joao) TODO: gopacket.NilDecodeFeedback is a var in gopacket but Luca implemented as a type (should be changed).
+	//              Code adapted below.
+	//if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
+	//	return err
+	//}
+	tmp := gopacket.NilDecodeFeedback{}
+	fold tmp.Mem()
+	if err := p.DecodeFromBytes(data, tmp); err != nil {
+		return err
+	}
+
+	translateBFDMemPred(p)
+
+	// (joao) add parentheses surrounding `d.bfdSessions`
+	if v, ok := (d.bfdSessions)[ingressID]; ok {
+		v.Messages() <- p
+		return nil
+	}
+
+	// (joao) no globals
+	// return noBFDSessionFound
+	return noBFDSessionFound()
+}
+
+ghost
+requires b.Mem()
+ensures  (*layers.BFD).Mem!<_!>(b)
+func translateBFDMemPred(b *layers.BFD) {
+	unfold (*layers.BFD).Mem(b)
+	fold (*layers.BFD).Mem!<_!>(b)
+}
 
 // (joao) THIS(2)
-// depends on issue #341 and on layers.BFD
+// depends on issue #341
 requires acc(DataPlaneMutexInvariant(d), _)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 	unfold DataPlaneMutexInvariant(d)
@@ -978,10 +1017,10 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 //		return noBFDSessionConfigured
 		return noBFDSessionConfigured()
 	}
-//	p := &layers.BFD{}
-//	if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
-//		return err
-//	}
+	p := &layers.BFD{}
+	if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
+		return err
+	}
 
 	ifID := uint16(0)
 	srcUDPAddr, ok := src.(*net.UDPAddr)
@@ -1013,7 +1052,6 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 		return nil
 	}
 
-	fold DataPlaneMutexInvariant(d)
 //	return noBFDSessionFound
 	return noBFDSessionFound()
 }
@@ -1023,7 +1061,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error /* {
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 requires buffer.Mem()
-requires s.MemSCION()
+requires s.Mem()
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
@@ -1069,43 +1107,63 @@ type scionPacketProcessor struct {
 	segmentChange bool
 }
 
-pred scionPacketProcessorInvariant(p *scionPacketProcessor) {
+pred (p *scionPacketProcessor) Mem() {
 	acc(p) &&
 	acc(&p.d.mtx, _) &&
 	p.d.mtx.LockP() &&
 	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!>
 }
 
-// TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn,
+// TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
+// TODO: switch to scionPacketProcessorInvariant() eventually
+requires p.Mem() && scmpH.Mem() && scmpP.Mem()
+// requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
+// requires verifyutils.BytesAcc(p.origPacket)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	cause error) (processResult, error) /* {
+	cause error) (processResult, error) /*{
 
 	// parse everything to see if the original packet was an SCMP error.
 	var (
 		scionLayer slayers.SCION
-		udpLayer   slayers.UDP
-		hbhExtn    slayers.HopByHopExtn
-		e2eExtn    slayers.EndToEndExtn
+		// (joao) not supported yet
+		// udpLayer   slayers.UDP
+		// hbhExtn    slayers.HopByHopExtn
+		// e2eExtn    slayers.EndToEndExtn
 		scmpLayer  slayers.SCMP
 	)
-	parser := gopacket.NewDecodingLayerParser(
-		slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
-	)
-	decoded := make([]gopacket.LayerType, 5)
+	// (joao) currently not supported, rewritten below
+	// parser := gopacket.NewDecodingLayerParser(
+	//	slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
+	// )
+	parser := gopacket.NewDecodingLayerParser(slayers.LayerTypeSCION())
+
+	decoded@ := make([]gopacket.LayerType, 5)
+	assert forall i int :: 0 <= i && i < len(decoded) ==> acc(&decoded[i])
+	assert len(decoded) == 5
 	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
 		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
+			assert len(decoded) == 5
+			assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
 			return processResult{}, serrors.WrapStr("decoding packet", err)
 		}
+		assert len(decoded) == 5
+		assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
 	}
+	assert forall i int :: 0 <= i && i < len(decoded) ==> acc(&decoded[i])
+	assert len(decoded) == 5
+	assert acc(&(decoded[len(decoded)-1]))
 	// in reply to an SCMP error do nothing:
-	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
+	// if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
+	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP() && !scmpLayer.TypeCode.InfoMsg() {
 		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
 	}
 
+	assume false
 	// the quoted packet is the packet in its current state
 	if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
 		return processResult{}, serrors.WrapStr("update info field", err)
 	}
+
 	if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
 		return processResult{}, serrors.WrapStr("update hop field", err)
 	}
@@ -1149,14 +1207,14 @@ ensures ok ==> s.Mem()
 func havocRaw() (s *scion.Raw, ok bool)
 
 requires acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
-requires (p.scionLayer).MemSCION()
+requires (p.scionLayer).Mem()
 ensures  acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
-ensures  (p.scionLayer).MemSCION()
+ensures  (p.scionLayer).Mem()
 ensures  errRet == nil ==> (acc(p.infoField) && path.HopFieldInv(p.hopField))
 func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) {
 	var ok bool
 	// (joao) this line depends on the proof that *scion.Raw implements Path. However, adding that to the code
-	//        causes verification to take a very long time. Nonetheless, should be uncommented on the final version of this. Also, we should use a smart way to avoid unfolding MemSCION
+	//        causes verification to take a very long time. Nonetheless, should be uncommented on the final version of this. Also, we should use a smart way to avoid unfolding Mem
 	// p.path, ok = p.scionLayer.Path.(*scion.Raw)
 	p.path, ok = havocRaw()
 	if !ok {
@@ -1164,8 +1222,8 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 		// return processResult{}, malformedPath
 		return processResult{}, malformedPath()
 	}
-	// (joao) here, p.path.Mem() holds without unfolding (p.scionLayer).MemSCION() because we use havocRaw. We would need to convert (p.scionLayer).MemSCION() into
-	// (p.scionLayer).MemSCIONWithoutPath() && p.path.Len() or else, remove path.Len() from MemSCION
+	// (joao) here, p.path.Mem() holds without unfolding (p.scionLayer).Mem() because we use havocRaw. We would need to convert (p.scionLayer).Mem() into
+	// (p.scionLayer).MemWithoutPath() && p.path.Len() or else, remove path.Len() from Mem
 	var err error
 	p.hopField, err = p.path.GetCurrentHopField()
 	if err != nil {
@@ -1310,10 +1368,10 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() error /* {
 }
 */
 
-requires acc(&p.scionLayer, 1/1000) && acc(p.scionLayer.MemSCION(), 1/1000)
+requires acc(&p.scionLayer, 1/1000) && acc(p.scionLayer.Mem(), 1/1000)
 pure func (p *scionPacketProcessor) currentInfoPointer() uint16 /* {
 	return uint16(slayers.CmnHdrLen + p.scionLayer.AddrHdrLen() +
-		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.MemSCION(), 1/1000) in p.path.PathMeta.CurrINF))
+		scion.MetaLen + path.InfoLen*int(unfolding acc(p.scionLayer.Mem(), 1/1000) in p.path.PathMeta.CurrINF))
 }
 */
 
@@ -1519,8 +1577,8 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 
 // next: packSCMP, 
 // THIS(4)
-requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
-ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).MemSCION(), 1/100)
+requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).Mem(), 1/100)
+ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).Mem(), 1/100)
 func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 	// (joao) adapted to avoid unfolding predicates
 	// if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
@@ -1546,7 +1604,7 @@ requires acc(p)
 requires acc(DataPlaneMutexInvariant(p.d), _)
 requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
 requires (p.buffer).Mem()
-requires (p.scionLayer).MemSCION()
+requires (p.scionLayer).Mem()
 func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
@@ -1701,8 +1759,8 @@ func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) //{
 //}
 
 // (joao) depends on issue #341
-requires dst.mem()
-ensures  ret.mem()
+requires dst.Mem()
+ensures  ret.Mem()
 func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 	if ip, ok := dst.(*net.IPAddr); ok {
 		return &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
@@ -1711,7 +1769,7 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) /* {
 }
 */
 
-// (joao) next: check how to avoid needing permission to rawPkt and s.MemSCION by stating that rawPkt is the packet in s.path
+// (joao) next: check how to avoid needing permission to rawPkt and s.Mem by stating that rawPkt is the packet in s.path
 // (joao) THIS(5)
 //func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 //	if err := buffer.Clear(); err != nil {

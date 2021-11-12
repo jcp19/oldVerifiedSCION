@@ -32,25 +32,30 @@ pred (o Path) UninitializedMem() {
 
 requires o.Mem()
 ensures  o.UninitializedMem()
+decreases
 func (o Path) ExchangePerms() {
 	fold o.UninitializedMem()
 }
 
 // (joao) `_` cannot be used as an argument identifier
 // func (o Path) DecodeFromBytes(_ []byte) error {
+decreases
 func (o Path) DecodeFromBytes(b []byte) error {
 	return nil
 }
 
+decreases
 func (o Path) SerializeTo(b []byte) error {
 	return nil
 }
 
+decreases
 func (o Path) Reverse() error {
 	return nil
 }
 
 ensures ret >= 0
+decreases
 pure func (o Path) Len() (ret int) {
 	return PathLen
 }

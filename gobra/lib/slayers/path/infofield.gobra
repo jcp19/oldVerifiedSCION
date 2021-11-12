@@ -55,6 +55,7 @@ type InfoField struct {
 // path.InfoLen
 preserves acc(inf)
 preserves forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/1000)
+decreases
 func (inf *InfoField) DecodeFromBytes(raw []byte) error {
 	if len(raw) < InfoLen {
 		return serrors.New("InfoField raw too short", "expected", InfoLen, "actual", len(raw))
@@ -74,6 +75,7 @@ func (inf *InfoField) DecodeFromBytes(raw []byte) error {
 // requires len(b) >= 8
 preserves acc(inf, 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+decreases
 func (inf *InfoField) SerializeTo(b []byte) error {
 	if len(b) < InfoLen {
 		return serrors.New("buffer for InfoField too short", "expected", InfoLen,
@@ -103,11 +105,13 @@ requires len(hfMac) >= 2
 requires acc(&hfMac[0], 1/1000) && acc(&hfMac[1], 1/1000)
 ensures acc(inf)
 ensures acc(&hfMac[0], 1/1000) && acc(&hfMac[1], 1/1000)
+decreases
 func (inf *InfoField) UpdateSegID(hfMac []byte) {
 	inf.SegID = inf.SegID ^ binary.BigEndian.Uint16(hfMac[:2])
 }
 
 requires acc(inf, _)
+decreases
 pure func (inf *InfoField) String() string // {
 // (joao) no support for strings at the moment
 //	return fmt.Sprintf("{Peer: %t, ConsDir: %t, SegID: %d, Timestamp: %s}",
