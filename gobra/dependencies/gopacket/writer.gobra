@@ -2,10 +2,6 @@ package gopacket
 
 import "gobra/verifyutils"
 
-const(
-	bufSize = 9000
-)
-
 type SerializableLayer interface {
 	pred Mem()
 
@@ -41,17 +37,10 @@ type SerializeBuffer interface {
 	ensures  Mem()
 	CombineAppendBytesMem(data []byte)
 
-	/* */
-	pred BytesMem(data []byte)
-
-	/* ghost */
-	requires BytesMem(data) && verifyutils.BytesAcc(data)
-	ensures  Mem()
-	CombineBytesMem(data []byte)
 	/* End of Ghost Operations */
 
 	requires Mem()
-	ensures BytesMem(data) && verifyutils.BytesAcc(data) && cap(data) <= bufSize
+	ensures verifyutils.BytesAcc(data) && cap(data) <= verifyutils.BufSize
 	ensures verifyutils.BytesAcc(data) --* Mem()
 	Bytes() (data []byte)
 

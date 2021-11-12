@@ -163,7 +163,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		assert &(bBytes[2:])[1] == &bBytes[3]
 		binary.BigEndian.PutUint16(bBytes[2:], s.Checksum)
 		fold verifyutils.BytesAcc(bBytes)
-		/*ghost*/ b.CombineBytesMem(bBytes)
+		apply verifyutils.BytesAcc(bBytes) --* b.Mem()
 		fold s.Mem()
 		return nil
 	} else {
