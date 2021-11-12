@@ -749,7 +749,7 @@ func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
-	assume err == nil ==> s.ReadDstAddr(res)
+	inhale err == nil ==> s.ReadDstAddr(res)
 	return res, err
 }
 
@@ -774,7 +774,7 @@ func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr)
-	assume err == nil ==> s.ReadSrcAddr(res)
+	inhale err == nil ==> s.ReadSrcAddr(res)
 	return res, err
 }
 

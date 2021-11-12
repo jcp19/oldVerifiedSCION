@@ -822,6 +822,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 		isRunning = unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 
 		// (tlino) continue not supported by gobra
+		// adapted code is below
 		// if err != nil {
 		// 	log.Debug("Failed to read batch", "err", err)
 		// 	// error metric
@@ -1080,6 +1081,9 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 // 	// (tlino) use sNew.getPathType() instead of s
 // 	// switch s.PathType {
+	
+// 	// assert false // doesn't verify
+// 	return d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
 // 	switch sNew.getPathType() {
 // 	case slayers.PathTypeEmpty:
 // 		// (tlino) use sNew instead of s and use getters
@@ -1129,7 +1133,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 // 		assert buffer.Mem()
 // 		assert sNew.Mem()
 // 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
-// 		// assert forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+// 		// assert false //verified
 // 		return d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
 // 	default:
 // 		// return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
@@ -2069,34 +2073,39 @@ requires s.Mem()
 requires buffer.Mem()
 ensures forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
 ensures cap(rawPkt) == bufSize
-ensures buffer.Mem()
+// ensures buffer.Mem()
 ensures err == nil ==> s.Mem()
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
-func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) //{
-// 	if err := buffer.Clear(); err != nil {
-// 		return err
-// 	}
-// 	if err := s.SerializeTo(buffer, gopacket.SerializeOptions{}); err != nil {
-// 		return err
-// 	}
-// 	// TODO(lukedirtwalker): We should add a method to the scion layers
-// 	// which can write into the existing buffer, see also the discussion in
-// 	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
-// 	rawContents@ := buffer.Bytes()
-// 	unfold verifyutils.BytesAcc(rawContents)
-// 	// (tlino) use Gobra's copy
-// 	// copy(rawPkt[:len(rawContents)], rawContents)
+func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) {
+	if err := buffer.Clear(); err != nil {
+		return err
+	}
+	if err := s.SerializeTo(buffer, gopacket.SerializeOptions{}); err != nil {
+		return err
+	}
+	// TODO(lukedirtwalker): We should add a method to the scion layers
+	// which can write into the existing buffer, see also the discussion in
+	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
+	rawContents@ := buffer.Bytes()
+	// assert verifyutils.BytesAcc(rawContents) --* buffer.Mem()
+	unfold verifyutils.BytesAcc(rawContents)
+	// (tlino) use Gobra's copy
+	// copy(rawPkt[:len(rawContents)], rawContents)
 
-// 	assume len(rawContents) <= len(rawPkt)
-// 	assert forall i int :: { rawContents[i] } (0 <= i && i < len(rawContents)) ==> acc(&rawContents[i], 1/100000)
-// 	assert forall i int :: { rawPkt[i] } (0 <= i && i < len(rawPkt)) ==> acc(&rawPkt[i])
-// 	assert forall i int :: 0 <= i && i < len(rawContents) ==> &(rawPkt[:len(rawContents)])[i] == &rawPkt[i]
-// 	assert forall i int :: 0 <= i && i < len(rawContents) ==> acc(&(rawPkt[:len(rawContents)])[i])
+	assume len(rawContents) <= len(rawPkt)
+	assert forall i int :: { rawContents[i] } (0 <= i && i < len(rawContents)) ==> acc(&rawContents[i], 1/100000)
+	assert forall i int :: { rawPkt[i] } (0 <= i && i < len(rawPkt)) ==> acc(&rawPkt[i])
+	assert forall i int :: 0 <= i && i < len(rawContents) ==> &(rawPkt[:len(rawContents)])[i] == &rawPkt[i]
+	assert forall i int :: 0 <= i && i < len(rawContents) ==> acc(&(rawPkt[:len(rawContents)])[i])
 
-// 	verifyutils.OutlineMemorySafeCopy(rawPkt[:len(rawContents)], rawContents)
-// 	return nil
-// }
+	verifyutils.OutlineMemorySafeCopy(rawPkt[:len(rawContents)], rawContents)
+
+	// fold verifyutils.BytesAcc(rawContents)
+	// apply verifyutils.BytesAcc(rawContents) --* buffer.Mem()
+
+	return nil
+}
 
 type bfdSend struct {
 	conn             BatchConn

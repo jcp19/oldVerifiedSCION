@@ -45,7 +45,11 @@ pred BaseInvariant(b *Base) {
 	// independently
 	b.NumINF >= 0 && b.NumINF <= 3 &&
 	// (joao) the code cannot establish this invariant yet
-	b.NumHops >= 0 // && b.NumHops <= 64
+	b.NumHops >= 0 && // && b.NumHops <= 64
+	// (tlino) CurrINF and CurrHF refer to the current info/hop fields
+	b.PathMeta.CurrHF >=0  && b.PathMeta.CurrHF <= b.NumHops &&
+	b.PathMeta.CurrINF >=0  && b.PathMeta.CurrINF <= b.NumINF
+
 }
 
 requires acc(s)
@@ -63,7 +67,9 @@ func (s *Base) DecodeFromBytes(data []byte) (res error) {
 	s.NumHops = 0
 
 	invariant -1 <= i && i <= 2
-	invariant acc(s)
+	invariant acc(&s.PathMeta.SegLen)
+	invariant acc(&s.NumHops)
+	invariant acc(&s.NumINF)
 	invariant s.NumHops >= 0 && s.NumINF >= 0 && s.NumINF <= 3 // && s.NumHops <= 64
 	decreases i
 	for i := 2; i >= 0; i-- {
@@ -83,6 +89,11 @@ func (s *Base) DecodeFromBytes(data []byte) (res error) {
 		assume int((s.PathMeta.SegLen)[i]) >= 0
 		s.NumHops += int((s.PathMeta.SegLen)[i])
 	}
+
+	// (tlino) introduce these assumptions
+	assume s.PathMeta.CurrINF < s.NumINF
+	assume s.PathMeta.CurrHF < s.NumHops
+
 	fold BaseInvariant(s)
 	return nil
 }
@@ -98,6 +109,8 @@ func (s *Base) IncPath() error {
 		return serrors.New("empty path cannot be increased")
 	}
 	if int(s.PathMeta.CurrHF) >= s.NumHops-1 {
+		// (tlino) uint8 is always non-negative
+		assume uint8(s.NumHops - 1) >= 0
 		s.PathMeta.CurrHF = uint8(s.NumHops - 1)
 		fold BaseInvariant(s)
 		return serrors.New("path already at end")
@@ -115,7 +128,7 @@ decreases
 func (s *Base) IsXover() bool {
 // (joao) tmp was introduced by me to simplify the unfoldings of BaseInvariant(s)
 	unfold acc(BaseInvariant(s), 1/100)
-	tmp := s.PathMeta.CurrINF != s.infIndexForHF(s.PathMeta.CurrINF+1)
+	tmp := s.PathMeta.CurrINF != s.infIndexForHF(s.PathMeta.CurrHF+1)
 	fold acc(BaseInvariant(s), 1/100)
 	return tmp
 }
@@ -145,31 +158,28 @@ pure func getCurrHF(s *Base) (res uint8) {
 }
 
 // (tlino) introduced to reduce verification time
-// (tlino) TODO: adapt BaseInvariant accordingly
-// (tlino) TODO: verify body
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
 decreases
-pure func GetCurrHF(s *Base) (res uint8) //{
-// 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
-// }
+pure func GetCurrHF(s *Base) (res uint8) {
+	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
+}
 
 // (tlino) introduced to reduce verification time
-// (tlino) TODO: adapt BaseInvariant accordingly
-// (tlino) TODO: verify body
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
 decreases
-pure func GetCurrINF(s *Base) (res uint8) //{
-// 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrINF
-// }
+pure func GetCurrINF(s *Base) (res uint8) {
+	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrINF
+}
 
 // (joao) spec in terms of implementation details not problematic because it is not exported
 // requires acc(BaseInvariant(s), p)
 // ensures acc(BaseInvariant(s), p)
 preserves acc(s, 1/1000) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
+ensures old(s.NumINF) > 0 ==> (res >= 0 && res < s.NumINF)
 decreases
-func (s *Base) infIndexForHF(hf uint8) uint8 {
+func (s *Base) infIndexForHF(hf uint8) (res uint8) {
 	left := uint8(0)
 
 	invariant acc(s, 1/1000) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
@@ -179,6 +189,9 @@ func (s *Base) infIndexForHF(hf uint8) uint8 {
 		if hf >= left {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 			if hf < left+(s.PathMeta.SegLen)[i] {
+				// (tlino) add assumption
+				assume uint8(i) >= 0
+				assume uint8(i) < s.NumINF
 				return uint8(i)
 			}
 		}
@@ -187,6 +200,9 @@ func (s *Base) infIndexForHF(hf uint8) uint8 {
 	}
 	// at the end we just return the last index.
 // (joao) the RHS of the following declaration used to be in the return statement
+	// (tlino) add assumption
+	assume uint8(s.NumINF - 1) >= 0
+	assume uint8(s.NumINF - 1) < s.NumINF
 	return uint8(s.NumINF - 1)
 }
 
@@ -216,14 +232,20 @@ requires acc(m)
 requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/100)
 ensures acc(m)
 ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/100)
+ensures err == nil ==> m.CurrINF >= 0
+ensures err == nil ==> m.CurrHF >= 0
 decreases
-func (m *MetaHdr) DecodeFromBytes(raw []byte) error {
+func (m *MetaHdr) DecodeFromBytes(raw []byte) (err error) {
 	if len(raw) < MetaLen {
 		return serrors.New("MetaHdr raw too short", "expected", MetaLen, "actual", len(raw))
 	}
 	line := binary.BigEndian.Uint32(raw)
 	m.CurrINF = uint8(line >> 30)
 	m.CurrHF = uint8(line>>24) & 0x3F
+	// (tlino) assertions ot m.CurrINF and m.CurrHF are always non-negative
+	// (tlino) thus, we can use these assumptions
+	assume m.CurrINF >= 0
+	assume m.CurrHF >= 0
 // (joao) introduced parentheses surrounding `m.SegLen`
 	(m.SegLen)[0] = uint8(line>>12) & 0x3F
 	(m.SegLen)[1] = uint8(line>>6) & 0x3F
@@ -238,6 +260,8 @@ preserves acc(m, 1/100)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures len(b) >= MetaLen ==> res == nil
 ensures len(b) < MetaLen ==> res != nil
+ensures m.CurrINF == old(m.CurrINF)
+ensures m.CurrHF == old(m.CurrHF)
 decreases
 func (m *MetaHdr) SerializeTo(b []byte) (res error) {
 	if len(b) < MetaLen {

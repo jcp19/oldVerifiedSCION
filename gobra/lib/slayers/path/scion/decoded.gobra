@@ -374,6 +374,13 @@ func (s *Decoded) Reverse() error {
 	}
 
 	unfold BaseInvariant(&s.Base)
+	// (tlino) we assume that s.NumINF and s.NumHops are smaller than 255
+	// (tlino) this assumption should be resonable since the number of INFs should be boundend by 3
+	// (tlino) and the number of Hops should be bounded by 64
+	// (tlino) Thus we can deduce that uint8(s.NumINF) > s.PathMeta.CurrINF, since s.NumINF > PathMeta.CurrINF
+	// (tlino) and uint8(s.NumHops) > s.PathMeta.CurrHF, since s.NumHops > s.PathMeta.CurrHF
+	assume uint8(s.NumINF) > s.PathMeta.CurrINF
+	assume uint8(s.NumHops) > s.PathMeta.CurrHF
 	s.PathMeta.CurrINF = uint8(s.NumINF) - s.PathMeta.CurrINF - 1
 	s.PathMeta.CurrHF = uint8(s.NumHops) - s.PathMeta.CurrHF - 1
 	fold BaseInvariant(&s.Base)

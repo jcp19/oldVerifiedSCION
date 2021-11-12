@@ -52,6 +52,7 @@ type SerializeBuffer interface {
 
 	requires Mem()
 	ensures BytesMem(data) && verifyutils.BytesAcc(data) && cap(data) <= bufSize
+	ensures verifyutils.BytesAcc(data) --* Mem()
 	Bytes() (data []byte)
 
 	requires Mem()
