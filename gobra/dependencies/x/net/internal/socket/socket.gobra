@@ -5,6 +5,7 @@ import (
 	"gobra/verifyutils"
 )
 
+// (tlino) TODO: adapt for more general case len(m.Buffers) > 1
 pred (m *Message) MemPartiallyInitialized() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&
@@ -14,6 +15,7 @@ pred (m *Message) MemPartiallyInitialized() {
 	m.Addr.Mem()
 }
 
+// (tlino) TODO: adapt for more general case len(m.Buffers) > 1
 pred (m *Message) Mem() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&
@@ -24,6 +26,7 @@ pred (m *Message) Mem() {
 	m.Addr.Mem()
 }
 
+// (tlino) added helper function
 requires acc(m.Mem(), _)
 pure func (m *Message) HasBuffersNonZeroLength() bool {
 	return unfolding acc(m.Mem(), _) in len(m.Buffers) >= 1
