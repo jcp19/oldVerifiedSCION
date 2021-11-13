@@ -1,0 +1,5 @@
+package verifyutils
+
+const(
+    BufSize = 9000
+)
