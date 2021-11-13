@@ -101,19 +101,16 @@ func (s *Base) DecodeFromBytes(data []byte) (res error) {
 
 // IncPath increases the currHF index and currINF index if appropriate.
 requires BaseInvariant(s)
-ensures BaseInvariant(s)
+ensures err == nil ==> BaseInvariant(s)
+ensures err != nil ==> acc(s)
 decreases
-func (s *Base) IncPath() error {
+func (s *Base) IncPath() (err error) {
 	unfold BaseInvariant(s)
 	if s.NumINF == 0 {
-		fold BaseInvariant(s)
 		return serrors.New("empty path cannot be increased")
 	}
 	if int(s.PathMeta.CurrHF) >= s.NumHops-1 {
-		// (tlino) uint8 is always non-negative
-		assume uint8(s.NumHops - 1) >= 0
 		s.PathMeta.CurrHF = uint8(s.NumHops - 1)
-		fold BaseInvariant(s)
 		return serrors.New("path already at end")
 	}
 	s.PathMeta.CurrHF++
@@ -233,8 +230,7 @@ requires acc(m)
 requires forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/100)
 ensures acc(m)
 ensures forall i int :: 0 <= i && i < len(raw) ==> acc(&raw[i], 1/100)
-ensures err == nil ==> m.CurrINF >= 0
-ensures err == nil ==> m.CurrHF >= 0
+ensures err == nil ==> (m.CurrINF >= 0 &&  m.CurrHF >= 0)
 decreases
 func (m *MetaHdr) DecodeFromBytes(raw []byte) (err error) {
 	if len(raw) < MetaLen {
@@ -257,12 +253,10 @@ func (m *MetaHdr) DecodeFromBytes(raw []byte) (err error) {
 
 // SerializeTo writes the fields into the provided buffer. The buffer must be of length >=
 // scion.MetaLen
-preserves acc(m, 1/100)
+preserves acc(m, 1/200)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures len(b) >= MetaLen ==> res == nil
 ensures len(b) < MetaLen ==> res != nil
-ensures m.CurrINF == old(m.CurrINF)
-ensures m.CurrHF == old(m.CurrHF)
 decreases
 func (m *MetaHdr) SerializeTo(b []byte) (res error) {
 	if len(b) < MetaLen {
