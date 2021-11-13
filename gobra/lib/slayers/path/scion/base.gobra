@@ -46,6 +46,7 @@ pred BaseInvariant(b *Base) {
 	b.NumINF >= 0 && b.NumINF <= 3 &&
 	// (joao) the code cannot establish this invariant yet
 	b.NumHops >= 0 && // && b.NumHops <= 64
+	(b.NumINF > 0 ==> b.NumHops > 0) &&
 	// (tlino) CurrINF and CurrHF refer to the current info/hop fields
 	(b.NumINF == 0 ==> b.PathMeta.CurrINF == 0) &&
 	(b.NumINF > 0 ==> b.PathMeta.CurrINF >= 0  && b.PathMeta.CurrINF < b.NumINF) &&
@@ -239,8 +240,9 @@ func (m *MetaHdr) DecodeFromBytes(raw []byte) (err error) {
 	line := binary.BigEndian.Uint32(raw)
 	m.CurrINF = uint8(line >> 30)
 	m.CurrHF = uint8(line>>24) & 0x3F
-	// (tlino) assertions ot m.CurrINF and m.CurrHF are always non-negative
-	// (tlino) thus, we can use these assumptions
+	// (tlino) Assertions ot m.CurrINF and m.CurrHF are always non-negative.
+	// (tlino) However, Gobra cannot prove this yet.
+	// (tlino) Thus, we can use these assumptions
 	assume m.CurrINF >= 0
 	assume m.CurrHF >= 0
 // (joao) introduced parentheses surrounding `m.SegLen`
