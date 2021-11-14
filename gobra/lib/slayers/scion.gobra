@@ -286,6 +286,20 @@ type SCION struct {
 
 	// Path is the path contained in the SCION header. It depends on the PathType field.
 	Path Path
+
+	// start of ghost members
+
+	/* ghost */
+	rawPkt []byte
+
+	/* ghost */
+	hdrBytes uint32
+
+	/* ghost */
+	pathLen uint32
+
+	/* ghost */
+	pathOffset uint32
 }
 
 pred (s *SCION) Mem() {
@@ -301,6 +315,8 @@ pred (s *SCION) Mem() {
 	s.FlowID >= 0 &&
 	s.HdrLen >= 0 &&
 	s.PayloadLen >= 0
+	// ghost
+	// (forall i int :: 0 <= i && i < len(s.rawPkt) ==> acc(&(s.rawPkt)[i]))
 	// TODO:
 	// - Relation between PathType and Path
 }
