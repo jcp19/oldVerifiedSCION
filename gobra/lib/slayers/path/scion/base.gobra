@@ -176,7 +176,7 @@ pure func GetCurrINF(s *Base) (res uint8) {
 // requires acc(BaseInvariant(s), p)
 // ensures acc(BaseInvariant(s), p)
 preserves acc(s, 1/1000) && s.NumINF >= 0 && s.NumINF <= 3 && s.NumHops >= 0
-ensures old(s.NumINF) > 0 ==> (res >= 0 && res < s.NumINF)
+ensures s.NumINF > 0 ==> (res >= 0 && res < s.NumINF)
 decreases
 func (s *Base) infIndexForHF(hf uint8) (res uint8) {
 	left := uint8(0)
@@ -189,8 +189,6 @@ func (s *Base) infIndexForHF(hf uint8) (res uint8) {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 			if hf < left+(s.PathMeta.SegLen)[i] {
 				// (tlino) add assumption
-				assume uint8(i) >= 0
-				assume uint8(i) < s.NumINF
 				return uint8(i)
 			}
 		}
@@ -200,8 +198,6 @@ func (s *Base) infIndexForHF(hf uint8) (res uint8) {
 	// at the end we just return the last index.
 // (joao) the RHS of the following declaration used to be in the return statement
 	// (tlino) add assumption
-	assume uint8(s.NumINF - 1) >= 0
-	assume uint8(s.NumINF - 1) < s.NumINF
 	return uint8(s.NumINF - 1)
 }
 
