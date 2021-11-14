@@ -1316,9 +1316,7 @@ type scionPacketProcessor struct {
 
 pred (p *scionPacketProcessor) Mem() {
 	acc(p) &&
-	acc(&p.d.mtx, _) &&
-	p.d.mtx.LockP() &&
-	p.d.mtx.LockInv() == DataPlaneMutexInvariant!<p.d!> &&
+	acc(DataPlaneMutexInvariant(p.d), _) &&
 	verifyutils.BytesAcc(p.origPacket) &&
 	p.path.Mem() &&
 	acc(p.infoField) &&
@@ -1332,8 +1330,6 @@ pred (p *scionPacketProcessor) Mem() {
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 // TODO: switch to scionPacketProcessorInvariant() eventually
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
-// requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
-// requires verifyutils.BytesAcc(p.origPacket)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 	cause error) (processResult, error) {
 	unfold p.Mem()
@@ -1399,23 +1395,40 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	if quoteLen > slayers.MaxSCMPPacketLen {
 		quoteLen = slayers.MaxSCMPPacketLen
 	}
-	quote@ := make([]byte, quoteLen)
+	quote := make([]byte, quoteLen)
 	updated := p.buffer.Bytes()
 	unfold verifyutils.BytesAcc(updated)
 
-	// (tlino) verified until here
-
 	// (tlino) use Gobra's copy function
 	// copy(quote[:len(updated)], updated)
-	// assume len(quote) <= len(updated)
-	// assert forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
-	// assert forall i int :: 0 <= i && i < len(updated) ==> acc(&updated[i], 1/100000)
-	// assert forall i int :: 0 <= i && i < len(update) ==> &(quote[:len(updated)])[i] == &quote[i]
+	assume len(updated) <= len(quote)
+	assert forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
+	assert forall i int :: 0 <= i && i < len(updated) ==> acc(&updated[i], 1/100000)
+	assert forall i int :: 0 <= i && i < len(updated) ==> &(quote[:len(updated)])[i] == &quote[i]
+	assert forall i int :: 0 <= i && i < len(updated) ==> acc(&(quote[:len(updated)])[i])
+	
+	verifyutils.OutlineMemorySafeCopy(quote[:len(updated)], updated)
 
-	// verifyutils.OutlineMemorySafeCopy(quote[:len(updated)], updated)
-	// //copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
+	// (tlino) use Gobra's copy function
+	// copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
+	unfold verifyutils.BytesAcc(p.origPacket)
+	assume quoteLen <= len(p.origPacket)
+	assert forall i int :: 0 <= i && i < (len(quote) - len(updated)) ==> &(quote[len(updated):])[i] == &quote[i + len(updated)]
+	assert forall i int :: 0 <= i && i < (len(quote) - len(updated)) ==> acc(&(quote[len(updated):])[i])
+	assert forall i int :: 0 <= i && i < len(p.origPacket) ==>  acc(&(p.origPacket)[i], 1/100000)
+	assert forall i int :: 0 <= i && i < (quoteLen - len(updated)) ==> &((p.origPacket)[len(updated):quoteLen])[i] == &(p.origPacket)[i + len(updated)]
+	assert forall i int :: 0 <= i && i < (quoteLen - len(updated)) ==> acc(&((p.origPacket)[len(updated):quoteLen])[i],  1/100000)
+	verifyutils.OutlineMemorySafeCopy(quote[len(updated):], (p.origPacket)[len(updated):quoteLen])
 
+	unfold acc(DataPlaneMutexInvariant(p.d), _)
+
+	// (tlino) added parantheses to make it parse
 	// _, external := p.d.external[p.ingressID]
+	_, external := (p.d.external)[p.ingressID]
+
+	// (tlino) replace scmpPacker with *scmpPacker
+	// (tlino) replace &p.scionLayer, with p.scionLayer
+	// (tlino) replace scmp.prepareSCMP with (&scmp).prepareSCMP
 	// rawSCMP, err := scmpPacker{
 	// 	internalIP: p.d.internalIP,
 	// 	localIA:    p.d.localIA,
@@ -1430,6 +1443,26 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	// 	external,
 	// 	cause,
 	// )
+
+	scmp := scmpPacker{
+		internalIP: p.d.internalIP,
+		localIA:    p.d.localIA,
+		origPacket: p.origPacket,
+		ingressID:  p.ingressID,
+		scionL:     p.scionLayer,
+		buffer:     p.buffer,
+		quote:      quote,
+	}
+
+	// (tlino) verified until here
+
+	// rawSCMP, err := (&scmp).prepareSCMP(
+	// 	scmpH,
+	// 	scmpP,
+	// 	external,
+	// 	cause,
+	// )
+
 	// return processResult{OutPkt: rawSCMP}, err
 }
 
