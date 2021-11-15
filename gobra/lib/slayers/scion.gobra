@@ -290,16 +290,7 @@ type SCION struct {
 	// start of ghost members
 
 	/* ghost */
-	rawPkt []byte
-
-	/* ghost */
-	hdrBytes uint32
-
-	/* ghost */
-	pathLen uint32
-
-	/* ghost */
-	pathOffset uint32
+	RawPkt []byte
 }
 
 pred (s *SCION) Mem() {
@@ -314,11 +305,34 @@ pred (s *SCION) Mem() {
 	s.TrafficClass >= 0 &&
 	s.FlowID >= 0 &&
 	s.HdrLen >= 0 &&
-	s.PayloadLen >= 0
+	s.PayloadLen >= 0 &&
 	// ghost
-	// (forall i int :: 0 <= i && i < len(s.rawPkt) ==> acc(&(s.rawPkt)[i]))
+	verifyutils.BytesAcc(s.RawPkt)
 	// TODO:
 	// - Relation between PathType and Path
+}
+
+ghost
+requires s.Mem()
+ensures verifyutils.BytesAcc(b)
+ensures verifyutils.BytesAcc(b) --* s.Mem()
+func (s *SCION) getRawPkt() (b []byte) {
+	unfold s.Mem()
+	b := s.RawPkt
+	package verifyutils.BytesAcc(b) --* s.Mem() {
+		fold s.Mem()
+	}
+}
+
+ghost requires s.Mem()
+ensures p.Mem()
+ensures p.Mem() --* s.Mem()
+func (s *SCION) getPath() (p Path) {
+	unfold s.Mem()
+	p := s.Path
+	package p.Mem() --* s.Mem() {
+		fold s.Mem()
+	}
 }
 
 /*
@@ -701,6 +715,9 @@ func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes
 	}
 	s.Contents = data[:hdrBytes]
 	s.Payload = data[hdrBytes:]
+
+	// (tlino) store data in ghost field
+	s.RawPkt = data
 
 	return nil
 }
