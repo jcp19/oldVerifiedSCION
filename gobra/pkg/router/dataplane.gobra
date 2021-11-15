@@ -1323,18 +1323,19 @@ pred (p *scionPacketProcessor) Mem() {
 	path.HopFieldInv(p.hopField) &&
 	p.buffer.Mem() &&
 	p.scionLayer.Mem() &&
-	cap(p.rawPkt) == bufSize // && p.path == unfolding p.scionLayer.Mem() in p.scionLayer.Path && p.rawPkt == unfolding 
+	cap(p.rawPkt) == bufSize //&&
 	// ghost
-	// p.rawPkt == s.getRawPkt()
-	// p.path == s.getPath()
+	// p.path == (unfolding p.scionLayer.Mem() in (p.scionLayer.Path).(*scion.Raw)) &&
+	// &(p.rawPkt) == unfolding p.scionLayer.Mem() in &(p.scionLayer.RawPkt)
 }
 
-// (tlino) partially verified
+// (tlino) Verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 // TODO: switch to scionPacketProcessorInvariant() eventually
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
+ensures pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt)
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	cause error) (processResult, error) {
+	cause error) (pr processResult, err error) {
 	unfold p.Mem()
 	// parse everything to see if the original packet was an SCMP error.
 	var (
@@ -1399,7 +1400,10 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 		quoteLen = slayers.MaxSCMPPacketLen
 	}
 	quote := make([]byte, quoteLen)
-	updated := p.buffer.Bytes()
+	// (tlino) use varable b to make magic wands work. Magic wands don't work directly on p.buffer
+	b := p.buffer
+	updated := b.Bytes()
+	assert verifyutils.BytesAcc(updated) --* b.Mem()
 	unfold verifyutils.BytesAcc(updated)
 
 	// (tlino) use Gobra's copy function
@@ -1423,11 +1427,25 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	assert forall i int :: 0 <= i && i < (quoteLen - len(updated)) ==> acc(&((p.origPacket)[len(updated):quoteLen])[i],  1/100000)
 	verifyutils.OutlineMemorySafeCopy(quote[len(updated):], (p.origPacket)[len(updated):quoteLen])
 
-	unfold acc(DataPlaneMutexInvariant(p.d), _)
+	fold verifyutils.BytesAcc(updated)
+	apply verifyutils.BytesAcc(updated) --* b.Mem()
+	return packSCMP2(p.d, quote, p.origPacket, p.ingressID, p.scionLayer, b, scmpH, scmpP, cause)
+}
 
+// (tlino) partially verified
+// (tlino) outlined part of packSCMP
+requires acc(DataPlaneMutexInvariant(d), _)
+requires forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
+requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+requires scionLayer.Mem() && buffer.Mem() && scmpH.Mem() && scmpP.Mem()
+ensures pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt)
+func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, scionLayer *slayers.SCION, 
+	buffer gopacket.SerializeBuffer, scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (pr processResult, err error) {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	
 	// (tlino) added parantheses to make it parse
 	// _, external := p.d.external[p.ingressID]
-	_, external := (p.d.external)[p.ingressID]
+	_, external := (d.external)[ingressID]
 
 	// (tlino) replace scmpPacker with *scmpPacker
 	// (tlino) replace &p.scionLayer, with p.scionLayer
@@ -1447,25 +1465,29 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	// 	cause,
 	// )
 
-	scmp := scmpPacker{
-		internalIP: p.d.internalIP,
-		localIA:    p.d.localIA,
-		origPacket: p.origPacket,
-		ingressID:  p.ingressID,
-		scionL:     p.scionLayer,
-		buffer:     p.buffer,
+	fold verifyutils.BytesAcc(origPacket)
+	fold verifyutils.BytesAcc(quote)
+	assert verifyutils.BytesAcc(origPacket)
+	assert verifyutils.BytesAcc(quote)
+
+	scmp := &scmpPacker{
+		internalIP: d.internalIP,
+		localIA:    d.localIA,
+		origPacket: origPacket,
+		ingressID:  ingressID,
+		scionL:     scionLayer,
+		buffer:     buffer,
 		quote:      quote,
 	}
+	// fold scmp.Mem()
 
-	// (tlino) verified until here
-
-	// rawSCMP, err := (&scmp).prepareSCMP(
+	// rawSCMP, err := scmp.prepareSCMP(
 	// 	scmpH,
 	// 	scmpP,
 	// 	external,
 	// 	cause,
 	// )
-
+	
 	// return processResult{OutPkt: rawSCMP}, err
 }
 
@@ -2230,7 +2252,6 @@ type scmpPacker struct {
 
 pred (s *scmpPacker) Mem() {
 	acc(s) &&
-	(forall i int :: 0 <= i && i < len(s.internalIP) ==> acc(&(s.internalIP)[i])) &&
 	verifyutils.BytesAcc(s.origPacket) &&
 	s.scionL.Mem() &&
 	s.buffer.Mem() &&
@@ -2238,11 +2259,12 @@ pred (s *scmpPacker) Mem() {
 }
 
 requires s.Mem() && scmpH.Mem() && scmpP.Mem()
+ensures b != nil ==> verifyutils.BytesAcc(b)
 // (tlino) use *scmpPacker instead of scmpPacker
 // func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
 //	incPath bool, cause error) ([]byte, error) {
 func (s *scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	incPath bool, cause error) ([]byte, error) //{
+	incPath bool, cause error) (b []byte, err error) //{
 
 	// // We use the original packet but put the already updated path, because usually a router will
 	// // not keep a copy of the original/unmodified packet around.
@@ -2270,7 +2292,6 @@ func (s *scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.Serializabl
 	// }
 
 	// // (tlino) tried to verify until here, takes ages
-
 
 // 	path := (s.scionL.Path).(*scion.Raw)
 
