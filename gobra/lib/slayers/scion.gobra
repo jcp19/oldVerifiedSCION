@@ -316,7 +316,7 @@ ghost
 requires s.Mem()
 ensures verifyutils.BytesAcc(b)
 ensures verifyutils.BytesAcc(b) --* s.Mem()
-func (s *SCION) getRawPkt() (b []byte) {
+func (s *SCION) getRawPktAcc() (b []byte) {
 	unfold s.Mem()
 	b := s.RawPkt
 	package verifyutils.BytesAcc(b) --* s.Mem() {
@@ -324,10 +324,11 @@ func (s *SCION) getRawPkt() (b []byte) {
 	}
 }
 
-ghost requires s.Mem()
+ghost 
+requires s.Mem()
 ensures p.Mem()
 ensures p.Mem() --* s.Mem()
-func (s *SCION) getPath() (p Path) {
+func (s *SCION) getPathAcc() (p Path) {
 	unfold s.Mem()
 	p := s.Path
 	package p.Mem() --* s.Mem() {
@@ -479,6 +480,18 @@ pure
 requires acc(s.Mem(), _)
 func (s *SCION) getSrcIA() addr.IA {
 	return unfolding acc(s.Mem(), _) in s.SrcIA
+}
+
+pure
+requires acc(s.Mem(), _)
+func (s *SCION) getRawPkt() []byte {
+	return unfolding acc(s.Mem(), _) in s.RawPkt
+}
+
+pure
+requires acc(s.Mem(), _)
+func (s *SCION) getPath() Path {
+	return unfolding acc(s.Mem(), _) in s.Path
 }
 /** End of Getters **/
 

@@ -188,7 +188,6 @@ func (s *Base) infIndexForHF(hf uint8) (res uint8) {
 		if hf >= left {
 // (joao) added paretheses surrounding `s.PathMeta.SegLen`
 			if hf < left+(s.PathMeta.SegLen)[i] {
-				// (tlino) add assumption
 				return uint8(i)
 			}
 		}
@@ -197,7 +196,6 @@ func (s *Base) infIndexForHF(hf uint8) (res uint8) {
 	}
 	// at the end we just return the last index.
 // (joao) the RHS of the following declaration used to be in the return statement
-	// (tlino) add assumption
 	return uint8(s.NumINF - 1)
 }
 
@@ -236,7 +234,7 @@ func (m *MetaHdr) DecodeFromBytes(raw []byte) (err error) {
 	line := binary.BigEndian.Uint32(raw)
 	m.CurrINF = uint8(line >> 30)
 	m.CurrHF = uint8(line>>24) & 0x3F
-	// (tlino) Assertions ot m.CurrINF and m.CurrHF are always non-negative.
+	// (tlino) Assertions of m.CurrINF and m.CurrHF are always non-negative.
 	// (tlino) However, Gobra cannot prove this yet.
 	// (tlino) Thus, we can use these assumptions
 	assume m.CurrINF >= 0
