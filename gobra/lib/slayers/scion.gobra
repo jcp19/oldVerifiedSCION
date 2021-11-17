@@ -324,15 +324,15 @@ func (s *SCION) getRawPktAcc(rawPkt []byte) {
 	}
 }
 
-
 ghost 
 requires s.Mem()
+requires p == s.getRawScionPath()
 ensures p.Mem()
-ensures p.Mem() --* s.Mem()
-func (s *SCION) getPathAcc() (ghost p Path) {
+ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath())
+func (s *SCION) getPathAcc() (p *scion.Raw) {
 	unfold s.Mem()
-	p := s.Path
-	package p.Mem() --* s.Mem() {
+	assume typeOf(s.Path) == *scion.Raw && p == (s.Path).(*scion.Raw)
+	package p.Mem() --* (s.Mem() && p == s.getRawScionPath()) {
 		fold s.Mem()
 	}
 }
@@ -499,7 +499,8 @@ func (s *SCION) getPath() (res Path) {
 ghost
 pure
 requires acc(s.Mem(), _)
-func (s *SCION) getRawScionPath() *scion.Raw {
+ensures res == unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
+func (s *SCION) getRawScionPath() (res *scion.Raw) {
 	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
 }
 /** End of Getters **/
