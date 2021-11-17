@@ -329,7 +329,7 @@ requires s.Mem()
 requires p == s.getRawScionPath()
 ensures p.Mem()
 ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath())
-func (s *SCION) getPathAcc() (p *scion.Raw) {
+func (s *SCION) getPathAcc(p *scion.Raw) {
 	unfold s.Mem()
 	assume typeOf(s.Path) == *scion.Raw && p == (s.Path).(*scion.Raw)
 	package p.Mem() --* (s.Mem() && p == s.getRawScionPath()) {
