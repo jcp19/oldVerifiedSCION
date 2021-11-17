@@ -1268,10 +1268,10 @@ requires verifyutils.BytesAcc(origPacket)
 requires cap(rawPkt) == bufSize
 requires buffer.Mem()
 requires s.Mem()
-ensures verifyutils.BytesAcc(origPacket)
-ensures cap(rawPkt) == bufSize
-ensures buffer.Mem()
-ensures s.Mem()
+// ensures verifyutils.BytesAcc(origPacket)
+// ensures cap(rawPkt) == bufSize
+// ensures buffer.Mem()
+// ensures s.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 // (joao) s is now a *slayers.SCION
