@@ -1329,7 +1329,7 @@ pred (p *scionPacketProcessor) Mem() {
 	p.scionLayer.Mem() &&
 	cap(p.rawPkt) == bufSize &&
 	p.path == p.scionLayer.getRawScionPath() &&
- 	verifyutils.ByteSlicesEqual(p.rawPkt, p.scionLayer.getRawPkt())
+ 	p.rawPkt == p.scionLayer.getRawPkt()
 }
 
 requires p.Mem()
@@ -2137,19 +2137,19 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) {
 	return dst
 }
 
-// (tlino) TODO: reverify
+// (tlino) Verified
 requires s.Mem()
-requires verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
+requires rawPkt == s.getRawPkt()
 requires buffer.Mem()
 ensures err == nil ==> s.Mem() && buffer.Mem()
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) {
-	assert verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
+	assert rawPkt == s.getRawPkt()
 	if err := buffer.Clear(); err != nil {
 		return err
 	}
-	assert verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
+	assert rawPkt == s.getRawPkt()
 	if err := s.SerializeTo(buffer, gopacket.SerializeOptions{}); err != nil {
 		return err
 	}
@@ -2158,9 +2158,9 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
 	
 	// (tlino) obtain access to rawPkt
-	assert verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
+	assert rawPkt == s.getRawPkt()
 	s.getRawPktAcc(rawPkt)
-	assert verifyutils.BytesAcc(rawPkt) --* s.Mem()
+	assert verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt())
 	assert verifyutils.BytesAcc(rawPkt)
 	unfold verifyutils.BytesAcc(rawPkt)
 
@@ -2179,7 +2179,7 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	verifyutils.OutlineMemorySafeCopy(rawPkt[:len(rawContents)], rawContents)
 
 	fold verifyutils.BytesAcc(rawPkt)
-	apply verifyutils.BytesAcc(rawPkt) --* s.Mem()
+	apply verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt())
 
 	fold verifyutils.BytesAcc(rawContents)
 	apply verifyutils.BytesAcc(rawContents) --* buffer.Mem()
