@@ -329,8 +329,12 @@ type SCMPParameterProblem struct {
 	Pointer uint16
 }
 
+pred (s *SCMPParameterProblem) Mem() {
+	acc(s)
+}
+
 // LayerType returns LayerTypeSCMPParameterProblem.
-func (*SCMPParameterProblem) LayerType() gopacket.LayerType {
+pure func (*SCMPParameterProblem) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMPParameterProblem
 	return LayerTypeSCMPParameterProblem()
 }
@@ -356,21 +360,24 @@ func (i *SCMPParameterProblem) DecodeFromBytes(data []byte, df gopacket.DecodeFe
 	}
 	return nil
 }
+*/
 
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
+requires i.Mem() && b.Mem()
+ensures  err == nil ==> (i.Mem() && b.Mem())
 func (i *SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer,
-	opts gopacket.SerializeOptions) error {
+	opts gopacket.SerializeOptions) (err error) //{
 
-	buf, err := b.PrependBytes(2 + 2)
-	if err != nil {
-		return err
-	}
-	binary.BigEndian.PutUint16(buf[0:2], uint16(0)) //Reserved
-	binary.BigEndian.PutUint16(buf[2:4], i.Pointer)
-	return nil
-}
-
+// 	buf, err := b.PrependBytes(2 + 2)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	binary.BigEndian.PutUint16(buf[0:2], uint16(0)) //Reserved
+// 	binary.BigEndian.PutUint16(buf[2:4], i.Pointer)
+// 	return nil
+// }
+/*
 func decodeSCMPParameterProblem(data []byte, pb gopacket.PacketBuilder) error {
 	s := &SCMPParameterProblem{}
 	if err := s.DecodeFromBytes(data, pb); err != nil {
@@ -380,6 +387,16 @@ func decodeSCMPParameterProblem(data []byte, pb gopacket.PacketBuilder) error {
 	return pb.NextDecoder(s.NextLayerType())
 }
 */
+
+(*SCMPParameterProblem) implements gopacket.SerializableLayer {
+	pure (s *SCMPParameterProblem) LayerType() gopacket.LayerType {
+		return s.LayerType()
+	}
+	
+	(s *SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = s.SerializeTo(b, opts)
+	}
+}
 
 // SCMPTraceroute represents the structure of a traceroute.
 //

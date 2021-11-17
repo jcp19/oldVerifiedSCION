@@ -1051,7 +1051,6 @@ pure func isZeroSCION(s slayers.SCION) bool {
 
 // (tlino) TODO: reverify
 // (tlino) TODO: permission to rawPkt is lost after DecodeFromBytes
-// (joao) THIS(1)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires isZeroSCION(s)
 requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
@@ -1192,33 +1191,33 @@ func translateBFDMemPred(b *layers.BFD) {
 preserves src.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 requires acc(DataPlaneMutexInvariant(d), _)
-func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error //{
-// 	// (tlino) add unfolding
-// 	// if len(d.bfdSessions) == 0 {
-// 	// 	return noBFDSessionConfigured
-// 	// }
+func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
+	// (tlino) add unfolding
+	// if len(d.bfdSessions) == 0 {
+	// 	return noBFDSessionConfigured
+	// }
 
-// 	hasNoBFDSessions := unfolding acc(DataPlaneMutexInvariant(d), _) in len(d.bfdSessions) == 0
-// 	if hasNoBFDSessions {
-// 		// (tlino) golbals not supported
-// 		// return noBFDSessionConfigured
-// 		return noBFDSessionConfigured()
-// 	}
-// 	p := &layers.BFD{}
+	hasNoBFDSessions := unfolding acc(DataPlaneMutexInvariant(d), _) in len(d.bfdSessions) == 0
+	if hasNoBFDSessions {
+		// (tlino) golbals not supported
+		// return noBFDSessionConfigured
+		return noBFDSessionConfigured()
+	}
+	p := &layers.BFD{}
 
-// 	// (tlino) TODO: gopacket.NilDecodeFeedback is a var in gopacket but Luca implemented as a type (should be changed).
-// 	//              Code adapted below.
-// 	// if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
-// 	// 	return err
-// 	// }
+	// (tlino) TODO: gopacket.NilDecodeFeedback is a var in gopacket but Luca implemented as a type (should be changed).
+	//              Code adapted below.
+	// if err := p.DecodeFromBytes(data, gopacket.NilDecodeFeedback); err != nil {
+	// 	return err
+	// }
 
-// 	tmp := gopacket.NilDecodeFeedback{}
-// 	fold tmp.Mem()
-// 	if err := p.DecodeFromBytes(data, tmp); err != nil {
-// 		return err
-// 	}
+	tmp := gopacket.NilDecodeFeedback{}
+	fold tmp.Mem()
+	if err := p.DecodeFromBytes(data, tmp); err != nil {
+		return err
+	}
 
-// 	translateBFDMemPred(p)
+	translateBFDMemPred(p)
 
 // 	ifID := uint16(0)
 // 	srcUDPAddr, ok := src.(*net.UDPAddr)
@@ -1257,10 +1256,9 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error //{
 // 	// (tlino) golbals not supported
 // 	// return noBFDSessionFound
 // 	return noBFDSessionFound()
-// }
+}
 
 // (tlino) Verified
-// (joao) THIS(2)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
@@ -1318,15 +1316,13 @@ pred (p *scionPacketProcessor) Mem() {
 	acc(p) &&
 	acc(DataPlaneMutexInvariant(p.d), _) &&
 	verifyutils.BytesAcc(p.origPacket) &&
-	p.path.Mem() &&
 	acc(p.infoField) &&
 	path.HopFieldInv(p.hopField) &&
 	p.buffer.Mem() &&
 	p.scionLayer.Mem() &&
-	cap(p.rawPkt) == bufSize //&&
-	// ghost
-	// p.path == (unfolding p.scionLayer.Mem() in (p.scionLayer.Path).(*scion.Raw)) &&
-	// &(p.rawPkt) == unfolding p.scionLayer.Mem() in &(p.scionLayer.RawPkt)
+	cap(p.rawPkt) == bufSize &&
+	p.path == (unfolding p.scionLayer.Mem() in (p.scionLayer.Path).(*scion.Raw))
+	// p.rawPkt == unfolding p.scionLayer.Mem() in &(p.scionLayer.RawPkt)
 }
 
 // (tlino) Verified
@@ -1535,35 +1531,42 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 
 // (tlino) partially verified
 // TODO: next. add "slayers.scmp" and "packSCMP"
-// THIS(5)
-requires acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
-requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
-ensures  acc(&p.infoField, 1/1000) && acc(&p.hopField, 1/1000)
-ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
-func (p *scionPacketProcessor) validateHopExpiry() (processResult, error) {
+requires acc(p.Mem(), 1/1000)
+func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error) {
 	// (joao) Add to separate this in two lines
 	// expiration := util.SecsToTime(p.infoField.Timestamp).
 	//	Add(path.ExpTimeToDuration(p.hopField.ExpTime))
+	unfold acc(p.Mem(), 1/1000)
 	tmp := util.SecsToTime(p.infoField.Timestamp)
 	expiration := tmp.Add(path.ExpTimeToDuration(unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ExpTime))
 	expired := expiration.Before(time.Now())
 	if !expired {
 		return processResult{}, nil
-	}
-	assume false
-//	return p.packSCMP(
-//		&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
-//			slayers.SCMPCodePathExpired),
-//		},
-//		&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-//		serrors.New("expired hop", "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
-//			"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF),
-//	)
+	} 
+	// (tlino) original code, adapted code is below
+	// return p.packSCMP(
+	// 	&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+	// 		slayers.SCMPCodePathExpired),
+	// 	},
+	// 	&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+	// 	serrors.New("expired hop", "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
+	// 		"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF),
+	// )
+	fold acc(p.Mem(), 1/1000)
+	scmpH := &slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
+		slayers.SCMPCodePathExpired)}
+	fold scmpH.Mem()
+	scmpP := &slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()}
+	fold scmpP.Mem()
+	// e := serrors.New("expired hop", "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
+	// 	"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF),
+	// )
+	e := serrors.New("foo")
+	return p.packSCMP(scmpH, scmpP, e)
 }
 
 // (tlino) partially verified
 // TODO: next. packSCMP
-// THIS(5)
 requires acc(p, 1/1000)
 requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
 ensures  acc(p, 1/1000)
@@ -1591,7 +1594,6 @@ func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
 	return processResult{}, nil
 }
 
-// THIS(4)
 func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 //	pktEgressID := p.egressInterface()
 //	_, ih := p.d.internalNextHops[pktEgressID]
@@ -1640,7 +1642,6 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 
 // (tlino) TODO: reverify
 // (joao) next: updateSCIONLayer
-// THIS(4)
 requires acc(p, 1/100) && p.path.Mem() && acc(p.infoField) && acc(path.HopFieldInv(p.hopField), 1/100) && p.buffer.Mem() &&  p.scionLayer.Mem()
 requires forall i int :: 0 <= i && i < len(p.rawPkt) ==> acc(&(p.rawPkt)[i])
 requires cap(p.rawPkt) == bufSize
@@ -1702,7 +1703,6 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) //{
 // (tlino) partially verified
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
-// THIS(4)
 requires acc(&p.d)
 requires acc(&p.scionLayer)
 requires acc(p.scionLayer.Mem(), 1/100)
@@ -1776,7 +1776,6 @@ func (p *scionPacketProcessor) doXover() (processResult, error) // {
 //	return processResult{}, nil
 //}
 
-//THIS(4)
 // (joao) being able to write sequences of pure statements inside
 // pure functions would be helpful here
 requires pm > 0
@@ -1793,7 +1792,6 @@ func (p *scionPacketProcessor) egressInterface(ghost pm perm) uint16 {
 	return p.hopField.ConsIngress
 }
 
-//THIS(4)
 func (p *scionPacketProcessor) validateEgressUp() (processResult, error) /*{
 //	egressID := p.egressInterface()
 //	if v, ok := p.d.bfdSessions[egressID]; ok {
@@ -1822,7 +1820,6 @@ func (p *scionPacketProcessor) validateEgressUp() (processResult, error) /*{
 */
 
 // (tlino) Verified
-// THIS(4)
 requires acc(&p.ingressID, 1/1000)
 requires p.ingressID != 0 ==> acc(&p.hopField) && path.HopFieldInv(p.hopField) && acc(&p.infoField) && acc(p.infoField)
 ensures acc(&p.ingressID, 1/1000)
@@ -1843,7 +1840,6 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error)
 	return p.handleSCMPTraceRouteRequest(p.ingressID)
 }
 
-// THIS(4)
 // (joao) TODO: clean-up, minimize permissions, write postconditions
 requires acc(&p.infoField) && acc(&p.infoField.ConsDir)
 requires acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert)
@@ -1894,7 +1890,6 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 //}
 
 // next: packSCMP, 
-// THIS(4)
 requires acc(&p.scionLayer, 1/100) && acc((p.scionLayer).Mem(), 1/100)
 ensures  acc(&p.scionLayer, 1/100) && acc((p.scionLayer).Mem(), 1/100)
 func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
@@ -1918,7 +1913,6 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 }
 
 // (tlino) partially Verified
-// THIS(3)
 requires acc(p)
 requires acc(DataPlaneMutexInvariant(p.d), _)
 requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
@@ -2086,7 +2080,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 // (tlino) partially verified
 // (tlino) TODO d.svc not supported yet
-// THIS(3)
 requires acc(s.Mem(), 1/100)
 requires acc(DataPlaneMutexInvariant(d), _)
 ensures acc(s.Mem(), 1/200)
@@ -2127,13 +2120,10 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) {
 	return dst
 }
 
-// (tlino) Verified
-requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
-requires cap(rawPkt) == bufSize
+// (tlino) TODO: reverify
 requires s.Mem()
+requires verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
 requires buffer.Mem()
-ensures forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
-ensures cap(rawPkt) == bufSize
 ensures err == nil ==> s.Mem() && buffer.Mem()
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
@@ -2147,6 +2137,13 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	// TODO(lukedirtwalker): We should add a method to the scion layers
 	// which can write into the existing buffer, see also the discussion in
 	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
+	
+	// (tlino) obtain access to rawPkt
+	s.getRawPktAcc(rawPkt)
+	assert verifyutils.BytesAcc(rawPkt) --* s.Mem()
+	assert verifyutils.BytesAcc(rawPkt)
+	unfold verifyutils.BytesAcc(rawPkt)
+
 	rawContents := buffer.Bytes()
 	assert verifyutils.BytesAcc(rawContents) --* buffer.Mem()
 	unfold verifyutils.BytesAcc(rawContents)
@@ -2160,6 +2157,9 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	assert forall i int :: 0 <= i && i < len(rawContents) ==> acc(&(rawPkt[:len(rawContents)])[i])
 
 	verifyutils.OutlineMemorySafeCopy(rawPkt[:len(rawContents)], rawContents)
+
+	fold verifyutils.BytesAcc(rawPkt)
+	apply verifyutils.BytesAcc(rawPkt) --* s.Mem()
 
 	fold verifyutils.BytesAcc(rawContents)
 	apply verifyutils.BytesAcc(rawContents) --* buffer.Mem()

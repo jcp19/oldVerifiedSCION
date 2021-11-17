@@ -314,21 +314,23 @@ pred (s *SCION) Mem() {
 
 ghost
 requires s.Mem()
-ensures verifyutils.BytesAcc(b)
-ensures verifyutils.BytesAcc(b) --* s.Mem()
-func (s *SCION) getRawPktAcc() (b []byte) {
-	unfold s.Mem()
-	b := s.RawPkt
-	package verifyutils.BytesAcc(b) --* s.Mem() {
-		fold s.Mem()
-	}
-}
+requires verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
+ensures verifyutils.BytesAcc(rawPkt)
+ensures verifyutils.BytesAcc(rawPkt) --* s.Mem()
+func (s *SCION) getRawPktAcc(rawPkt []byte) //{
+// 	unfold verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
+// 	unfold s.Mem()
+// 	package verifyutils.BytesAcc(rawPkt) --* s.Mem() {
+// 		fold s.Mem()
+// 	}
+// }
+
 
 ghost 
 requires s.Mem()
 ensures p.Mem()
 ensures p.Mem() --* s.Mem()
-func (s *SCION) getPathAcc() (p Path) {
+func (s *SCION) getPathAcc() (ghost p Path) {
 	unfold s.Mem()
 	p := s.Path
 	package p.Mem() --* s.Mem() {
@@ -484,14 +486,21 @@ func (s *SCION) getSrcIA() addr.IA {
 
 pure
 requires acc(s.Mem(), _)
-func (s *SCION) getRawPkt() []byte {
+func (s *SCION) getRawPkt() (res []byte) {
 	return unfolding acc(s.Mem(), _) in s.RawPkt
 }
 
 pure
 requires acc(s.Mem(), _)
-func (s *SCION) getPath() Path {
+func (s *SCION) getPath() (res Path) {
 	return unfolding acc(s.Mem(), _) in s.Path
+}
+
+ghost
+pure
+requires acc(s.Mem(), _)
+func (s *SCION) getRawScionPath() *scion.Raw {
+	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
 }
 /** End of Getters **/
 
