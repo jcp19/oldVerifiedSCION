@@ -147,7 +147,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		bytes[2] = 0
 		bytes[3] = 0
 		fold verifyutils.BytesAcc(bytes)
-		/*ghost*/ b.CombinePrependBytesMem(bytes)
+		apply verifyutils.BytesAcc(bytes) --* b.Mem()
 		// (joao) separated call to Bytes and computeChecksum
 		// s.Checksum, err = s.scn.computeChecksum(b.Bytes(), uint8(common.L4SCMP))
 		bBytes := b.Bytes()
@@ -171,7 +171,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		assert forall i int :: 0 <= i && i < len(bytes) ==> &(bytes[2:])[i] == &bytes[2 + i] 
 		binary.BigEndian.PutUint16(bytes[2:], s.Checksum)
 		fold verifyutils.BytesAcc(bytes)
-		/*ghost*/ b.CombinePrependBytesMem(bytes)
+		apply verifyutils.BytesAcc(bytes) --* b.Mem()
 		fold s.Mem()
 		return nil
 	}

@@ -23,9 +23,9 @@ pure func BytesIndex(b []byte, i int) (v byte) {
 	return unfolding acc(BytesAcc(b), _) in b[i]
 }
 
-// (tlino) TODO: add support for comparing addresses
 // Compares if two slices are equal. 
 // The slices are equal if their lengths, capacities and addresses are the same
-pred ByteSlicesEqual(s1 []byte, s2 []byte) {
-	(len(s1) == len(s2)) && (cap(s1) == cap(s2)) && (forall i int :: 0 <= i && i < len(s1) ==> &s1[i] == &s2[i])
+ghost
+pure func ByteSlicesEqual(s1 []byte, s2 []byte) bool {
+	return (len(s1) == len(s2)) && (cap(s1) == cap(s2)) && (forall i int :: 0 <= i && i < len(s1) ==> &s1[i] == &s2[i])
 }

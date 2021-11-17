@@ -316,7 +316,7 @@ ghost
 requires s.Mem()
 requires verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
 ensures verifyutils.BytesAcc(rawPkt)
-ensures verifyutils.BytesAcc(rawPkt) --* s.Mem()
+ensures verifyutils.BytesAcc(rawPkt) --* (s.Mem() && verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt()))
 func (s *SCION) getRawPktAcc(rawPkt []byte) //{
 // 	unfold verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
 // 	unfold s.Mem()
@@ -579,7 +579,7 @@ pure func (s *SCION) getPathLen() (ret int) /* {
 
 // (joao) Partially Verified
 requires s.Mem() && b.Mem()
-ensures  retErr == nil ==> s.Mem() && b.Mem()
+ensures retErr == nil ==> s.Mem() && b.Mem() && verifyutils.ByteSlicesEqual(old(s.getRawPkt()), s.getRawPkt())
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
 	scnLen := CmnHdrLen + s.AddrHdrLen() + s.getPathLen()
 	buf, err := b.PrependBytes(scnLen)
@@ -640,11 +640,12 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 	assert forall i int :: 0 <= i && i < len(buf[offset:]) ==> &(buf[offset:])[i] == &buf[i + offset]
 	var ret error = s.outlinePathSerializeTo(buf[offset:])
 	fold verifyutils.BytesAcc(buf)
-	b.CombinePrependBytesMem(buf)
+	apply verifyutils.BytesAcc(buf) --* b.Mem()
 }
 
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+ensures verifyutils.ByteSlicesEqual(old(s.getRawPkt()), s.getRawPkt())
 func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
 	unfold s.Mem()
 	ret := s.Path.SerializeTo(buf)
@@ -958,6 +959,7 @@ pure func (s *SCION) AddrHdrLen() (res int) {
 // layer, otherwise the results of this method are undefined.
 preserves acc(s.Mem(), 1/100)
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+ensures err == nil ==> verifyutils.ByteSlicesEqual(old(s.getRawPkt()), s.getRawPkt())
 ensures len(buf) >= s.AddrHdrLen() ==> err == nil
 ensures len(buf) < s.AddrHdrLen()  ==> err != nil
 func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
@@ -1003,6 +1005,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures verifyutils.ByteSlicesEqual(old(s.getRawPkt()), s.getRawPkt())
 func copyRawDstAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
 	assume false
@@ -1019,6 +1022,7 @@ func copyRawDstAddr(s *SCION, b []byte) /* {
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures verifyutils.ByteSlicesEqual(old(s.getRawPkt()), s.getRawPkt())
 func copyRawSrcAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
 	assume false

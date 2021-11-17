@@ -1019,8 +1019,7 @@ type processResult struct {
 	OutPkt   []byte
 }
 
-pred (pr *processResult) Mem() {
-	acc(pr) &&
+pred (pr processResult) Mem() {
 	pr.OutConn.Mem() &&
 	pr.OutAddr.Mem() &&
 	(forall i int :: 0 <= i && i < len(pr.OutPkt) ==> acc(&(pr.OutPkt)[i]))
@@ -1050,18 +1049,23 @@ pure func isZeroSCION(s slayers.SCION) bool {
 }
 
 // (tlino) TODO: reverify
-// (tlino) TODO: permission to rawPkt is lost after DecodeFromBytes
 requires acc(DataPlaneMutexInvariant(d), _)
 requires isZeroSCION(s)
-requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
-requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+requires verifyutils.BytesAcc(rawPkt)
+requires verifyutils.BytesAcc(origPacket)
 requires cap(rawPkt) == bufSize
-preserves srcAddr.Mem()
+requires srcAddr.Mem()
 requires buffer.Mem()
-// ensures forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
-// ensures forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+ensures isZeroSCION(s)
+ensures verifyutils.BytesAcc(rawPkt)
+ensures verifyutils.BytesAcc(origPacket)
+ensures cap(rawPkt) == bufSize
+ensures srcAddr.Mem()
+ensures buffer.Mem()
+ensures pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) //{
+	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, err error) //{
 // 	// (joao) `s` should always have the zero value of slayers.SCION;
 // 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
 // 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
@@ -1260,17 +1264,20 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 
 // (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
-requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-requires forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+requires verifyutils.BytesAcc(origPacket)
 requires cap(rawPkt) == bufSize
 requires buffer.Mem()
 requires s.Mem()
-// ensures forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-// ensures forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+ensures verifyutils.BytesAcc(origPacket)
+ensures cap(rawPkt) == bufSize
+ensures buffer.Mem()
+ensures s.Mem()
+ensures pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer) (processResult, error) {
+	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, err error) {
 
 	// (joao) added `&` before `scionPacketProcessor` to make this type check
 	p := &scionPacketProcessor{
@@ -1281,7 +1288,7 @@ func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCI
 		origPacket: origPacket,
 		buffer:     buffer,
 	}
-	return p.process()
+	p.process()
 }
 
 type scionPacketProcessor struct {
@@ -1321,8 +1328,14 @@ pred (p *scionPacketProcessor) Mem() {
 	p.buffer.Mem() &&
 	p.scionLayer.Mem() &&
 	cap(p.rawPkt) == bufSize &&
-	p.path == (unfolding p.scionLayer.Mem() in (p.scionLayer.Path).(*scion.Raw))
-	// p.rawPkt == unfolding p.scionLayer.Mem() in &(p.scionLayer.RawPkt)
+	p.path == p.scionLayer.getRawScionPath() &&
+ 	verifyutils.ByteSlicesEqual(p.rawPkt, p.scionLayer.getRawPkt())
+}
+
+requires p.Mem()
+func (p *scionPacketProcessor) foo() {
+	unfold p.Mem()
+	fold p.Mem()
 }
 
 // (tlino) Verified
@@ -1915,11 +1928,15 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 // (tlino) partially Verified
 requires acc(p)
 requires acc(DataPlaneMutexInvariant(p.d), _)
-requires forall i int :: 0 <= i && i < len(p.origPacket) ==> acc(&(p.origPacket)[i])
-requires forall i int :: 0 <= i && i < len(p.rawPkt) ==> acc(&(p.rawPkt)[i])
+requires verifyutils.BytesAcc(p.origPacket)
 requires cap(p.rawPkt) == bufSize
 requires (p.buffer).Mem()
 requires (p.scionLayer).Mem()
+ensures acc(p)
+ensures verifyutils.BytesAcc(p.origPacket)
+ensures cap(p.rawPkt) == bufSize
+ensures (p.buffer).Mem()
+ensures (p.scionLayer).Mem()
 func (p *scionPacketProcessor) process() (processResult, error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
@@ -2128,9 +2145,11 @@ ensures err == nil ==> s.Mem() && buffer.Mem()
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) {
+	assert verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
 	if err := buffer.Clear(); err != nil {
 		return err
 	}
+	assert verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
 	if err := s.SerializeTo(buffer, gopacket.SerializeOptions{}); err != nil {
 		return err
 	}
@@ -2139,6 +2158,7 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
 	
 	// (tlino) obtain access to rawPkt
+	assert verifyutils.ByteSlicesEqual(rawPkt, s.getRawPkt())
 	s.getRawPktAcc(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt) --* s.Mem()
 	assert verifyutils.BytesAcc(rawPkt)
