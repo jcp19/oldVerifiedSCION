@@ -326,13 +326,12 @@ func (s *SCION) getRawPktAcc(rawPkt []byte) {
 
 ghost 
 requires s.Mem()
-requires p == s.getRawScionPath()
+requires p != nil && p == s.getRawScionPath()
 ensures p.Mem()
-ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath())
+ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath() && s.getRawPkt() == old(s.getRawPkt()))
 func (s *SCION) getPathAcc(p *scion.Raw) {
 	unfold s.Mem()
-	assume typeOf(s.Path) == *scion.Raw && p == (s.Path).(*scion.Raw)
-	package p.Mem() --* (s.Mem() && p == s.getRawScionPath()) {
+	package p.Mem() --* (s.Mem() && p == s.getRawScionPath() && s.getRawPkt() == old(s.getRawPkt())) {
 		fold s.Mem()
 	}
 }

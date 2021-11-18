@@ -1268,8 +1268,10 @@ requires verifyutils.BytesAcc(origPacket)
 requires cap(rawPkt) == bufSize
 requires buffer.Mem()
 requires s.Mem()
+ensures verifyutils.BytesAcc(origPacket)
+ensures buffer.Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* (verifyutils.BytesAcc(rawPkt) && verifyutils.BytesAcc(origPacket) && buffer.Mem())
+ensures pr.Mem() --* (verifyutils.BytesAcc(rawPkt))
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
@@ -1496,13 +1498,13 @@ func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, 
 	// return processResult{OutPkt: rawSCMP}, err
 }
 
-// (tlino) needs to return scionPacketProcessor.Mem()
-// (tlino) TODO: p.path == p.scionLayer.path, we cannot hold both p.path.Mem() and p.scionLayer.Mem()
-requires acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
-requires (p.scionLayer).Mem()
-ensures  acc(p, 1/100) && acc(&p.path, 99/100) && acc(&p.infoField, 99/100) && acc(&p.hopField, 99/100)
-ensures  (p.scionLayer).Mem()
-ensures  errRet == nil ==> (acc(p.infoField) && path.HopFieldInv(p.hopField))
+// (tlino) TODO: see TODO in body
+requires acc(p) && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
+requires (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
+requires acc(DataPlaneMutexInvariant(p.d), _)
+ensures errRet != nil ==> acc(p) && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
+ensures errRet != nil ==> (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
+ensures errRet == nil ==> p.Mem()
 func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) {
 	var ok bool
 	unfold p.scionLayer.Mem()
@@ -1513,28 +1515,40 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 		fold p.scionLayer.Mem()
 		return processResult{}, malformedPath()
 	}
-	assert p.path.Mem()
-	// (joao) here, p.path.Mem() holds without unfolding (p.scionLayer).Mem() because we use havocRaw. We would need to convert (p.scionLayer).Mem() into
-	// (p.scionLayer).MemWithoutPath() && p.path.Len() or else, remove path.Len() from Mem
+	fold p.scionLayer.Mem()
+	assert p.path == p.scionLayer.getRawScionPath()
 	var err error
+	// (tlino) TODO: remove this assume later
+	assume p.path != nil
+	// (tlino) get access to path. Use new local variables to make gobra work
+	pp := p.path
+	scionL := p.scionLayer
+	scionL.getPathAcc(pp)
+	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
+	assert pp.Mem()
 	p.hopField, err = p.path.GetCurrentHopField()
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
-		fold p.scionLayer.Mem()
+		// (tlino) get back access to p.scionLayer
+		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
 		return processResult{}, err
 	}
 	p.infoField, err = p.path.GetCurrentInfoField()
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
-		fold p.scionLayer.Mem()
+		// (tlino) get back access to p.scionLayer
+		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
 		return processResult{}, err
 	}
-	fold p.scionLayer.Mem()
-	// (tlino) use here scionPacketProcessor.Mem()
+	// (tlino) get back access to p.scionLayer
+	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
+	fold p.Mem()
 	if r, err := p.validateHopExpiry(); err != nil {
+		unfold p.Mem()
 		return r, err
 	}
 	if r, err := p.validateIngressID(); err != nil {
+		unfold p.Mem()
 		return r, err
 	}
 	return processResult{}, nil
@@ -1543,6 +1557,7 @@ func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error)
 // (tlino) partially verified
 // TODO: next. add "slayers.scmp" and "packSCMP"
 requires acc(p.Mem(), 1/1000)
+ensures acc(p.Mem(), 1/1000)
 func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error) {
 	// (joao) Add to separate this in two lines
 	// expiration := util.SecsToTime(p.infoField.Timestamp).
@@ -1552,6 +1567,7 @@ func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error)
 	expiration := tmp.Add(path.ExpTimeToDuration(unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ExpTime))
 	expired := expiration.Before(time.Now())
 	if !expired {
+		fold acc(p.Mem(), 1/1000)
 		return processResult{}, nil
 	} 
 	// (tlino) original code, adapted code is below
@@ -1578,10 +1594,10 @@ func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error)
 
 // (tlino) partially verified
 // TODO: next. packSCMP
-requires acc(p, 1/1000)
-requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
-ensures  acc(p, 1/1000)
-ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
+requires acc(p.Mem(), 1/1000)
+// requires acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
+ensures  acc(p.Mem(), 1/1000)
+// ensures  acc(p.infoField, 1/1000) && acc(path.HopFieldInv(p.hopField), 1/1000)
 func (p *scionPacketProcessor) validateIngressID() (processResult, error) {
 	pktIngressID := unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ConsIngress
 	errCode := slayers.SCMPCodeUnknownHopFieldIngress
@@ -1935,7 +1951,8 @@ ensures verifyutils.BytesAcc(p.origPacket)
 ensures cap(p.rawPkt) == bufSize
 ensures (p.buffer).Mem()
 ensures (p.scionLayer).Mem()
-func (p *scionPacketProcessor) process() (processResult, error) {
+ensures pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt))
+func (p *scionPacketProcessor) process() (pr processResult, err error) {
 	if r, err := p.parsePath(); err != nil {
 		return r, err
 	}
@@ -2018,7 +2035,7 @@ requires s.Mem()
 requires buffer.Mem()
 ensures buffer.Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* BytesAcc(rawPkt)
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 // (tlino) s is now a *slayers.SCION
 // func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
