@@ -20,16 +20,6 @@ type SerializeOptions struct {
 type SerializeBuffer interface {
 	pred Mem()
 
-	/* */
-	pred AppendBytesMem(data []byte)
-
-	/* ghost */
-	requires AppendBytesMem(data) && verifyutils.BytesAcc(data)
-	ensures  Mem()
-	CombineAppendBytesMem(data []byte)
-
-	/* End of Ghost Operations */
-
 	requires Mem()
 	ensures verifyutils.BytesAcc(data) && cap(data) <= verifyutils.BufSize
 	ensures verifyutils.BytesAcc(data) --* Mem()
@@ -42,8 +32,9 @@ type SerializeBuffer interface {
 	PrependBytes(num int) (data []byte, err error)
 
 	requires Mem()
-	ensures err == nil ==> AppendBytesMem(data) && verifyutils.BytesAcc(data)
+	ensures err == nil ==> verifyutils.BytesAcc(data)
 	ensures err == nil ==> len(data) == num
+	ensures err == nil ==> verifyutils.BytesAcc(data) --* Mem()
 	AppendBytes(num int) (data []byte, err error)
 
 	requires Mem()
