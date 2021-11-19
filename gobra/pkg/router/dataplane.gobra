@@ -891,6 +891,7 @@ preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 preserves acc(scmpErr)
 preserves buffer.Mem()
 requires isZeroSCION(spkt)
+ensures isZeroSCION(spkt)
 func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) //{
 // 	unfold msgs.Mem()
@@ -2167,6 +2168,7 @@ requires s.Mem()
 requires rawPkt == s.getRawPkt()
 requires buffer.Mem()
 ensures err == nil ==> s.Mem() && buffer.Mem()
+decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) {
@@ -2193,6 +2195,7 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	// (tlino) use Gobra's copy
 	// copy(rawPkt[:len(rawContents)], rawContents)
 
+	// rawContents cannot have a higher length than rawPkt, since it only contains the SCION fields without the payload
 	assume len(rawContents) <= len(rawPkt)
 	assert forall i int :: { rawContents[i] } (0 <= i && i < len(rawContents)) ==> acc(&rawContents[i], 1/100000)
 	assert forall i int :: { rawPkt[i] } (0 <= i && i < len(rawPkt)) ==> acc(&rawPkt[i])
