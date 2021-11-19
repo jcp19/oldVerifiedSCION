@@ -305,24 +305,17 @@ pred (s *SCION) Mem() {
 	s.TrafficClass >= 0 &&
 	s.FlowID >= 0 &&
 	s.HdrLen >= 0 &&
-	s.PayloadLen >= 0 &&
-	// ghost
-	verifyutils.BytesAcc(s.RawPkt)
+	s.PayloadLen >= 0
 	// TODO:
 	// - Relation between PathType and Path
 }
 
 ghost
 requires s.Mem()
-requires rawPkt == s.getRawPkt()
-ensures verifyutils.BytesAcc(rawPkt)
-ensures verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt())
-func (s *SCION) getRawPktAcc(rawPkt []byte) {
-	unfold s.Mem()
-	package verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt()) {
-		fold s.Mem()
-	}
-}
+requires b == s.getRawPkt()
+ensures verifyutils.BytesAcc(b)
+ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt())
+func (s *SCION) getRawPktAcc(b []byte)
 
 ghost 
 requires s.Mem()
@@ -663,6 +656,7 @@ requires acc(s) && df.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures  df.Mem()
 ensures  errRes == nil ==> s.Mem()
+ensures errRes == nil ==> s.getRawPkt() == data
 func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes error) /* {
 	// Decode common header.
 	if len(data) < CmnHdrLen {

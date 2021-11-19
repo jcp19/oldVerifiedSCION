@@ -1267,7 +1267,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires verifyutils.BytesAcc(origPacket)
 requires cap(rawPkt) == bufSize
 requires buffer.Mem()
-requires s.Mem()
+requires s.Mem() && s.getRawPkt() == rawPkt
 ensures verifyutils.BytesAcc(origPacket)
 ensures buffer.Mem()
 ensures pr.Mem()
@@ -1887,6 +1887,8 @@ func (p *scionPacketProcessor) handleEgressRouterAlert() (processResult, error) 
 	return p.handleSCMPTraceRouteRequest(egressID)
 }
 
+
+// (tlino) p.scionLayer.Payload is subsliced in scmpH and scmpP
 func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 	interfaceID uint16) (processResult, error) // {
 //	var scmpH slayers.SCMP
@@ -1945,7 +1947,7 @@ requires acc(DataPlaneMutexInvariant(p.d), _)
 requires verifyutils.BytesAcc(p.origPacket)
 requires cap(p.rawPkt) == bufSize
 requires (p.buffer).Mem()
-requires (p.scionLayer).Mem()
+requires (p.scionLayer).Mem() && (p.scionLayer).getRawPkt() == p.rawPkt
 ensures acc(p)
 ensures verifyutils.BytesAcc(p.origPacket)
 ensures cap(p.rawPkt) == bufSize
@@ -2031,7 +2033,7 @@ func (p *scionPacketProcessor) process() (pr processResult, err error) {
 }
 
 requires acc(DataPlaneMutexInvariant(d), _)
-requires s.Mem()
+requires s.Mem() && s.getRawPkt() == rawPkt
 requires buffer.Mem()
 ensures buffer.Mem()
 ensures pr.Mem()
@@ -2168,11 +2170,9 @@ ensures err == nil ==> s.Mem() && buffer.Mem()
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) {
-	assert rawPkt == s.getRawPkt()
 	if err := buffer.Clear(); err != nil {
 		return err
 	}
-	assert rawPkt == s.getRawPkt()
 	if err := s.SerializeTo(buffer, gopacket.SerializeOptions{}); err != nil {
 		return err
 	}
