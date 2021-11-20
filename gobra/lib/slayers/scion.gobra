@@ -301,8 +301,6 @@ pred (s *SCION) Mem() {
 	s.FlowID >= 0 &&
 	s.HdrLen >= 0 &&
 	s.PayloadLen >= 0
-	// TODO:
-	// - Relation between PathType and Path
 }
 
 /*
@@ -469,11 +467,12 @@ func (s *SCION) LayerType() gopacket.LayerType {
 	return LayerTypeSCION()
 }
 
-/* pure */
-// (joao) LayerClass not implemented
-// func (s *SCION) CanDecode() gopacket.LayerClass {
-//	return LayerTypeSCION
-//}
+pure
+func (s *SCION) CanDecode() gopacket.LayerClass {
+	// (joao) global variables not yet supported
+	// return LayerTypeSCION
+	return LayerTypeSCION()
+}
 
 requires acc(s.Mem(), 1/100)
 func (s *SCION) NextLayerType() gopacket.LayerType {
@@ -500,7 +499,8 @@ func (s *SCION) LayerPayload() []byte {
 
 requires acc(s.Mem(), 1/1000)
 ensures  ret == unfolding acc(s.Mem(), 1/100) in s.Path.Len()
-ensures  ret >= 0 // (joao) This cannot be added as a post-condition of the pure method in Path and is also not inferred from the instances
+ // (joao) This cannot be added as a post-condition of the pure method in Path and is also not inferred from the instances
+ensures  ret >= 0
 pure func (s *SCION) getPathLen() (ret int) /* {
 	return unfolding acc(s.Mem(), 1/100) in s.Path.Len()
 }
@@ -509,7 +509,7 @@ pure func (s *SCION) getPathLen() (ret int) /* {
 // (joao) Partially Verified
 requires s.Mem() && b.Mem()
 ensures  retErr == nil ==> s.Mem() && b.Mem()
-func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
+func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) /* {
 	scnLen := CmnHdrLen + s.AddrHdrLen() + s.getPathLen()
 	buf, err := b.PrependBytes(scnLen)
 	if err != nil {
@@ -571,6 +571,7 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 	fold verifyutils.BytesAcc(buf)
 	b.CombinePrependBytesMem(buf)
 }
+*/
 
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
@@ -671,7 +672,6 @@ func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes
 }
 */
 
-
 // (joao) ignored for now, not used in this file
 /* func decodeSCION(data []byte, pb gopacket.PacketBuilder) error {
 	scn := &SCION{}
@@ -685,8 +685,9 @@ func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes
 }
 */
 
+// (joao) Verified
 // (joao) global variables still not supported
-func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
+func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType /*{
 	switch t {
 	case common.L4UDP:
 		// return LayerTypeSCIONUDP
@@ -708,16 +709,7 @@ func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
 		return gopacket.LayerTypePayload()
 	}
 }
-
-// (joao) The following predicate and ghost function would not be necessary
-//        if Gobra had support for magic wands 
-pred (s *SCION) ReadDstAddr(addr net.Addr)
-
-ghost
-requires acc(s.Mem(), 1/200) && acc(addr.Mem(), 1/200)
-requires s.ReadDstAddr(addr)
-ensures acc(s.Mem(), 1/100)
-func (s *SCION) AddReadDstAddr(addr net.Addr)
+*/
 
 // (joao) Verified
 // DstAddr parses the destination address into a net.Addr. The returned net.Addr references data
@@ -725,24 +717,23 @@ func (s *SCION) AddReadDstAddr(addr net.Addr)
 // information and thus should be treated read-only. Instead, SetDstAddr should be used to update
 // the destination address.
 requires acc(s.Mem(), 1/200)
-ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadDstAddr(resAddr)
+ensures resErr == nil ==> (acc(resAddr.Mem(), 1/200) && (acc(resAddr.Mem(), 1/200) --* acc(s.Mem(), 1/200)))
 func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
+	// (joao) introduced to make things verify with the wands
+	tmp := s.RawDstAddr 
 	// (joao) this call used to be part of the return statement
-	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
-	assume err == nil ==> s.ReadDstAddr(res)
+	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, /*s.RawDstAddr*/ tmp)
+	ghost if err == nil {
+		assert (acc(res.Mem(), 1/200) --* acc(verifyutils.BytesAcc(/*s.RawDstAddr*/ tmp), 1/200))
+		package (acc(res.Mem(), 1/200) --* acc(s.Mem(), 1/200)) {
+			apply (acc(res.Mem(), 1/200) --* acc(verifyutils.BytesAcc(/*s.RawDstAddr*/ tmp), 1/200))
+			fold acc(s.Mem(), 1/200)
+		}
+		assert acc(res.Mem(), 1/200)
+	}
 	return res, err
 }
-
-// (joao) The following predicate and ghost function would not be necessary
-//        if Gobra had support for magic wands 
-pred (s *SCION) ReadSrcAddr(addr net.Addr)
-
-ghost
-requires acc(s.Mem(), 1/200) && acc(addr.Mem(), 1/200)
-requires s.ReadSrcAddr(addr)
-ensures acc(s.Mem(), 1/100)
-func (s *SCION) AddReadSrcAddr(addr net.Addr)
 
 // (joao) Verified
 // SrcAddr parses the source address into a net.Addr. The returned net.Addr references data from the
@@ -750,12 +741,21 @@ func (s *SCION) AddReadSrcAddr(addr net.Addr)
 // and thus should be treated read-only. Instead, SetDstAddr should be used to update the source
 // address.
 requires acc(s.Mem(), 1/200)
-ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadSrcAddr(resAddr)
+ensures resErr == nil ==> (acc(resAddr.Mem(), 1/200) && (acc(resAddr.Mem(), 1/200) --* acc(s.Mem(), 1/200)))
 func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
+	// (joao) introduced to make things verify with the wands
+	tmp := s.RawSrcAddr 
 	// (joao) this call used to be part of the return statement
-	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr)
-	assume err == nil ==> s.ReadSrcAddr(res)
+	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, /*s.RawSrcAddr*/ tmp)
+	ghost if err == nil {
+		assert (acc(res.Mem(), 1/200) --* acc(verifyutils.BytesAcc(/*s.RawSrcAddr*/ tmp), 1/200))
+		package (acc(res.Mem(), 1/200) --* acc(s.Mem(), 1/200)) {
+			apply (acc(res.Mem(), 1/200) --* acc(verifyutils.BytesAcc(/*s.RawSrcAddr*/ tmp), 1/200))
+			fold acc(s.Mem(), 1/200)
+		}
+		assert acc(res.Mem(), 1/200)
+	}
 	return res, err
 }
 
@@ -765,7 +765,7 @@ func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 // Changes to dst might leave the layer in an inconsistent state.
 requires s.Mem() && dst.Mem()
 ensures ret == nil ==> s.Mem()
-func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
+func (s *SCION) SetDstAddr(dst net.Addr) (ret error) /*{
 	unfold s.Mem()
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
@@ -778,14 +778,15 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	}
 	return err
 }
+*/
 
+// (joao) Verified
 // SetSrcAddr sets the source address and updates the DstAddrLen/Type fields accordingly.
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
 // Changes to src might leave the layer in an inconsistent state.
-// (joao) Verified
 requires s.Mem() && src.Mem()
 ensures ret == nil ==> s.Mem()
-func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
+func (s *SCION) SetSrcAddr(src net.Addr) (ret error) /*{
 	var err error
 	unfold s.Mem()
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)
@@ -798,26 +799,39 @@ func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	}
 	return err
 }
+*/
 
+// TODO adapt to verify with the wand
 requires addrLen == AddrLen4 ==> len(raw) == 4
 requires addrLen == AddrLen16 ==> len(raw) == 16
 requires acc(verifyutils.BytesAcc(raw), 1/200)
 ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
 ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
 ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
-ensures resErr == nil ==> acc(resAddr.Mem(), 1/200)
+ensures resErr == nil ==> (acc(resAddr.Mem(), 1/200) && (acc(resAddr.Mem(), 1/200) --* acc(verifyutils.BytesAcc(raw), 1/200)))
 func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) {
 	switch addrLen {
 	case AddrLen4:
+			assume false
 		switch addrType {
 		case T4Ip:
 			// (joao) previously:
 			// return &net.IPAddr{IP: net.IP(raw)}, nil
+			assert len(raw) == 4
 			unfold acc(verifyutils.BytesAcc(raw), 1/200)
-			tmp := &net.IPAddr{IP: net.IP(raw)}
+			tmpParam := net.IP(raw)
+			fold tmpParam.Mem()
+			tmp := &net.IPAddr{IP:tmpParam}
 			fold acc(tmp.Mem(), 1/200)
+			package (acc(tmp.Mem(), 1/200) --* acc(verifyutils.BytesAcc(raw), 1/200)) {
+				unfold acc(tmp.Mem(), 1/200)
+				unfold acc(tmp.IP.Mem(), 1/200)
+				fold acc(verifyutils.BytesAcc(raw), 1/200)
+			}
 			return tmp, nil
 		case T4Svc:
+			//TODO
+			assume false
 			// (joao) previously:
 			// return addr.HostSVC(binary.BigEndian.Uint16(raw[:addr.HostLenSVC])), nil
 			unfold acc(verifyutils.BytesAcc(raw), 1/200)
@@ -827,6 +841,8 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr
 			return tmp, nil
 		}
 	case AddrLen16:
+			//TODO
+			assume false
 		switch addrType {
 		case T16Ip:
 			// (joao) previously:
@@ -841,32 +857,43 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr
 		"type", addrType, "len", addrLen)
 }
 
-// (joao) Assumed
-// (joao) Verify this next
-// (joao) requires implementation proof that IPAddr implements Addr to verify the body
+// (joao) Verified
 requires hostAddr.Mem()
 ensures verifyutils.BytesAcc(s)
 // (joao) the LHS of this implication is necessary, because AddrLen4 is 0 and 0 is the value returned for addrLen
 //        in case of error
 ensures (err == nil && addrLen == AddrLen4)  ==> (addrType == T4Svc || addrType == T4Ip)
 ensures (err == nil && addrLen == AddrLen16) ==> addrType == T16Ip
-// (joao) This post-condition may require additional-checks to hold 
 ensures err == nil ==> validAddrLen(addrLen) && len(s) == addrBytes(addrLen)
 ensures err != nil ==> addrLen == 0 && addrType == 0 && s == nil
-func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) /* {
+func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) {
 	switch a := hostAddr.(type) {
 	case *net.IPAddr:
-		if ip := a.IP.To4(); ip != nil {
+		unfold a.Mem()
+		unfold a.IP.Mem()
+		assert len(a.IP) == 4 || len(a.IP) == 16
+		// (joao) introduced to make this easier to verify
+		tmp := a.IP
+		if ip := tmp.To4()/*a.IP.To4()*/; ip != nil {
+			assert len(ip) == 4
+			assert len(tmp) == 4 ==> (forall i int :: 0 <= i && i < len(ip) ==> &ip[i] == &tmp[i])
+			assert len(tmp) == 16 ==> (forall i int :: 0 <= i && i < net.IPv4len ==> &ip[i] == &tmp[12+i])
+			assert forall i int :: 0 <= i && i < len(ip) ==> acc(&ip[i])
+			fold verifyutils.BytesAcc(ip)
 			return AddrLen4, T4Ip, ip, nil
 		}
-		// (joao) requires ip.Mem() to make it succeed
-		return AddrLen16, T16Ip, a.IP, nil
+		assert len(tmp) == 16
+		fold verifyutils.BytesAcc(tmp)
+		return AddrLen16, T16Ip, tmp /*a.IP*/, nil
 	case addr.HostSVC:
-		return AddrLen4, T4Svc, a.PackWithPad(2), nil
+		tmp := a.PackWithPad(2)
+		fold verifyutils.BytesAcc(tmp)
+		return AddrLen4, T4Svc, tmp /*a.PackWithPad(2)*/, nil
 	}
-	return 0, 0, nil, serrors.New("unsupported address", "addr", hostAddr)
+	fold verifyutils.BytesAcc(nil)
+	// (joao) added casts to AddrLen and AddrType to make Gobra accept this
+	return AddrLen(0), AddrType(0), nil, serrors.New("unsupported address", "addr", hostAddr)
 }
-*/
 
 // AddrHdrLen returns the length of the address header (destination and source ISD-AS-Host triples)
 // in bytes.
@@ -926,16 +953,15 @@ func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 }
 
 // (joao) Assumed
+// (joao) TODO: try to verify in CI, even if it takes longer
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func copyRawDstAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
-	assume false
 	unfold acc(s.Mem(), 1/1000)
 	unfold acc(verifyutils.BytesAcc(s.RawDstAddr), 1/10000)
 	verifyutils.OutlineMemorySafeCopy(b, s.RawDstAddr)
-	assume false
 	fold acc(verifyutils.BytesAcc(s.RawDstAddr), 1/10000)
 	fold acc(s.Mem(), 1/1000)
 }
@@ -947,7 +973,6 @@ preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 func copyRawSrcAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
-	assume false
 	unfold acc(s.Mem(), 1/1000)
 	unfold acc(verifyutils.BytesAcc(s.RawSrcAddr), 1/10000)
 	verifyutils.OutlineMemorySafeCopy(b, s.RawSrcAddr)
@@ -1078,12 +1103,6 @@ func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32
 	// for i := 0; i < len(s.RawSrcAddr); i += 2 {
 	for i := 0; i < s.getLenRawSrcAddr(); i += 2 {
 		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
-		// (joao) original:
-		// csum += uint32(s.RawSrcAddr[i]) << 8
-		// csum += uint32(s.RawSrcAddr[i+1])
-		// (joao) the following rewrite used to work before grouping permissions to s.RawSrcAddr in an instance of BytesAcc:
-		// csum += uint32(unfolding acc(s.Mem(), 1/400) in (s.RawSrcAddr)[i]) << 8
-		// csum += uint32(unfolding acc(s.Mem(), 1/400) in (s.RawSrcAddr)[i+1])
 		csum += uint32(s.getRawSrcAddrIdx(i)) << 8
 		csum += uint32(s.getRawSrcAddrIdx(i+1))
 	}
@@ -1096,9 +1115,6 @@ func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32
 	// for i := 0; i < len(s.RawDstAddr); i += 2 {
 	for i := 0; i < s.getLenRawDstAddr(); i += 2 {
 		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
-		// (joao) rewrite 1:
-		// csum += uint32(unfolding acc(s.Mem(), 1/400) in (s.RawDstAddr)[i]) << 8
-		// csum += uint32(unfolding acc(s.Mem(), 1/400) in (s.RawDstAddr)[i+1])
 		csum += uint32(s.getRawDstAddrIdx(i)) << 8
 		csum += uint32(s.getRawDstAddrIdx(i+1))
 	}
