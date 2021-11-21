@@ -28,6 +28,7 @@ pred (m *Message) Mem() {
 
 // (tlino) added helper function
 requires acc(m.Mem(), _)
+decreases
 pure func (m *Message) HasBuffersNonZeroLength() bool {
 	return unfolding acc(m.Mem(), _) in len(m.Buffers) >= 1
 }

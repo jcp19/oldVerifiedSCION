@@ -300,7 +300,7 @@ pred (s *SCION) Mem() {
 	verifyutils.BytesAcc(s.RawDstAddr) &&
 	validAddrLen(s.SrcAddrLen) && len(s.RawSrcAddr) == addrBytes(s.SrcAddrLen) && len(s.RawSrcAddr)%2 == 0 &&
 	validAddrLen(s.DstAddrLen) && len(s.RawDstAddr) == addrBytes(s.DstAddrLen) && len(s.RawDstAddr)%2 == 0 &&
-	s.Path.Mem() &&
+	s.Path != nil && s.Path.Mem() &&
 	// value of uint fields is non-negative (Gobra cannot prove this yet)
 	s.Version >= 0 &&
 	s.TrafficClass >= 0 &&
