@@ -23,6 +23,7 @@ type SerializeBuffer interface {
 	requires Mem()
 	ensures verifyutils.BytesAcc(data) && cap(data) <= verifyutils.BufSize
 	ensures verifyutils.BytesAcc(data) --* Mem()
+	decreases
 	Bytes() (data []byte)
 
 	requires Mem()
@@ -30,6 +31,7 @@ type SerializeBuffer interface {
 	ensures err == nil ==> len(data) == num
 	ensures err == nil ==> verifyutils.BytesAcc(data) --* Mem()
 	ensures err != nil ==> Mem()
+	decreases
 	PrependBytes(num int) (data []byte, err error)
 
 	requires Mem()
@@ -37,19 +39,23 @@ type SerializeBuffer interface {
 	ensures err == nil ==> len(data) == num
 	ensures err == nil ==> verifyutils.BytesAcc(data) --* Mem()
 	ensures err != nil ==> Mem()
+	decreases
 	AppendBytes(num int) (data []byte, err error)
 
 	requires Mem()
 	ensures Mem()
+	decreases
 	Clear() error
 
 	requires Mem()
 	ensures Mem()
 	ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+	decreases
 	Layers() (data []LayerType)
 
 	requires Mem()
 	ensures Mem()
+	decreases
 	PushLayer(LayerType)
 }
 

@@ -615,6 +615,7 @@ pure func (s *SCION) getPathLen() (ret int) /* {
 // (joao) Partially Verified
 requires s.Mem() && b.Mem()
 ensures s.Mem() && b.Mem() && (old(s.getRawPkt()) == s.getRawPkt())
+decreases
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
 	scnLen := CmnHdrLen + s.AddrHdrLen() + s.getPathLen()
 	buf, err := b.PrependBytes(scnLen)
@@ -681,6 +682,7 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
 ensures old(s.getRawPkt()) == s.getRawPkt()
+decreases
 func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
 	unfold s.Mem()
 	ret := s.Path.SerializeTo(buf)
@@ -996,6 +998,7 @@ pure func (s *SCION) AddrHdrLen() (res int) {
 // layer, otherwise the results of this method are undefined.
 preserves acc(s.Mem(), 1/100)
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+decreases
 ensures err == nil ==> (old(s.getRawPkt()) == s.getRawPkt())
 ensures len(buf) >= s.AddrHdrLen() ==> err == nil
 ensures len(buf) < s.AddrHdrLen()  ==> err != nil
@@ -1043,6 +1046,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures old(s.getRawPkt()) == s.getRawPkt()
+decreases
 func copyRawDstAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
 	assume false
@@ -1060,6 +1064,7 @@ func copyRawDstAddr(s *SCION, b []byte) /* {
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures old(s.getRawPkt()) == s.getRawPkt()
+decreases
 func copyRawSrcAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
 	assume false
