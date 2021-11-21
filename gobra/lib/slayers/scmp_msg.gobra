@@ -106,8 +106,7 @@ func (i *SCMPExternalInterfaceDown) DecodeFromBytes(data []byte,
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 requires acc(i) && b.Mem()
-ensures  acc(i) 
-ensures  ret == nil ==> b.Mem()
+ensures  acc(i) && b.Mem()
 func (i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) (ret error) {
 
@@ -365,7 +364,7 @@ func (i *SCMPParameterProblem) DecodeFromBytes(data []byte, df gopacket.DecodeFe
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 requires i.Mem() && b.Mem()
-ensures  err == nil ==> (i.Mem() && b.Mem())
+ensures  (i.Mem() && b.Mem())
 func (i *SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) (err error) {
 	buf, err := b.PrependBytes(2 + 2)

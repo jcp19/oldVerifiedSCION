@@ -1522,68 +1522,69 @@ func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, 
 	// return processResult{OutPkt: rawSCMP}, err
 }
 
-// (tlino) TODO: reverify
+// (tlino) Verified
 requires acc(p) && p.scionLayer != nil && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 requires (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
 requires acc(DataPlaneMutexInvariant(p.d), _)
 ensures errRet != nil ==> acc(p) && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 ensures errRet != nil ==> (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
 ensures errRet == nil ==> p.Mem()
-func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) //{
-// 	var ok bool
-// 	unfold p.scionLayer.Mem()
-// 	assert p.scionLayer.Path != nil
-// 	p.path, ok = (p.scionLayer.Path).(*scion.Raw)
-// 	if !ok {
-// 		// TODO(lukedirtwalker) parameter problem invalid path?
-// 		// (tlino) gobra doesn't support globals yet
-// 		// return processResult{}, malformedPath
-// 		fold p.scionLayer.Mem()
-// 		return processResult{}, malformedPath()
-// 	}
-// 	fold p.scionLayer.Mem()
-// 	assert p.path == p.scionLayer.getRawScionPath()
-// 	var err error
+func (p *scionPacketProcessor) parsePath() (prosRet processResult, errRet error) {
+	var ok bool
+	unfold p.scionLayer.Mem()
+	assert p.scionLayer.Path != nil
+	p.path, ok = (p.scionLayer.Path).(*scion.Raw)
+	if !ok {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		// (tlino) gobra doesn't support globals yet
+		// return processResult{}, malformedPath
+		fold p.scionLayer.Mem()
+		return processResult{}, malformedPath()
+	}
+	fold p.scionLayer.Mem()
+	assert p.path == p.scionLayer.getRawScionPath()
+	var err error
 
-// 	// (tlino) we know that this holds, since (SCION).DecodeFromBytes has already decoded the path.
-// 	// (tlino) a decoded path is always not nil and in this function of dynamic type *scion.Raw.
-// 	// (tlino) however, (p.scionLayer.Path).(*scion.Raw) cannot deduce that p.path != nil.
-// 	assume p.path != nil
+	// (tlino) we know that this holds, since (SCION).DecodeFromBytes has already decoded the path.
+	// (tlino) a decoded path is always not nil and in this function of dynamic type *scion.Raw.
+	// (tlino) however, (p.scionLayer.Path).(*scion.Raw) cannot deduce that p.path != nil.
+	assume p.path != nil
 
-// 	// (tlino) get access to path. Use new local variables to make gobra work
-// 	pp := p.path
-// 	scionL := p.scionLayer
-// 	scionL.getPathAcc(pp)
-// 	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
-// 	assert pp.Mem()
+	// (tlino) get access to path. Use new local variables to make gobra work
+	pp := p.path
+	scionL := p.scionLayer
+	rp := p.rawPkt
+	scionL.getPathAcc(pp, rp)
+	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+	assert pp.Mem()
 
-// 	p.hopField, err = p.path.GetCurrentHopField()
-// 	if err != nil {
-// 		// TODO(lukedirtwalker) parameter problem invalid path?
-// 		// (tlino) get back access to p.scionLayer
-// 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
-// 		return processResult{}, err
-// 	}
-// 	p.infoField, err = p.path.GetCurrentInfoField()
-// 	if err != nil {
-// 		// TODO(lukedirtwalker) parameter problem invalid path?
-// 		// (tlino) get back access to p.scionLayer
-// 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
-// 		return processResult{}, err
-// 	}
-// 	// (tlino) get back access to p.scionLayer
-// 	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
-// 	fold p.Mem()
-// 	if r, err := p.validateHopExpiry(); err != nil {
-// 		unfold p.Mem()
-// 		return r, err
-// 	}
-// 	if r, err := p.validateIngressID(); err != nil {
-// 		unfold p.Mem()
-// 		return r, err
-// 	}
-// 	return processResult{}, nil
-// }
+	p.hopField, err = p.path.GetCurrentHopField()
+	if err != nil {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		// (tlino) get back access to p.scionLayer
+		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+		return processResult{}, err
+	}
+	p.infoField, err = p.path.GetCurrentInfoField()
+	if err != nil {
+		// TODO(lukedirtwalker) parameter problem invalid path?
+		// (tlino) get back access to p.scionLayer
+		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+		return processResult{}, err
+	}
+	// (tlino) get back access to p.scionLayer
+	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+	fold p.Mem()
+	if r, err := p.validateHopExpiry(); err != nil {
+		unfold p.Mem()
+		return r, err
+	}
+	if r, err := p.validateIngressID(); err != nil {
+		unfold p.Mem()
+		return r, err
+	}
+	return processResult{}, nil
+}
 
 // (tlino) partially verified
 // TODO: next. add "slayers.scmp" and "packSCMP"
@@ -1699,7 +1700,7 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 }
 */
 
-// (tlino) TODO: partially verified
+// (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
@@ -1731,10 +1732,15 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 		apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rawPkt == sl.getRawPkt())
 		assert p.path == p.scionLayer.getRawScionPath()
 		assert p.rawPkt == p.scionLayer.getRawPkt()
-		// if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
-		// 	return err
-		// }
+		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
+			// (tlino) need to add this assume, since p.path still points to p.sciion.Path
+			assume p.path == p.scionLayer.getRawScionPath()
+			fold p.Mem()
+			return err
+		}
 	}
+	// (tlino) need to add this assume, since p.path still points to p.sciion.Path
+	assume p.path == p.scionLayer.getRawScionPath()
 	fold p.Mem()
 	return nil
 }
@@ -2207,10 +2213,10 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) {
 }
 
 // (tlino) Verified
-requires s.Mem()
+requires s.Mem() && buffer.Mem()
 requires rawPkt == s.getRawPkt()
-requires buffer.Mem()
-ensures err == nil ==> s.Mem() && buffer.Mem()
+ensures s.Mem() && buffer.Mem()
+ensures rawPkt == s.getRawPkt()
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) {

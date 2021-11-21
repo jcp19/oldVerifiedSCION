@@ -29,12 +29,14 @@ type SerializeBuffer interface {
 	ensures err == nil ==> verifyutils.BytesAcc(data)
 	ensures err == nil ==> len(data) == num
 	ensures err == nil ==> verifyutils.BytesAcc(data) --* Mem()
+	ensures err != nil ==> Mem()
 	PrependBytes(num int) (data []byte, err error)
 
 	requires Mem()
 	ensures err == nil ==> verifyutils.BytesAcc(data)
 	ensures err == nil ==> len(data) == num
 	ensures err == nil ==> verifyutils.BytesAcc(data) --* Mem()
+	ensures err != nil ==> Mem()
 	AppendBytes(num int) (data []byte, err error)
 
 	requires Mem()
