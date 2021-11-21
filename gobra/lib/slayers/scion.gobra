@@ -323,11 +323,27 @@ ghost
 requires s.Mem()
 requires p != nil && p == s.getRawScionPath()
 ensures p.Mem()
-ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath() && s.getRawPkt() == old(s.getRawPkt()))
+ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath())
 decreases
 func (s *SCION) getPathAcc(p *scion.Raw) {
 	unfold s.Mem()
-	package p.Mem() --* (s.Mem() && p == s.getRawScionPath() && s.getRawPkt() == old(s.getRawPkt())) {
+	package p.Mem() --* (s.Mem() && p == s.getRawScionPath()) {
+		fold s.Mem()
+	}
+}
+
+// (tlino) use this version if we need to fold back *SCION to a scionPacketProcessor struct.
+// (tlino) this version ensures that the alias to rawPkt keeps valid
+ghost 
+requires s.Mem()
+requires p != nil && p == s.getRawScionPath()
+requires b == s.getRawPkt()
+ensures p.Mem()
+ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath() && b == s.getRawPkt())
+decreases
+func (s *SCION) getPathAcc(p *scion.Raw, b []byte) {
+	unfold s.Mem()
+	package p.Mem() --* (s.Mem() && p == s.getRawScionPath() && b == s.getRawPkt()) {
 		fold s.Mem()
 	}
 }
