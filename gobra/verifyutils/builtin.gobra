@@ -19,6 +19,7 @@ pred BytesAcc(b []byte) {
 requires acc(BytesAcc(b), _)
 requires 0 <= i && i < len(b)
 ensures v == unfolding acc(BytesAcc(b), _) in b[i]
+decreases
 pure func BytesIndex(b []byte, i int) (v byte) {
 	return unfolding acc(BytesAcc(b), _) in b[i]
 }
