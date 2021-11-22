@@ -1020,11 +1020,7 @@ type processResult struct {
 	OutPkt   []byte
 }
 
-pred (pr processResult) Mem() {
-	(pr.OutConn != nil ==> pr.OutConn.Mem()) &&
-	(pr.OutAddr != nil ==> pr.OutAddr.Mem()) &&
-	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
-}
+pred (pr processResult) Mem()
 
 pure func isZeroSCION(s slayers.SCION) bool {
 	return s.EmbeddedBaseLayer.Contents == nil &&
@@ -1332,6 +1328,7 @@ pred (p *scionPacketProcessor) Mem() {
 }
 
 requires p.Mem()
+decreases
 func (p *scionPacketProcessor) foo() {
 	unfold p.Mem()
 	fold p.Mem()
@@ -1342,7 +1339,6 @@ func (p *scionPacketProcessor) foo() {
 // TODO: switch to scionPacketProcessorInvariant() eventually
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures p.Mem()
-ensures pr.Mem()
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 	cause error) (pr processResult, err error) //{
 // 	unfold p.Mem()
@@ -1390,14 +1386,15 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 
 // 	// (tlino) get access to path. Use new local variables to make gobra work
 // 	pp := p.path
+// 	rp := p.rawPkt
 // 	scionL := p.scionLayer
-// 	scionL.getPathAcc(pp)
-// 	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
+// 	scionL.getPathAcc(pp, rp)
+// 	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 // 	assert pp.Mem()
 
 // 	if err := p.path.SetInfoField(p.infoField, int( unfolding p.path.Mem() in scion.GetCurrINF(&(p.path.Base)))); err != nil {
 // 		// (tlino) get back access to scionLayer and fold scionPacketProcessor
-// 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
+// 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 // 		fold p.Mem()
 // 		return processResult{}, serrors.WrapStr("update info field", err)
 // 	}
@@ -1406,13 +1403,13 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 // 	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
 // 	if err := p.path.SetHopField(p.hopField, int( unfolding p.path.Mem() in scion.GetCurrHF(&(p.path.Base)))); err != nil {
 // 		// (tlino) get back access to scionLayer and fold scionPacketProcessor
-// 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
+// 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 // 		fold p.Mem()
 // 		return processResult{}, serrors.WrapStr("update hop field", err)
 // 	}
 
 // 	// (tlino) get back access to scionLayer
-// 	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && scionL.getRawPkt() == old(scionL.getRawPkt()))
+// 	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 
 // 	if err := p.buffer.Clear(); err != nil {
 // 		fold p.Mem()
@@ -1528,7 +1525,6 @@ requires (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
 requires acc(DataPlaneMutexInvariant(p.d), _)
 ensures errRet != nil ==> acc(p) && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 ensures errRet != nil ==> (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
-ensures errRet == nil ==> p.Mem()
 func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 	var ok bool
 	unfold p.scionLayer.Mem()
@@ -2008,9 +2004,8 @@ func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //
 	// if r, err := p.parsePath(); err != nil {
 	// 	// (tlino) create magic wand to later get back access to p.rawPkt
 	// 	// return r, err
-	// 	pr, errProcess :=
-	// 	package pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt)) {}
 	// }
+
 	// if r, err := p.validatePktLen(); err != nil {
 	// 	return r, err
 	// }
@@ -2205,6 +2200,7 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, err error) 
 // (tlino) Verified
 requires dst.Mem()
 ensures ret.Mem()
+decreases
 func addEndhostPort(dst net.Addr) (ret net.Addr) {
 	if ip, ok := dst.(*net.IPAddr); ok {
 		unfold dst.Mem()
@@ -2220,6 +2216,7 @@ requires s.Mem() && buffer.Mem()
 requires rawPkt == s.getRawPkt()
 ensures s.Mem() && buffer.Mem()
 ensures rawPkt == s.getRawPkt()
+decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
 func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.SerializeBuffer) (err error) {
@@ -2345,21 +2342,18 @@ type scmpPacker struct {
 	quote  []byte
 }
 
-pred (s *scmpPacker) Mem() {
-	acc(s) &&
+pred (s scmpPacker) Mem() {
 	verifyutils.BytesAcc(s.origPacket) &&
-	s.scionL.Mem() &&
-	s.buffer.Mem() &&
+	s.scionL != nil && s.scionL.Mem() &&
+	s.buffer != nil && s.buffer.Mem() &&
 	verifyutils.BytesAcc(s.quote)
 }
 
 requires s.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures b != nil ==> verifyutils.BytesAcc(b)
 // (tlino) use *scmpPacker instead of scmpPacker
-// func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
-//	incPath bool, cause error) ([]byte, error) {
-func (s *scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	incPath bool, cause error) (b []byte, err error) //{
+func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
+	incPath bool, cause error) (b []byte, e error) //{
 
 	// // We use the original packet but put the already updated path, because usually a router will
 	// // not keep a copy of the original/unmodified packet around.

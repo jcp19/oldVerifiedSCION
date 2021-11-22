@@ -5,7 +5,7 @@ import (
 	"gobra/verifyutils"
 )
 
-// (tlino) TODO: adapt for more general case len(m.Buffers) > 1
+// (tlino) this predicate is tailored for the SCION code
 pred (m *Message) MemPartiallyInitialized() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&
@@ -15,7 +15,7 @@ pred (m *Message) MemPartiallyInitialized() {
 	m.Addr.Mem()
 }
 
-// (tlino) TODO: adapt for more general case len(m.Buffers) > 1
+// (tlino) this predicate is tailored for the SCION code
 pred (m *Message) Mem() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&

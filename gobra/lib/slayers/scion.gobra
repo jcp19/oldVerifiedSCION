@@ -614,7 +614,8 @@ pure func (s *SCION) getPathLen() (ret int) /* {
 
 // (joao) Partially Verified
 requires s.Mem() && b.Mem()
-ensures s.Mem() && b.Mem() && (old(s.getRawPkt()) == s.getRawPkt())
+ensures s.Mem() && b.Mem()
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
 decreases
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
 	scnLen := CmnHdrLen + s.AddrHdrLen() + s.getPathLen()
@@ -681,7 +682,7 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
-ensures old(s.getRawPkt()) == s.getRawPkt()
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
 decreases
 func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
 	unfold s.Mem()
@@ -999,9 +1000,9 @@ pure func (s *SCION) AddrHdrLen() (res int) {
 preserves acc(s.Mem(), 1/100)
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
 decreases
-ensures err == nil ==> (old(s.getRawPkt()) == s.getRawPkt())
 ensures len(buf) >= s.AddrHdrLen() ==> err == nil
 ensures len(buf) < s.AddrHdrLen()  ==> err != nil
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
 func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
@@ -1045,7 +1046,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures old(s.getRawPkt()) == s.getRawPkt()
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
 decreases
 func copyRawDstAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
@@ -1063,7 +1064,7 @@ func copyRawDstAddr(s *SCION, b []byte) /* {
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures old(s.getRawPkt()) == s.getRawPkt()
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
 decreases
 func copyRawSrcAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
