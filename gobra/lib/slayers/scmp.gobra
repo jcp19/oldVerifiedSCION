@@ -126,8 +126,8 @@ func (s *SCMP) NextLayerType() gopacket.LayerType {
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 requires s.Mem()
 requires b.Mem()
-ensures  s.Mem()
-ensures  ret == nil ==> b.Mem()
+ensures s.Mem()
+ensures b.Mem()
 func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (ret error) {
 	unfold s.Mem()
 	bytes, err := b.PrependBytes(4)
@@ -140,6 +140,8 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 
 	if opts.ComputeChecksums {
 		if s.scn == nil {
+			fold verifyutils.BytesAcc(bytes)
+			apply verifyutils.BytesAcc(bytes) --* b.Mem()
 			fold s.Mem()
 			return serrors.New("can not calculate checksum without SCION header")
 		}
@@ -147,13 +149,15 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		bytes[2] = 0
 		bytes[3] = 0
 		fold verifyutils.BytesAcc(bytes)
-		/*ghost*/ b.CombinePrependBytesMem(bytes)
+		apply verifyutils.BytesAcc(bytes) --* b.Mem()
 		// (joao) separated call to Bytes and computeChecksum
 		// s.Checksum, err = s.scn.computeChecksum(b.Bytes(), uint8(common.L4SCMP))
 		bBytes := b.Bytes()
 		unfold verifyutils.BytesAcc(bBytes)
 		s.Checksum, err = s.scn.computeChecksum(bBytes, uint8(common.L4SCMP))
 		if err != nil {
+			fold verifyutils.BytesAcc(bBytes)
+			apply verifyutils.BytesAcc(bBytes) --* b.Mem()
 			fold s.Mem()
 			return err
 		}
@@ -163,7 +167,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		assert &(bBytes[2:])[1] == &bBytes[3]
 		binary.BigEndian.PutUint16(bBytes[2:], s.Checksum)
 		fold verifyutils.BytesAcc(bBytes)
-		/*ghost*/ b.CombineBytesMem(bBytes)
+		apply verifyutils.BytesAcc(bBytes) --* b.Mem()
 		fold s.Mem()
 		return nil
 	} else {
@@ -171,7 +175,7 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 		assert forall i int :: 0 <= i && i < len(bytes) ==> &(bytes[2:])[i] == &bytes[2 + i] 
 		binary.BigEndian.PutUint16(bytes[2:], s.Checksum)
 		fold verifyutils.BytesAcc(bytes)
-		/*ghost*/ b.CombinePrependBytesMem(bytes)
+		apply verifyutils.BytesAcc(bytes) --* b.Mem()
 		fold s.Mem()
 		return nil
 	}

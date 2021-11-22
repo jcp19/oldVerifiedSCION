@@ -29,10 +29,11 @@ import (
 //	"github.com/scionproto/scion/go/lib/serrors"
 //	jsontopo "github.com/scionproto/scion/go/lib/topology/json"
 //	"github.com/scionproto/scion/go/lib/topology/underlay"
+	"gobra/lib/topology/underlay"
 )
 
 // EndhostPort is the underlay port that the dispatcher binds to on non-routers.
-// const EndhostPort = underlay.EndhostPort
+const EndhostPort = underlay.EndhostPort
 
 // ErrAddressNotFound indicates the address was not found.
 // var ErrAddressNotFound = serrors.New("address not found")

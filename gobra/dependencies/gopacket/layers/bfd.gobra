@@ -460,7 +460,7 @@ func (d *BFD) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (err erro
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 // See the docs for gopacket.SerializableLayer for more info.
 requires d.Mem() && b.Mem()
-ensures  err == nil ==> d.Mem() && b.Mem()
+ensures d.Mem() && b.Mem()
 func (d *BFD) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) /* {
 	data, err := b.PrependBytes(bfdMinimumRecordSizeInBytes)
 	if err != nil {

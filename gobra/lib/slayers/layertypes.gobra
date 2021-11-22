@@ -116,15 +116,38 @@ func init() {
 */
 
 // (joao) Rewrote all global vars as pure functions. This is sound, since the global variables will not be modified after being set
+decreases
 pure func LayerTypeSCION() gopacket.LayerType 
+
+decreases
 pure func LayerTypeSCIONUDP() gopacket.LayerType
+
+decreases
 pure func LayerTypeSCMP() gopacket.LayerType
+
+decreases
 pure func LayerTypeSCMPDummy() gopacket.LayerType
+
+decreases
 pure func LayerTypeHopByHopExtn() gopacket.LayerType
+
+decreases
 pure func LayerTypeEndToEndExtn() gopacket.LayerType
+
+decreases
 pure func LayerTypeSCMPExternalInterfaceDown() gopacket.LayerType
+
+decreases
 pure func LayerTypeSCMPInternalConnectivityDown() gopacket.LayerType
+
+decreases
 pure func LayerTypeSCMPParameterProblem() gopacket.LayerType
+
+decreases
 pure func LayerTypeSCMPDestinationUnreachable() gopacket.LayerType
+
+decreases
 pure func LayerTypeSCMPEcho() gopacket.LayerType
+
+decreases
 pure func LayerTypeSCMPTraceroute() gopacket.LayerType
