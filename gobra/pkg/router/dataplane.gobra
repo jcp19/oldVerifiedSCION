@@ -1696,7 +1696,7 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 }
 */
 
-// (tlino) Verified
+// (tlino) TODO: reverify
 requires p.Mem()
 ensures p.Mem()
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
@@ -1729,14 +1729,10 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 		assert p.path == p.scionLayer.getRawScionPath()
 		assert p.rawPkt == p.scionLayer.getRawPkt()
 		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
-			// (tlino) need to add this assume, since p.path still points to p.sciion.Path
-			assume p.path == p.scionLayer.getRawScionPath()
 			fold p.Mem()
 			return err
 		}
 	}
-	// (tlino) need to add this assume, since p.path still points to p.sciion.Path
-	assume p.path == p.scionLayer.getRawScionPath()
 	fold p.Mem()
 	return nil
 }
@@ -2216,6 +2212,7 @@ requires s.Mem() && buffer.Mem()
 requires rawPkt == s.getRawPkt()
 ensures s.Mem() && buffer.Mem()
 ensures rawPkt == s.getRawPkt()
+ensures s.getRawPkt() == old(s.getRawPkt()) && s.getRawScionPath() == old(getRawScionPath())
 decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
