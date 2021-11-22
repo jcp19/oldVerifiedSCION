@@ -1,0 +1,186 @@
+// Copyright 2020 Anapaya Systems
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package router
+
+import (
+	// mrand "math/rand"
+	"net"
+	"sync"
+
+	// "github.com/scionproto/scion/go/lib/addr"
+	"gobra/lib/addr"
+)
+
+type services struct {
+	mtx sync.Mutex
+	m   map[addr.HostSVC][]*net.UDPAddr
+}
+
+// (joao) memory protected by the lock s.mtx. Should never be
+//        unfolded outside of this predicate.
+pred internalLockInv(s *services) {
+	acc(&s.m) &&
+	acc(s.m) &&
+	(forall host addr.HostSVC :: host in domain(s.m) ==> validMapValue((s.m)[host])) &&
+	// (joao) injectivity constraints
+	(forall host1 addr.HostSVC :: (forall host2 addr.HostSVC :: (host1 != host2 && notEqual((s.m)[host1], nil)) ==> notEqual((s.m)[host1], (s.m)[host2])))
+}
+
+ghost
+pure func notEqual(udpSlice1 []*net.UDPAddr, udpSlice2 []*net.UDPAddr) bool {
+	return udpSlice1 != udpSlice2
+}
+
+pred validMapValue(udpSlice []*net.UDPAddr) {
+	forall i int :: 0 <= i && i < len(udpSlice) ==> acc(&udpSlice[i]) && acc((udpSlice[i]).Mem(), _)
+}
+
+pred (s *services) Mem() {
+	// acc(&s.mtx) &&
+	s.mtx.LockP() &&
+	s.mtx.LockInv() == internalLockInv!<s!>;
+}
+
+ensures res.Mem()
+func newServices() (res *services) {
+	// (joao) previously:
+	// return &services{m: make(map[addr.HostSVC][]*net.UDPAddr)}
+	tmp := &services{m: make(map[addr.HostSVC][]*net.UDPAddr)}
+	fold internalLockInv!<tmp!>()
+	(&tmp.mtx).SetInv(internalLockInv!<tmp!>)
+	fold tmp.Mem()
+	return tmp
+}
+
+requires s.Mem()
+requires acc(a.Mem(), _)
+ensures  s.Mem()
+func (s *services) AddSvc(svc addr.HostSVC, a *net.UDPAddr) {
+	unfold s.Mem()
+	s.mtx.Lock()
+	// (joao) moved below, defer not supported
+	// defer s.mtx.Unlock()
+
+	unfold internalLockInv!<s!>()
+	// (joao) added parentheses here
+	addrs := (s.m)[svc]
+	ghost if addrs == nil {
+		fold validMapValue(addrs)
+	}
+	if _, ok := s.index(a, addrs); ok {
+		fold internalLockInv!<s!>()
+		s.mtx.Unlock()
+		fold s.Mem()
+		return
+	}
+	unfold validMapValue(addrs)
+	// (joao) before:
+	// s.m[svc] = append(addrs, a)
+	tmp := append(perm(1/2), addrs, a)
+	fold validMapValue(tmp)
+	(s.m)[svc] = tmp
+	// (joao) assumption required: right now, Gobra cannot prove that `append` returns
+	//        the slice on the 1st non-ghost parameter or a fresh slice
+	assume forall host addr.HostSVC :: host != svc ==> notEqual(tmp, (s.m)[host])
+	fold internalLockInv!<s!>()
+	s.mtx.Unlock()
+	fold s.Mem()
+}
+
+preserves s.Mem() && acc(a.Mem(), _)
+func (s *services) DelSvc(svc addr.HostSVC, a *net.UDPAddr) {
+	unfold s.Mem()
+	s.mtx.Lock()
+	unfold internalLockInv!<s!>()
+	// (joao) defer statement not supported
+	// defer s.mtx.Unlock()
+
+	// (joao) add parentheses
+	addrs := (s.m)[svc]
+	ghost if addrs == nil {
+		fold validMapValue(addrs)
+	}
+	index, ok := s.index(a, addrs)
+	if !ok {
+		fold internalLockInv!<s!>()
+		s.mtx.Unlock()
+		fold s.Mem()
+		return
+	}
+	unfold validMapValue(addrs)
+	addrs[index] = addrs[len(addrs)-1]
+	addrs[len(addrs)-1] = nil
+	assert forall i int :: 0 <= i && i < len(addrs[:len(addrs)-1]) ==> &addrs[:len(addrs)-1][i] == &addrs[i]
+	// (joao) again, Gobra cannot prove that the predicate is injective, even though it must be
+	//        given that the permission scheme does not allow for slice overlaping
+	assume forall host addr.HostSVC :: host != svc ==> notEqual(addrs[:len(addrs)-1], (s.m)[host])
+	fold validMapValue(addrs[:len(addrs)-1])
+	// (joao) add parentheses
+	(s.m)[svc] = addrs[:len(addrs)-1]
+	fold internalLockInv!<s!>()
+	s.mtx.Unlock()
+	fold s.Mem()
+}
+
+requires s.Mem()
+ensures  ok  ==> s.Mem() && acc(addr.Mem(), _)
+ensures  !ok ==> s.Mem() && addr == nil
+func (s *services) Any(svc addr.HostSVC) (addr *net.UDPAddr, ok bool) {
+	unfold s.Mem()
+	s.mtx.Lock()
+	// (joao) defer not supported
+	// defer s.mtx.Unlock()
+
+	unfold internalLockInv!<s!>()
+
+	// (joao) add parentheses
+	addrs := (s.m)[svc]
+	if len(addrs) == 0 {
+		fold internalLockInv!<s!>()
+		s.mtx.Unlock()
+		fold s.Mem()
+		return nil, false
+	}
+	// (joao) mrand not supported, rewrote following statement
+	// return addrs[mrand.Intn(len(addrs))], true
+	unfold validMapValue(addrs)
+	tmp := addrs[/*mrand.Intn(len(addrs))*/ generateRand(len(addrs))]
+	fold validMapValue(addrs)
+	fold internalLockInv!<s!>()
+	s.mtx.Unlock()
+	fold s.Mem()
+	return tmp, true
+}
+
+// (joao) function introduced because model mrand.Intn is not supported
+requires n > 0
+ensures  0 <= r && r < n
+func generateRand(n int) (r int)
+
+preserves acc(a.Mem(), _) && acc(validMapValue(addrs), 1/2)
+ensures   resBool ==> resInt >= 0 && len(addrs) > 0 && 0 <= resInt && resInt < len(addrs)
+ensures   !resBool ==> resInt == -1
+// (joao) this postcondition can be made stronger if Gobra allowed IP.Equal to be a pure function
+ensures  !resBool ==> unfolding acc(validMapValue(addrs), 1/2) in (forall i int :: 0 <= i && i < len(addrs) ==> addrs[i] != a)
+func (s *services) index(a *net.UDPAddr, addrs []*net.UDPAddr) (resInt int, resBool bool) /* {
+	// (joao) range statements not supported yet
+	for i, o := range addrs {
+		if a.IP.Equal(o.IP) && a.Port == o.Port {
+			return i, true
+		}
+	}
+	return -1, false
+}
+*/
