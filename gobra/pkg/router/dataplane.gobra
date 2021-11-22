@@ -608,10 +608,14 @@ func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	d.mtx.Lock()
 	// defer d.mtx.Unlock()
 	if a == nil {
+		d.mtx.Unlock()
 		// return emptyValue
 		return emptyValue()
 	}
+	unfold DataPlaneMutexInvariant!<d!>()
 	if d.svc == nil {
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
 		return nil
 	}
 	d.svc.DelSvc(svc, a)
@@ -620,6 +624,8 @@ func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	// 	d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
 	// 	d.Metrics.ServiceInstanceCount.With(labels).Add(-1)
 	// }
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
