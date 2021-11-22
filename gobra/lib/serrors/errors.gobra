@@ -55,6 +55,7 @@ func (e basicError) Error() string {
 }
 
 requires isComparable(err)
+decreases
 func (e basicError) Is(err error) bool {
 	switch other := err.(type) {
 	case basicError:
@@ -76,7 +77,7 @@ func (e basicError) As(as interface{}) bool // {
 //	return false
 //}
 
-
+decreases
 func (e basicError) Unwrap() error {
 	return e.cause
 }
@@ -121,6 +122,7 @@ func IsTemporary(err error) bool // {
 // additional context. The additional context is printed in the Error method.
 // The returned error implements Is and Is(err) returns true.
 ensures res != nil
+decreases
 func WithCtx(err error, logCtx ...interface{}) (res error) {
 	return basicError{
 		msg:    errOrMsg{err: err},
@@ -133,6 +135,7 @@ func WithCtx(err error, logCtx ...interface{}) (res error) {
 // error. The returned error implements Is and Is(msg) and Is(cause) returns
 // true.
 ensures res != nil
+decreases
 func Wrap(msg, cause error, logCtx ...interface{}) (res error) {
 	return basicError{
 		msg:    errOrMsg{err: msg},
@@ -145,6 +148,7 @@ func Wrap(msg, cause error, logCtx ...interface{}) (res error) {
 // adds the additional context. The returned error implements Is and Is(cause)
 // returns true.
 ensures res != nil
+decreases
 func WrapStr(msg string, cause error, logCtx ...interface{}) (res error) {
 	return basicError{
 		msg:    errOrMsg{str: msg},
@@ -172,6 +176,7 @@ func New(msg string, logCtx ...interface{}) (res error) {
 type List []error
 
 // ToError returns the object as error interface implementation.
+decreases
 func (e List) ToError() error {
 	if len(e) == 0 {
 		return nil
