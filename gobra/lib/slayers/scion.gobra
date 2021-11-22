@@ -315,25 +315,10 @@ ghost
 requires s.Mem()
 requires b == s.getRawPkt()
 ensures verifyutils.BytesAcc(b)
-ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt())
+ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
 decreases
 func (s *SCION) getRawPktAcc(b []byte)
 
-ghost 
-requires s.Mem()
-requires p != nil && p == s.getRawScionPath()
-ensures p.Mem()
-ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath())
-decreases
-func (s *SCION) getPathAcc(p *scion.Raw) {
-	unfold s.Mem()
-	package p.Mem() --* (s.Mem() && p == s.getRawScionPath()) {
-		fold s.Mem()
-	}
-}
-
-// (tlino) use this version if we need to fold back *SCION to a scionPacketProcessor struct.
-// (tlino) this version ensures that the alias to rawPkt keeps valid
 ghost 
 requires s.Mem()
 requires p != nil && p == s.getRawScionPath()
@@ -532,7 +517,7 @@ ghost
 pure
 requires acc(s.Mem(), _)
 ensures res == unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
-decreases_
+decreases _
 func (s *SCION) getRawScionPath() (res *scion.Raw) {
 	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
 }
@@ -579,25 +564,6 @@ func (s *SCION) LayerPayload() []byte {
 	// return s.Payload
 	return unfolding acc(s.Mem(), 1/10000) in (s.EmbeddedBaseLayer).Payload
 }
-
-// (tlino) give up access to s to get access to Payload
-// (tlino) TODO implement method
-requires s.Mem()
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-func (s *SCION) LayerPayloadWithPermission() (b []byte) //{
-// 	unfold s.Mem()
-// 	return (s.EmbeddedBaseLayer).Payload
-// }
-
-// (tlino) give up access to s to get access to Payload and Path
-// (tlino) TODO implement method
-requires s.Mem()
-ensures forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures p.Mem()
-func (s *SCION) GetPathAndPayload() (p Path, b []byte) //{
-// 	unfold s.Mem()
-// 	return s.Path, (s.EmbeddedBaseLayer).Payload
-// }
 
 // (joao) Flow not implemented
 //func (s *SCION) NetworkFlow() gopacket.Flow {

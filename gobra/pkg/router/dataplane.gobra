@@ -1519,13 +1519,13 @@ func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, 
 	// return processResult{OutPkt: rawSCMP}, err
 }
 
-// (tlino) Verified
+// (tlino) TODO: reverify
 requires acc(p) && p.scionLayer != nil && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 requires (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
 requires acc(DataPlaneMutexInvariant(p.d), _)
 ensures errRet != nil ==> acc(p) && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 ensures errRet != nil ==> (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
-func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
+func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) //{
 	var ok bool
 	unfold p.scionLayer.Mem()
 	assert p.scionLayer.Path != nil
@@ -1715,17 +1715,16 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 		assert p.path != nil
 		sl := p.scionLayer
 		pp := p.path
-		rawPkt := p.rawPkt
-		sl.getPathAcc(pp, rawPkt)
-		assert pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rawPkt == sl.getRawPkt())
+		sl.getPathAcc(pp)
+		assert pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && sl.getRawPkt() == old(sl.getRawPkt()))
 		assert pp.Mem()
 
 		if err := p.path.SetInfoField(p.infoField, int( unfolding p.path.Mem() in scion.GetCurrINF(&(p.path.Base)))); err != nil {
-			apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rawPkt == sl.getRawPkt())
+			apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && sl.getRawPkt() == old(sl.getRawPkt()))
 			fold p.Mem()
 			return serrors.WrapStr("update info field", err)
 		}
-		apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rawPkt == sl.getRawPkt())
+		apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && sl.getRawPkt() == old(sl.getRawPkt()))
 		assert p.path == p.scionLayer.getRawScionPath()
 		assert p.rawPkt == p.scionLayer.getRawPkt()
 		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
@@ -2212,7 +2211,7 @@ requires s.Mem() && buffer.Mem()
 requires rawPkt == s.getRawPkt()
 ensures s.Mem() && buffer.Mem()
 ensures rawPkt == s.getRawPkt()
-ensures s.getRawPkt() == old(s.getRawPkt()) && s.getRawScionPath() == old(getRawScionPath())
+ensures s.getRawPkt() == old(s.getRawPkt()) && s.getRawScionPath() == old(s.getRawScionPath())
 decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
@@ -2230,7 +2229,7 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	// (tlino) obtain access to rawPkt
 	assert rawPkt == s.getRawPkt()
 	s.getRawPktAcc(rawPkt)
-	assert verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt())
+	assert verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
 	assert verifyutils.BytesAcc(rawPkt)
 	unfold verifyutils.BytesAcc(rawPkt)
 
@@ -2250,7 +2249,7 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	verifyutils.OutlineMemorySafeCopy(rawPkt[:len(rawContents)], rawContents)
 
 	fold verifyutils.BytesAcc(rawPkt)
-	apply verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt())
+	apply verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
 
 	fold verifyutils.BytesAcc(rawContents)
 	apply verifyutils.BytesAcc(rawContents) --* buffer.Mem()
