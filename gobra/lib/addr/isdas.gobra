@@ -324,10 +324,12 @@ func (ia *IA) Parse(b common.RawBytes) {
 // avoiding quantification on purpose in the specification of Write
 requires acc(&b[0]) && acc(&b[1]) && acc(&b[2]) && acc(&b[3]) && acc(&b[4]) && acc(&b[5]) && acc(&b[6]) && acc(&b[7])
 ensures acc(&b[0]) && acc(&b[1]) && acc(&b[2]) && acc(&b[3]) && acc(&b[4]) && acc(&b[5]) && acc(&b[6]) && acc(&b[7])
+decreases
 func (ia IA) Write(b common.RawBytes) {
 	binary.BigEndian.PutUint64(b, uint64(ia.IAInt()))
 }
 
+decreases
 func (ia IA) IAInt() IAInt // {
 // (joao) Logic error: unexpected type IAInt
 //	return IAInt(ia.I)<<ASBits | IAInt(ia.A&MaxAS)

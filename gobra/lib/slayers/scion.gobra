@@ -95,6 +95,7 @@ const (
 ghost const AddrLenError AddrLen = 4
 
 ghost
+decreases
 pure func validAddrLen(addrLen AddrLen) bool {
 	return addrLen == AddrLen4 || addrLen == AddrLen8 || addrLen == AddrLen12 || addrLen == AddrLen16
 }
@@ -286,6 +287,11 @@ type SCION struct {
 
 	// Path is the path contained in the SCION header. It depends on the PathType field.
 	Path Path
+
+	// start of ghost members
+
+	/* ghost */
+	RawPkt []byte
 }
 
 pred (s *SCION) Mem() {
@@ -294,7 +300,7 @@ pred (s *SCION) Mem() {
 	verifyutils.BytesAcc(s.RawDstAddr) &&
 	validAddrLen(s.SrcAddrLen) && len(s.RawSrcAddr) == addrBytes(s.SrcAddrLen) && len(s.RawSrcAddr)%2 == 0 &&
 	validAddrLen(s.DstAddrLen) && len(s.RawDstAddr) == addrBytes(s.DstAddrLen) && len(s.RawDstAddr)%2 == 0 &&
-	s.Path.Mem() &&
+	s.Path != nil && s.Path.Mem() &&
 	// value of uint fields is non-negative (Gobra cannot prove this yet)
 	s.Version >= 0 &&
 	s.TrafficClass >= 0 &&
@@ -303,6 +309,28 @@ pred (s *SCION) Mem() {
 	s.PayloadLen >= 0
 	// TODO:
 	// - Relation between PathType and Path
+}
+
+ghost
+requires s.Mem()
+requires b == s.getRawPkt()
+ensures verifyutils.BytesAcc(b)
+ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
+decreases
+func (s *SCION) getRawPktAcc(b []byte)
+
+ghost 
+requires s.Mem()
+requires p != nil && p == s.getRawScionPath()
+requires b == s.getRawPkt()
+ensures p.Mem()
+ensures p.Mem() --* (s.Mem() && p == s.getRawScionPath() && b == s.getRawPkt())
+decreases
+func (s *SCION) getPathAcc(p *scion.Raw, b []byte) {
+	unfold s.Mem()
+	package p.Mem() --* (s.Mem() && p == s.getRawScionPath() && b == s.getRawPkt()) {
+		fold s.Mem()
+	}
 }
 
 /*
@@ -333,60 +361,70 @@ func soundInvariantSCION1(s *SCION) {
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getDstAddrType() AddrType {
 	return unfolding acc(s.Mem(), 1/1000) in s.DstAddrType
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getSrcAddrType() AddrType {
 	return unfolding acc(s.Mem(), 1/1000) in s.SrcAddrType
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getVersion() uint8 {
 	return unfolding acc(s.Mem(), 1/1000) in s.Version
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getTrafficClass() uint8 {
 	return unfolding acc(s.Mem(), 1/1000) in s.TrafficClass
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getFlowID() uint32 {
 	return unfolding acc(s.Mem(), 1/1000) in s.FlowID
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getNextHdr() common.L4ProtocolType {
 	return unfolding acc(s.Mem(), 1/1000) in s.NextHdr
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getHdrLen() uint8 {
 	return unfolding acc(s.Mem(), 1/1000) in s.HdrLen
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getPayloadLen() uint16 {
 	return unfolding acc(s.Mem(), 1/1000) in s.PayloadLen
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getRawSrcAddr() []byte {
 	return unfolding acc(s.Mem(), 1/1000) in s.RawSrcAddr
 }
 
 pure
 requires acc(s.Mem(), 1/1000)
+decreases
 func (s *SCION) getPathType() PathType {
 	return unfolding acc(s.Mem(), 1/1000) in s.PathType
 }
@@ -394,6 +432,7 @@ func (s *SCION) getPathType() PathType {
 pure
 requires acc(s.Mem(), _)
 requires 0 <= i && i < s.getLenRawSrcAddr()
+decreases
 func (s *SCION) getRawSrcAddrIdx(i int) (res byte) {
 	return unfolding acc(s.Mem(), _) in verifyutils.BytesIndex(s.RawSrcAddr, i)
 }
@@ -401,18 +440,21 @@ func (s *SCION) getRawSrcAddrIdx(i int) (res byte) {
 pure
 requires acc(s.Mem(), _)
 requires 0 <= i && i < s.getLenRawDstAddr()
+decreases
 func (s *SCION) getRawDstAddrIdx(i int) (res byte) {
 	return unfolding acc(s.Mem(), _) in verifyutils.BytesIndex(s.RawDstAddr, i)
 }
 
 pure
 requires acc(s.Mem(), _)
+decreases
 func (s *SCION) getDstAddrLen() AddrLen {
 	return unfolding acc(s.Mem(), _) in s.DstAddrLen
 }
 
 pure
 requires acc(s.Mem(), _)
+decreases
 func (s *SCION) getSrcAddrLen() AddrLen {
 	return unfolding acc(s.Mem(), _) in s.SrcAddrLen
 }
@@ -421,12 +463,14 @@ pure
 requires acc(s.Mem(), _)
 ensures res == unfolding acc(s.Mem(), _) in len(s.RawSrcAddr)
 ensures res%2 == 0
+decreases
 func (s *SCION) getLenRawSrcAddr() (res int) {
 	return unfolding acc(s.Mem(), _) in len(s.RawSrcAddr)
 }
 
 pure
 requires acc(s.Mem(), _)
+decreases
 func (s *SCION) getRawDstAddr() []byte {
 	return unfolding acc(s.Mem(), _) in s.RawDstAddr
 }
@@ -435,20 +479,47 @@ pure
 requires acc(s.Mem(), _)
 ensures res == unfolding acc(s.Mem(), _) in len(s.RawDstAddr)
 ensures res%2 == 0
+decreases
 func (s *SCION) getLenRawDstAddr() (res int) {
 	return unfolding acc(s.Mem(), _) in len(s.RawDstAddr)
 }
 
 pure
 requires acc(s.Mem(), _)
+decreases
 func (s *SCION) getDstIA() addr.IA {
 	return unfolding acc(s.Mem(), _) in s.DstIA
 }
 
 pure
 requires acc(s.Mem(), _)
+decreases
 func (s *SCION) getSrcIA() addr.IA {
 	return unfolding acc(s.Mem(), _) in s.SrcIA
+}
+
+pure
+requires acc(s.Mem(), _)
+ensures res == unfolding acc(s.Mem(), _) in s.RawPkt
+decreases
+func (s *SCION) getRawPkt() (res []byte) {
+	return unfolding acc(s.Mem(), _) in s.RawPkt
+}
+
+pure
+requires acc(s.Mem(), _)
+decreases
+func (s *SCION) getPath() (res Path) {
+	return unfolding acc(s.Mem(), _) in s.Path
+}
+
+ghost
+pure
+requires acc(s.Mem(), _)
+ensures res == unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
+decreases _
+func (s *SCION) getRawScionPath() (res *scion.Raw) {
+	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
 }
 /** End of Getters **/
 
@@ -458,11 +529,13 @@ ensures addrLen == AddrLen8 ==> res == 8
 ensures addrLen == AddrLen12 ==> res == 12
 ensures addrLen == AddrLen16 ==> res == 16
 ensures res%2 == 0
+decreases
 pure func addrBytes(addrLen AddrLen) (res int) {
 	return (int(addrLen) + 1) * LineLen
 }
 
 pure
+decreases
 func (s *SCION) LayerType() gopacket.LayerType {
 	// (joao) slayers.LayerTypeSCION is currently implemented as a pure function due to the lack of support for global variables
 	// return LayerTypeSCION
@@ -508,7 +581,9 @@ pure func (s *SCION) getPathLen() (ret int) /* {
 
 // (joao) Partially Verified
 requires s.Mem() && b.Mem()
-ensures  retErr == nil ==> s.Mem() && b.Mem()
+ensures s.Mem() && b.Mem()
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+decreases
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
 	scnLen := CmnHdrLen + s.AddrHdrLen() + s.getPathLen()
 	buf, err := b.PrependBytes(scnLen)
@@ -569,11 +644,13 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 	assert forall i int :: 0 <= i && i < len(buf[offset:]) ==> &(buf[offset:])[i] == &buf[i + offset]
 	var ret error = s.outlinePathSerializeTo(buf[offset:])
 	fold verifyutils.BytesAcc(buf)
-	b.CombinePrependBytesMem(buf)
+	apply verifyutils.BytesAcc(buf) --* b.Mem()
 }
 
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+decreases
 func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
 	unfold s.Mem()
 	ret := s.Path.SerializeTo(buf)
@@ -591,6 +668,8 @@ requires acc(s) && df.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures  df.Mem()
 ensures  errRes == nil ==> s.Mem()
+ensures errRes == nil ==> s.getRawPkt() == data
+decreases
 func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes error) /* {
 	// Decode common header.
 	if len(data) < CmnHdrLen {
@@ -667,6 +746,9 @@ func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes
 	s.Contents = data[:hdrBytes]
 	s.Payload = data[hdrBytes:]
 
+	// (tlino) store data in ghost field
+	s.RawPkt = data
+
 	return nil
 }
 */
@@ -730,7 +812,7 @@ func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
-	assume err == nil ==> s.ReadDstAddr(res)
+	inhale err == nil ==> s.ReadDstAddr(res)
 	return res, err
 }
 
@@ -755,7 +837,7 @@ func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr)
-	assume err == nil ==> s.ReadSrcAddr(res)
+	inhale err == nil ==> s.ReadSrcAddr(res)
 	return res, err
 }
 
@@ -884,8 +966,10 @@ pure func (s *SCION) AddrHdrLen() (res int) {
 // layer, otherwise the results of this method are undefined.
 preserves acc(s.Mem(), 1/100)
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
+decreases
 ensures len(buf) >= s.AddrHdrLen() ==> err == nil
 ensures len(buf) < s.AddrHdrLen()  ==> err != nil
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
 func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
@@ -929,6 +1013,8 @@ func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+decreases
 func copyRawDstAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
 	assume false
@@ -945,6 +1031,8 @@ func copyRawDstAddr(s *SCION, b []byte) /* {
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+decreases
 func copyRawSrcAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
 	assume false

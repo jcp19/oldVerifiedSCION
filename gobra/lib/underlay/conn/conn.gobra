@@ -54,6 +54,10 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 // between ipv4.Message, ipv6.Message and socket.Message.
 type Messages []ipv4.Message
 
+pred (m Messages) MemPartiallyInitialized() {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemPartiallyInitialized()
+}
+
 pred (m Messages) Mem() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
 }
@@ -76,7 +80,7 @@ type Conn interface {
 	// (tlino) Returns the number of read messages
 	preserves Mem()
 	preserves msgs.Mem()
-	preserves ReadMetasAcc(metas)
+	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 	ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error)
 
@@ -222,7 +226,7 @@ func newConnUDPIPv4(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv4
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
 preserves c.Mem()
 preserves msgs.Mem()
-preserves ReadMetasAcc(metas)
+preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 func (c *connUDPIPv4) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) // {
 // 	for i := range metas {
@@ -314,7 +318,7 @@ func newConnUDPIPv6(listen, remote *net.UDPAddr, cfg *Config) (conn *connUDPIPv6
 // corresponding ReadMeta in metas. It returns the number of packets read, and an error if any.
 preserves c.Mem()
 preserves msgs.Mem()
-preserves ReadMetasAcc(metas)
+preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 func (c *connUDPIPv6) ReadBatch(msgs Messages, metas []ReadMeta) (n int, err error) 
 // {
@@ -780,10 +784,6 @@ pred (r *ReadMeta) Mem() {
 	acc(r) && (r.Src != nil ==> r.Src.Mem()) && (r.Local != nil ==> r.Local.Mem())
 }
 
-pred ReadMetasAcc(m []ReadMeta) {
-	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
-}
-
 // (tlino) Verifed
 preserves m.Mem()
 func (m *ReadMeta) reset() {
@@ -820,7 +820,7 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 // NewReadMessages allocates memory for reading IPv4 Linux network stack
 // messages.
 requires n >= 0
-ensures msgs.Mem()
+ensures msgs.MemPartiallyInitialized()
 ensures len(msgs) == n
 func NewReadMessages(n int) (msgs Messages) //{
 // 	m := make(Messages, n)
@@ -836,7 +836,7 @@ func NewReadMessages(n int) (msgs Messages) //{
 // NewWriteMessages allocates memory for writing IPv4 Linux network stack
 // messages.
 requires n >= 0
-ensures msgs.Mem()
+ensures msgs.MemPartiallyInitialized()
 ensures len(msgs) == n
 func NewWriteMessages(n int) (msgs Messages) {
  	m := make(Messages, n)
@@ -849,14 +849,14 @@ func NewWriteMessages(n int) (msgs Messages) {
 
 	invariant 0 <= i && i <= len(m)
 	invariant forall j int :: i <= j && j < len(m) ==> acc(&m[j]) && (forall k int :: 0 <= k && k < len(m[j].OOB) ==> acc(&((m[j].OOB)[k])))
-	invariant forall j int :: 0 <= j && j < i ==> (&m[j]).Mem()
+	invariant forall j int :: 0 <= j && j < i ==> (&m[j]).MemPartiallyInitialized()
 	for i := 0; i < len(m); i++ {
 		// Allocate a single-element, to avoid allocations when setting the buffer.
 		m[i].Buffers = make([][]byte, 1)
 		m[i].Addr = &net.UDPAddr{}
 		fold (m[i].Addr).Mem()
-		fold (&m[i]).Mem()
+		fold (&m[i]).MemPartiallyInitialized()
 	}
-	fold m.Mem()
+	fold m.MemPartiallyInitialized()
 	return m
 }
