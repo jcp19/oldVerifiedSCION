@@ -160,6 +160,7 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 
 ghost
 ensures DataPlaneMutexInvariant(res)
+decreases
 func soundDataPlaneMutexInvariant() (res *DataPlane) {
 	d@ := DataPlane{}
 	res = &d
@@ -183,36 +184,47 @@ func soundDataPlaneMutexInvariant() (res *DataPlane) {
 /** Globals **/
 // (joao): begin alternative to final global variables defined in the previous var block
 ensures e != nil
+decreases
 func alreadySet() (e error) { return serrors.New("already set") }
 
 ensures e != nil
+decreases
 func cannotRoute() (e error) { return serrors.New("cannot route, dropping pkt") }
 
 ensures e != nil
+decreases
 func emptyValue() (e error) { return serrors.New("empty value") }
 
 ensures e != nil
+decreases
 func malformedPath() (e error) { return serrors.New("malformed path content") }
 
 ensures e != nil
+decreases
 func modifyExisting() (e error) { return serrors.New("modifying a running dataplane is not allowed") }
 
 ensures e != nil
+decreases
 func noSVCBackend() (e error) { return serrors.New("cannot find internal IP for the SVC") }
 
 ensures e != nil
+decreases
 func unsupportedPathType() (e error) { return serrors.New("unsupported path type") }
 
 ensures e != nil
+decreases
 func unsupportedPathTypeNextHeader() (e error) { return serrors.New("unsupported combination") }
 
 ensures e != nil
+decreases
 func noBFDSessionFound() (e error) { return serrors.New("no BFD sessions was found") }
 
 ensures e != nil
+decreases
 func noBFDSessionConfigured() (e error) { return serrors.New("no BFD sessions have been configured") }
 
 ensures e != nil
+decreases
 func errBFDDisabled() (e error) { return serrors.New("BFD is disabled") }
 /** End of Globals **/
 
@@ -221,6 +233,7 @@ type scmpError struct {
 	Cause    error
 }
 
+decreases
 func (e scmpError) Error() string {
 	return (serrors.New("scmp", "typecode", e.TypeCode, "cause", e.Cause)).Error()
 }
@@ -1334,190 +1347,196 @@ func (p *scionPacketProcessor) foo() {
 	fold p.Mem()
 }
 
-// (tlino) TODO reverify
+// (tlino) partially verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
-// TODO: switch to scionPacketProcessorInvariant() eventually
+// TODO: verify termination
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures p.Mem()
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	cause error) (pr processResult, err error) //{
-// 	unfold p.Mem()
-// 	// parse everything to see if the original packet was an SCMP error.
-// 	var (
-// 		scionLayer slayers.SCION
-// 		// (joao) not supported yet
-// 		// udpLayer   slayers.UDP
-// 		// hbhExtn    slayers.HopByHopExtn
-// 		// e2eExtn    slayers.EndToEndExtn
-// 		scmpLayer  slayers.SCMP
-// 	)
-// 	// (joao) currently not supported, rewritten below
-// 	// parser := gopacket.NewDecodingLayerParser(
-// 	//	slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
-// 	// )
-// 	parser := gopacket.NewDecodingLayerParser(slayers.LayerTypeSCION())
+	cause error) (pr processResult, err error) {
+	unfold p.Mem()
+	// parse everything to see if the original packet was an SCMP error.
+	var (
+		scionLayer slayers.SCION
+		// (joao) not supported yet
+		// udpLayer   slayers.UDP
+		// hbhExtn    slayers.HopByHopExtn
+		// e2eExtn    slayers.EndToEndExtn
+		scmpLayer  slayers.SCMP
+	)
+	// (joao) currently not supported, rewritten below
+	// parser := gopacket.NewDecodingLayerParser(
+	//	slayers.LayerTypeSCION, &scionLayer, &udpLayer, &hbhExtn, &e2eExtn, &scmpLayer,
+	// )
+	parser := gopacket.NewDecodingLayerParser(slayers.LayerTypeSCION())
 
-// 	decoded@ := make([]gopacket.LayerType, 5)
-// 	assert forall i int :: 0 <= i && i < len(decoded) ==> acc(&decoded[i])
-// 	assert len(decoded) == 5
-// 	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
-// 		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
-// 			assert len(decoded) == 5
-// 			assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
-// 			fold p.Mem()
-// 			return processResult{}, serrors.WrapStr("decoding packet", err)
-// 		}
-// 		assert len(decoded) == 5
-// 		assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
-// 	}
-// 	assert forall i int :: 0 <= i && i < len(decoded) ==> acc(&decoded[i])
-// 	assert len(decoded) == 5
-// 	assert acc(&(decoded[len(decoded)-1]))
-// 	// in reply to an SCMP error do nothing:
-// 	// if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
-// 	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP() && !scmpLayer.TypeCode.InfoMsg() {
-// 		fold p.Mem()
-// 		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
-// 	}
+	decoded@ := make([]gopacket.LayerType, 5)
+	assert forall i int :: 0 <= i && i < len(decoded) ==> acc(&decoded[i])
+	assert len(decoded) == 5
+	if err := parser.DecodeLayers(p.origPacket, &decoded); err != nil {
+		if _, ok := err.(gopacket.UnsupportedLayerType); !ok {
+			assert len(decoded) == 5
+			assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
+			fold p.Mem()
+			return processResult{}, serrors.WrapStr("decoding packet", err)
+		}
+		assert len(decoded) == 5
+		assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
+	}
+	assert forall i int :: 0 <= i && i < len(decoded) ==> acc(&decoded[i])
+	assert len(decoded) == 5
+	assert acc(&(decoded[len(decoded)-1]))
+	// in reply to an SCMP error do nothing:
+	// if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
+	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP() && !scmpLayer.TypeCode.InfoMsg() {
+		fold p.Mem()
+		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
+	}
 
-// 	// the quoted packet is the packet in its current state
-// 	// (tlino) use getter to reduce verification overhead, see adapted code below
-// 	// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+	// the quoted packet is the packet in its current state
+	// (tlino) use getter to reduce verification overhead, see adapted code below
+	// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
 
-// 	// (tlino) get access to path. Use new local variables to make gobra work
-// 	pp := p.path
-// 	rp := p.rawPkt
-// 	scionL := p.scionLayer
-// 	scionL.getPathAcc(pp, rp)
-// 	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
-// 	assert pp.Mem()
+	// (tlino) get access to path. Use new local variables to make gobra work
+	pp := p.path
+	rp := p.rawPkt
+	scionL := p.scionLayer
+	scionL.getPathAcc(pp, rp)
+	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+	assert pp.Mem()
 
-// 	if err := p.path.SetInfoField(p.infoField, int( unfolding p.path.Mem() in scion.GetCurrINF(&(p.path.Base)))); err != nil {
-// 		// (tlino) get back access to scionLayer and fold scionPacketProcessor
-// 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
-// 		fold p.Mem()
-// 		return processResult{}, serrors.WrapStr("update info field", err)
-// 	}
+	// (tlino) use getter for currINF to reduce verification overhead
+	// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
+	if err := p.path.SetInfoField(p.infoField, int( unfolding p.path.Mem() in scion.getCurrINF(&(p.path.Base)))); err != nil {
+		// (tlino) get back access to scionLayer and fold scionPacketProcessor
+		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+		fold p.Mem()
+		return processResult{}, serrors.WrapStr("update info field", err)
+	}
 
-// 	// (tlino) use getter to reduce verification overhead
-// 	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
-// 	if err := p.path.SetHopField(p.hopField, int( unfolding p.path.Mem() in scion.GetCurrHF(&(p.path.Base)))); err != nil {
-// 		// (tlino) get back access to scionLayer and fold scionPacketProcessor
-// 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
-// 		fold p.Mem()
-// 		return processResult{}, serrors.WrapStr("update hop field", err)
-// 	}
+	// (tlino) use getter for currHF to reduce verification overhead
+	// if err := p.path.SetHopField(p.hopField, int(p.path.PathMeta.CurrHF)); err != nil {
+	if err := p.path.SetHopField(p.hopField, int( unfolding p.path.Mem() in scion.getCurrHF(&(p.path.Base)))); err != nil {
+		// (tlino) get back access to scionLayer and fold scionPacketProcessor
+		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+		fold p.Mem()
+		return processResult{}, serrors.WrapStr("update hop field", err)
+	}
 
-// 	// (tlino) get back access to scionLayer
-// 	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+	// (tlino) get back access to scionLayer
+	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 
-// 	if err := p.buffer.Clear(); err != nil {
-// 		fold p.Mem()
-// 		return processResult{}, err
-// 	}
+	if err := p.buffer.Clear(); err != nil {
+		fold p.Mem()
+		return processResult{}, err
+	}
 
-// 	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
-// 		fold p.Mem()
-// 		return processResult{}, err
-// 	}
-// 	// quoteLen is used to limit the size of the quote buffer, the final quote
-// 	// length is calculated inside the scmpPacker.
-// 	quoteLen := len(p.origPacket)
-// 	if quoteLen > slayers.MaxSCMPPacketLen {
-// 		quoteLen = slayers.MaxSCMPPacketLen
-// 	}
-// 	quote := make([]byte, quoteLen)
-// 	// (tlino) use varable b to make magic wands work. Magic wands don't work directly on p.buffer
-// 	b := p.buffer
-// 	updated := b.Bytes()
-// 	assert verifyutils.BytesAcc(updated) --* b.Mem()
-// 	unfold verifyutils.BytesAcc(updated)
+	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
+		fold p.Mem()
+		return processResult{}, err
+	}
+	// quoteLen is used to limit the size of the quote buffer, the final quote
+	// length is calculated inside the scmpPacker.
+	quoteLen := len(p.origPacket)
+	if quoteLen > slayers.MaxSCMPPacketLen {
+		quoteLen = slayers.MaxSCMPPacketLen
+	}
+	quote := make([]byte, quoteLen)
+	// (tlino) use varable b to make magic wands work. Magic wands don't work directly on p.buffer
+	b := p.buffer
+	updated := b.Bytes()
+	assert verifyutils.BytesAcc(updated) --* b.Mem()
+	unfold verifyutils.BytesAcc(updated)
 
-// 	// (tlino) use Gobra's copy function
-// 	// copy(quote[:len(updated)], updated)
-// 	assume len(updated) <= len(quote)
-// 	assert forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
-// 	assert forall i int :: 0 <= i && i < len(updated) ==> acc(&updated[i], 1/100000)
-// 	assert forall i int :: 0 <= i && i < len(updated) ==> &(quote[:len(updated)])[i] == &quote[i]
-// 	assert forall i int :: 0 <= i && i < len(updated) ==> acc(&(quote[:len(updated)])[i])
+	// (tlino) use Gobra's copy function
+	// copy(quote[:len(updated)], updated)
+	assume len(updated) <= len(quote)
+	assert forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
+	assert forall i int :: 0 <= i && i < len(updated) ==> acc(&updated[i], 1/100000)
+	assert forall i int :: 0 <= i && i < len(updated) ==> &(quote[:len(updated)])[i] == &quote[i]
+	assert forall i int :: 0 <= i && i < len(updated) ==> acc(&(quote[:len(updated)])[i])
 	
-// 	verifyutils.OutlineMemorySafeCopy(quote[:len(updated)], updated)
+	verifyutils.OutlineMemorySafeCopy(quote[:len(updated)], updated)
 
-// 	// (tlino) use Gobra's copy function
-// 	// copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
-// 	unfold verifyutils.BytesAcc(p.origPacket)
-// 	assume quoteLen <= len(p.origPacket)
-// 	assert forall i int :: 0 <= i && i < (len(quote) - len(updated)) ==> &(quote[len(updated):])[i] == &quote[i + len(updated)]
-// 	assert forall i int :: 0 <= i && i < (len(quote) - len(updated)) ==> acc(&(quote[len(updated):])[i])
-// 	assert forall i int :: 0 <= i && i < len(p.origPacket) ==>  acc(&(p.origPacket)[i], 1/100000)
-// 	assert forall i int :: 0 <= i && i < (quoteLen - len(updated)) ==> &((p.origPacket)[len(updated):quoteLen])[i] == &(p.origPacket)[i + len(updated)]
-// 	assert forall i int :: 0 <= i && i < (quoteLen - len(updated)) ==> acc(&((p.origPacket)[len(updated):quoteLen])[i],  1/100000)
-// 	verifyutils.OutlineMemorySafeCopy(quote[len(updated):], (p.origPacket)[len(updated):quoteLen])
+	// (tlino) use Gobra's copy function
+	// copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
+	unfold verifyutils.BytesAcc(p.origPacket)
+	assume quoteLen <= len(p.origPacket)
+	assert forall i int :: 0 <= i && i < (len(quote) - len(updated)) ==> &(quote[len(updated):])[i] == &quote[i + len(updated)]
+	assert forall i int :: 0 <= i && i < (len(quote) - len(updated)) ==> acc(&(quote[len(updated):])[i])
+	assert forall i int :: 0 <= i && i < len(p.origPacket) ==>  acc(&(p.origPacket)[i], 1/100000)
+	assert forall i int :: 0 <= i && i < (quoteLen - len(updated)) ==> &((p.origPacket)[len(updated):quoteLen])[i] == &(p.origPacket)[i + len(updated)]
+	assert forall i int :: 0 <= i && i < (quoteLen - len(updated)) ==> acc(&((p.origPacket)[len(updated):quoteLen])[i],  1/100000)
+	verifyutils.OutlineMemorySafeCopy(quote[len(updated):], (p.origPacket)[len(updated):quoteLen])
 
-// 	fold verifyutils.BytesAcc(updated)
-// 	apply verifyutils.BytesAcc(updated) --* b.Mem()
-// 	pr, err := packSCMP2(p.d, quote, p.origPacket, p.ingressID, p.scionLayer, b, scmpH, scmpP, cause)
-// 	fold p.Mem()
-// }
+	fold verifyutils.BytesAcc(updated)
+	apply verifyutils.BytesAcc(updated) --* b.Mem()
+	fold verifyutils.BytesAcc(p.origPacket)
+	pr, err := packSCMP2(p.d, quote, p.origPacket, p.ingressID, p.scionLayer, b, scmpH, scmpP, cause)
+	fold p.Mem()
+}
 
 // (tlino) partially verified
 // (tlino) outlined part of packSCMP
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
-requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+requires verifyutils.BytesAcc(origPacket)
 requires scionLayer.Mem() && buffer.Mem() && scmpH.Mem() && scmpP.Mem()
-ensures pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt)
+ensures scionLayer.Mem() && buffer.Mem()
+ensures verifyutils.BytesAcc(origPacket)
+ensures scionLayer.getRawScionPath() == old(scionLayer.getRawScionPath())
+ensures scionLayer.getRawPkt() == old(scionLayer.getRawPkt())
 func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, scionLayer *slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (pr processResult, err error) {
-	unfold acc(DataPlaneMutexInvariant(d), _)
+	buffer gopacket.SerializeBuffer, scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (pr processResult, err error) //{
+// 	unfold acc(DataPlaneMutexInvariant(d), _)
 	
-	// (tlino) added parantheses to make it parse
-	// _, external := p.d.external[p.ingressID]
-	_, external := (d.external)[ingressID]
+// 	// (tlino) added parantheses to make it parse
+// 	// _, external := p.d.external[p.ingressID]
+// 	_, external := (d.external)[ingressID]
 
-	// (tlino) replace scmpPacker with *scmpPacker
-	// (tlino) replace &p.scionLayer, with p.scionLayer
-	// (tlino) replace scmp.prepareSCMP with (&scmp).prepareSCMP
-	// rawSCMP, err := scmpPacker{
-	// 	internalIP: p.d.internalIP,
-	// 	localIA:    p.d.localIA,
-	// 	origPacket: p.origPacket,
-	// 	ingressID:  p.ingressID,
-	// 	scionL:     &p.scionLayer,
-	// 	buffer:     p.buffer,
-	// 	quote:      quote,
-	// }.prepareSCMP(
-	// 	scmpH,
-	// 	scmpP,
-	// 	external,
-	// 	cause,
-	// )
+// 	// (tlino) replace scmpPacker with *scmpPacker
+// 	// (tlino) replace &p.scionLayer, with p.scionLayer
+// 	// (tlino) replace scmp.prepareSCMP with (&scmp).prepareSCMP
+// 	// rawSCMP, err := scmpPacker{
+// 	// 	internalIP: p.d.internalIP,
+// 	// 	localIA:    p.d.localIA,
+// 	// 	origPacket: p.origPacket,
+// 	// 	ingressID:  p.ingressID,
+// 	// 	scionL:     &p.scionLayer,
+// 	// 	buffer:     p.buffer,
+// 	// 	quote:      quote,
+// 	// }.prepareSCMP(
+// 	// 	scmpH,
+// 	// 	scmpP,
+// 	// 	external,
+// 	// 	cause,
+// 	// )
 
-	fold verifyutils.BytesAcc(origPacket)
-	fold verifyutils.BytesAcc(quote)
-	assert verifyutils.BytesAcc(origPacket)
-	assert verifyutils.BytesAcc(quote)
+// 	fold verifyutils.BytesAcc(origPacket)
+// 	fold verifyutils.BytesAcc(quote)
+// 	assert verifyutils.BytesAcc(origPacket)
+// 	assert verifyutils.BytesAcc(quote)
 
-	scmp := &scmpPacker{
-		internalIP: d.internalIP,
-		localIA:    d.localIA,
-		origPacket: origPacket,
-		ingressID:  ingressID,
-		scionL:     scionLayer,
-		buffer:     buffer,
-		quote:      quote,
-	}
-	// fold scmp.Mem()
+// 	scmp := &scmpPacker{
+// 		internalIP: d.internalIP,
+// 		localIA:    d.localIA,
+// 		origPacket: origPacket,
+// 		ingressID:  ingressID,
+// 		scionL:     scionLayer,
+// 		buffer:     buffer,
+// 		quote:      quote,
+// 	}
+// 	// fold scmp.Mem()
 
-	// rawSCMP, err := scmp.prepareSCMP(
-	// 	scmpH,
-	// 	scmpP,
-	// 	external,
-	// 	cause,
-	// )
+// 	// rawSCMP, err := scmp.prepareSCMP(
+// 	// 	scmpH,
+// 	// 	scmpP,
+// 	// 	external,
+// 	// 	cause,
+// 	// )
 	
-	// return processResult{OutPkt: rawSCMP}, err
-}
+// 	// return processResult{OutPkt: rawSCMP}, err
+// }
 
 // (tlino) Verified
 requires acc(p) && p.scionLayer != nil && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
@@ -1583,7 +1602,7 @@ func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 }
 
 // (tlino) partially verified
-// TODO: next. add "slayers.scmp" and "packSCMP"
+// TODO: verify termination
 requires p.Mem()
 ensures p.Mem()
 func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error) {
@@ -1613,15 +1632,25 @@ func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error)
 	fold scmpH.Mem()
 	scmpP := &slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()}
 	fold scmpP.Mem()
-	// e := serrors.New("expired hop", "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
-	// 	"curr_inf", p.path.PathMeta.CurrINF, "curr_hf", p.path.PathMeta.CurrHF),
-	// )
-	e := serrors.New("foo")
+	unfold p.Mem()
+
+	sl := p.scionLayer
+	pp := p.path
+	rp := p.rawPkt
+	sl.getPathAcc(pp, rp)
+	assert pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rp == sl.getRawPkt())
+	assert pp.Mem()
+
+	e := serrors.New("expired hop", "cons_dir", p.infoField.ConsDir, "if_id", p.ingressID,
+		"curr_inf", p.path.GetCurrINF(), "curr_hf", p.path.GetCurrHF())
+	
+	apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rp == sl.getRawPkt())
+	fold p.Mem()
 	return p.packSCMP(scmpH, scmpP, e)
 }
 
 // (tlino) partially verified
-// TODO: next. packSCMP
+// TODO: termination
 requires p.Mem()
 ensures p.Mem()
 func (p *scionPacketProcessor) validateIngressID() (pr processResult, err error) {
@@ -1633,18 +1662,25 @@ func (p *scionPacketProcessor) validateIngressID() (pr processResult, err error)
 		errCode = slayers.SCMPCodeUnknownHopFieldEgress
 	}
 	if p.ingressID != 0 && p.ingressID != pktIngressID {
+		// (tlino) original code, adapted code is below
+		// return p.packSCMP(
+		// 	&slayers.SCMP{
+		// 		TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+		// 	},
+		// 	&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+		// 	serrors.New("ingress interface invalid",
+		// 		"pkt_ingress", pktIngressID, "router_ingress", p.ingressID),
+		// )
 		fold p.Mem()
-		assume false
-		/*
-		return p.packSCMP(
-			&slayers.SCMP{
+		scmpH := &slayers.SCMP{
 				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
-			},
-			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-			serrors.New("ingress interface invalid",
-				"pkt_ingress", pktIngressID, "router_ingress", p.ingressID),
-		)
-		*/
+			}
+		fold scmpH.Mem()
+		scmpP := &slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()}
+		fold scmpP.Mem()
+		e := serrors.New("ingress interface invalid",
+		 		"pkt_ingress", pktIngressID, "router_ingress", (unfolding acc(p.Mem(), 1/1000) in p.ingressID))
+		return p.packSCMP(scmpH, scmpP, e)
 	}
 	fold p.Mem()
 	return processResult{}, nil
@@ -2417,6 +2453,7 @@ pred (s scmpPacker) Mem() {
 }
 
 requires s.Mem() && scmpH.Mem() && scmpP.Mem()
+ensures s.scionL.Mem()
 ensures b != nil ==> verifyutils.BytesAcc(b)
 // (tlino) use *scmpPacker instead of scmpPacker
 func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
@@ -2424,34 +2461,39 @@ func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.Serializable
 
 	// // We use the original packet but put the already updated path, because usually a router will
 	// // not keep a copy of the original/unmodified packet around.
-	// // (tlino) added parantheses
 	// unfold s.Mem()
 	// unfold s.scionL.Mem()
 	// // (tlino) access Raw over tmp, added check
 	// // (tlino) find more elegant solution
 	// // pathRaw := (s.scionL.Path).(*scion.Raw).Raw
 	// tmpPath, ok := (s.scionL.Path).(*scion.Raw)
-	// if !ok {
-	// 	return nil, nil
-	// }
+	// // if !ok {
+	// // 	assume false
+	// // 	panic(e)
+	// // }
+
+	// assume typeOf(tmpPath) == *scion.Raw && tmpPath != nil
 	// unfold tmpPath.Mem()
 	// pathRaw := tmpPath.Raw
-
+	// assert forall i int :: 0 <= i && i < len(pathRaw) ==> acc(&pathRaw[i])
 	// // (tlino) use gopacket.NilDecodeFeedback{} instead of global gopacket.NilDecodeFeedback
 	// // if err := s.scionL.DecodeFromBytes(s.origPacket, gopacket.NilDecodeFeedback); err != nil {
 	// // 	panic(err)
 	// // }
-	// assert acc(s.scionL)
+	
+	// fold tmpPath.Mem()
 	// unfold verifyutils.BytesAcc(s.origPacket)
-	// if err := s.scionL.DecodeFromBytes(s.origPacket, gopacket.NilDecodeFeedback{}); err != nil {
+	// df := gopacket.NilDecodeFeedback{}
+	// fold df.Mem()
+	// if err := s.scionL.DecodeFromBytes(s.origPacket, df); err != nil {
+	// 	assume false
 	// 	panic(err)
 	// }
 
-	// // (tlino) tried to verify until here, takes ages
+	// unfold s.scionL.Mem()
+	// path := (s.scionL.Path).(*scion.Raw)
 
-// 	path := (s.scionL.Path).(*scion.Raw)
-
-// 	path.Raw = pathRaw
+ 	// path.Raw = pathRaw
 // 	decPath, err := path.ToDecoded()
 // 	if err != nil {
 // 		return nil, serrors.Wrap(cannotRoute, err, "details", "decoding raw path")
@@ -2518,7 +2560,7 @@ func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.Serializable
 // 		return nil, serrors.Wrap(cannotRoute, err, "details", "serializing SCMP message")
 // 	}
 // 	return s.buffer.Bytes(), scmpError{TypeCode: scmpH.TypeCode, Cause: cause}
-// }
+//}
 
 type segIDUpdater struct{}
 
