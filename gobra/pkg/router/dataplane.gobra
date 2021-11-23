@@ -1352,6 +1352,7 @@ func (p *scionPacketProcessor) foo() {
 // TODO: verify termination
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures p.Mem()
+decreases _
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 	cause error) (pr processResult, err error) {
 	unfold p.Mem()
@@ -1649,10 +1650,10 @@ func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error)
 	return p.packSCMP(scmpH, scmpP, e)
 }
 
-// (tlino) partially verified
-// TODO: termination
+// (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
+decreases
 func (p *scionPacketProcessor) validateIngressID() (pr processResult, err error) {
 	unfold p.Mem()
 	pktIngressID := unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ConsIngress

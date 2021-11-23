@@ -86,20 +86,24 @@ const (
 type SCMPTypeCode uint16
 
 // Type returns the SCMP type field.
+decreases
 pure func (a SCMPTypeCode) Type() SCMPType {
 	return SCMPType(a >> 8)
 }
 
 // Code returns the SCMP code field.
+decreases
 pure func (a SCMPTypeCode) Code() SCMPCode {
 	return SCMPCode(a)
 }
 
 // InfoMsg indicates if the SCMP message is an SCMP informational message.
+decreases
 pure func (a SCMPTypeCode) InfoMsg() bool {
 	return a.Type() > 127
 }
 
+decreases
 func (a SCMPTypeCode) String() string /* {
 	t, c := a.Type(), a.Code()
 	info, ok := scmpTypeCodeInfo[t]
@@ -120,11 +124,13 @@ func (a SCMPTypeCode) String() string /* {
 // SerializeTo writes the SCMPTypeCode value to the buffer.
 requires acc(&bytes[0]) && acc(&bytes[1])
 ensures  acc(&bytes[0]) && acc(&bytes[1])
+decreases
 func (a SCMPTypeCode) SerializeTo(bytes []byte) {
 	binary.BigEndian.PutUint16(bytes, uint16(a))
 }
 
 // CreateSCMPTypeCode is a convenience function to create an SCMPTypeCode
+decreases
 func CreateSCMPTypeCode(typ SCMPType, code SCMPCode) SCMPTypeCode {
 	return SCMPTypeCode(binary.BigEndian.Uint16([]byte{uint8(typ), uint8(code)}))
 }
