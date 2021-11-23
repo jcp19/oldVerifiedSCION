@@ -496,25 +496,24 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 		return emptyValue()
 	}
 	var m bfd.Metrics
-	if d.Metrics != nil {
-		labels := []string{
-			"interface", /* fmt.Sprint(ifID), */ // (joao) fmt Not supported yet
-			"isd_as", d.localIA.String(),
-			"neighbor_isd_as", dst.IA.String(),
-	 	}
-
-		// (joao) without these variables, Gobra cannot parse the following code
-		tmpMetrics1 := d.Metrics.InterfaceUp
-		tmpMetrics2 := d.Metrics.BFDInterfaceStateChanges
-		tmpMetrics3 := d.Metrics.BFDPacketsSent
-		tmpMetrics4 := d.Metrics.BFDPacketsReceived
-		m = bfd.Metrics{
-			Up: (metrics.NewPromGauge(/*d.Metrics.InterfaceUp*/ tmpMetrics1)).With(labels...),
-			StateChanges: (metrics.NewPromCounter(/*d.Metrics.BFDInterfaceStateChanges*/ tmpMetrics2)).With(labels...),
-			PacketsSent: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsSent*/ tmpMetrics3)).With(labels...),
-			PacketsReceived: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsReceived*/tmpMetrics4)).With(labels...),
-		}
-	}
+	// if d.Metrics != nil {
+	//	labels := []string{
+	//		"interface", /* fmt.Sprint(ifID), */ // (joao) fmt Not supported yet
+	//		"isd_as", d.localIA.String(),
+	//		"neighbor_isd_as", dst.IA.String(),
+	//	}
+	//	// (joao) without these variables, Gobra cannot parse the following code
+	//	tmpMetrics1 := d.Metrics.InterfaceUp
+	//	tmpMetrics2 := d.Metrics.BFDInterfaceStateChanges
+	//	tmpMetrics3 := d.Metrics.BFDPacketsSent
+	//	tmpMetrics4 := d.Metrics.BFDPacketsReceived
+	//	m = bfd.Metrics{
+	//		Up: (metrics.NewPromGauge(/*d.Metrics.InterfaceUp*/ tmpMetrics1)).With(labels...),
+	//		StateChanges: (metrics.NewPromCounter(/*d.Metrics.BFDInterfaceStateChanges*/ tmpMetrics2)).With(labels...),
+	//		PacketsSent: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsSent*/ tmpMetrics3)).With(labels...),
+	//		PacketsReceived: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsReceived*/tmpMetrics4)).With(labels...),
+	//	}
+	//}
 	s := &bfdSend{
 		conn:       conn,
 		// srcAddr:    src.Addr,
