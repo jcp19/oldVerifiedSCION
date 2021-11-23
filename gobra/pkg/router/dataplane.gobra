@@ -1877,7 +1877,7 @@ func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processRes
 	}
 }
 
-// (tlino)
+// (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
 decreases
