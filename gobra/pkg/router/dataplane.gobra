@@ -1033,7 +1033,11 @@ type processResult struct {
 	OutPkt   []byte
 }
 
-pred (pr processResult) Mem()
+pred (pr processResult) Mem() {
+	(pr.OutConn != nil ==> pr.OutConn.Mem()) &&
+	(pr.OutAddr != nil ==> pr.OutAddr.Mem()) &&
+	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
+}
 
 pure func isZeroSCION(s slayers.SCION) bool {
 	return s.EmbeddedBaseLayer.Contents == nil &&
@@ -1173,10 +1177,12 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 // 	}
 // }
 
-// (tlino) Verified
+// (tlino) partially Verified
+// (tlino) TODO show termination
 // (joao) `oh` is not used anywhere in the function
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	if len(d.bfdSessions) == 0 {
@@ -1213,6 +1219,7 @@ func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []by
 ghost
 requires b.Mem()
 ensures  (*layers.BFD).Mem!<_!>(b)
+decreases
 func translateBFDMemPred(b *layers.BFD) {
 	unfold (*layers.BFD).Mem(b)
 	fold (*layers.BFD).Mem!<_!>(b)
@@ -1369,9 +1376,10 @@ func (p *scionPacketProcessor) foo() {
 // TODO: verify termination
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures p.Mem()
+ensures pr.Mem()
 decreases _
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
-	cause error) (pr processResult, err error) {
+	cause error) (pr processResult, errRet error) {
 	unfold p.Mem()
 	// parse everything to see if the original packet was an SCMP error.
 	var (
@@ -1396,7 +1404,9 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 			assert len(decoded) == 5
 			assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
 			fold p.Mem()
-			return processResult{}, serrors.WrapStr("decoding packet", err)
+			pr, errRet = processResult{}, serrors.WrapStr("decoding packet", err)
+			fold pr.Mem()
+			return 
 		}
 		assert len(decoded) == 5
 		assert forall j int :: 0 <= j && j < len(decoded) ==> acc(&decoded[j])
@@ -1408,7 +1418,9 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	// if decoded[len(decoded)-1] == slayers.LayerTypeSCMP && !scmpLayer.TypeCode.InfoMsg() {
 	if decoded[len(decoded)-1] == slayers.LayerTypeSCMP() && !scmpLayer.TypeCode.InfoMsg() {
 		fold p.Mem()
-		return processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
+		pr, errRet = processResult{}, serrors.WrapStr("SCMP error for SCMP error pkt -> DROP", cause)
+		fold pr.Mem()
+		return 
 	}
 
 	// the quoted packet is the packet in its current state
@@ -1429,7 +1441,9 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 		// (tlino) get back access to scionLayer and fold scionPacketProcessor
 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 		fold p.Mem()
-		return processResult{}, serrors.WrapStr("update info field", err)
+		pr, errRet = processResult{}, serrors.WrapStr("update info field", err)
+		fold pr.Mem()
+		return 
 	}
 
 	// (tlino) use getter for currHF to reduce verification overhead
@@ -1438,7 +1452,9 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 		// (tlino) get back access to scionLayer and fold scionPacketProcessor
 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 		fold p.Mem()
-		return processResult{}, serrors.WrapStr("update hop field", err)
+		pr, errRet = processResult{}, serrors.WrapStr("update hop field", err)
+		fold pr.Mem()
+		return 
 	}
 
 	// (tlino) get back access to scionLayer
@@ -1446,12 +1462,16 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 
 	if err := p.buffer.Clear(); err != nil {
 		fold p.Mem()
-		return processResult{}, err
+		pr, errRet = processResult{}, err
+		fold pr.Mem()
+		return
 	}
 
 	if err := p.scionLayer.SerializeTo(p.buffer, gopacket.SerializeOptions{}); err != nil {
 		fold p.Mem()
-		return processResult{}, err
+		pr, errRet = processResult{}, err
+		fold pr.Mem()
+		return
 	}
 	// quoteLen is used to limit the size of the quote buffer, the final quote
 	// length is calculated inside the scmpPacker.
@@ -1490,7 +1510,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	fold verifyutils.BytesAcc(updated)
 	apply verifyutils.BytesAcc(updated) --* b.Mem()
 	fold verifyutils.BytesAcc(p.origPacket)
-	pr, err := packSCMP2(p.d, quote, p.origPacket, p.ingressID, p.scionLayer, b, scmpH, scmpP, cause)
+	pr, errRet := packSCMP2(p.d, quote, p.origPacket, p.ingressID, p.scionLayer, b, scmpH, scmpP, cause)
 	fold p.Mem()
 }
 
@@ -1504,6 +1524,8 @@ ensures scionLayer.Mem() && buffer.Mem()
 ensures verifyutils.BytesAcc(origPacket)
 ensures scionLayer.getRawScionPath() == old(scionLayer.getRawScionPath())
 ensures scionLayer.getRawPkt() == old(scionLayer.getRawPkt())
+ensures pr.Mem()
+decreases _
 func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, scionLayer *slayers.SCION, 
 	buffer gopacket.SerializeBuffer, scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (pr processResult, err error) //{
 // 	unfold acc(DataPlaneMutexInvariant(d), _)
@@ -1562,6 +1584,7 @@ requires (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
 requires acc(DataPlaneMutexInvariant(p.d), _)
 ensures errRet != nil ==> acc(p) && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 ensures errRet != nil ==> (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
+ensures pr.Mem()
 func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 	var ok bool
 	unfold p.scionLayer.Mem()
@@ -1572,7 +1595,9 @@ func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 		// (tlino) gobra doesn't support globals yet
 		// return processResult{}, malformedPath
 		fold p.scionLayer.Mem()
-		return processResult{}, malformedPath()
+		pr, errRet = processResult{}, malformedPath()
+		fold pr.Mem()
+		return 
 	}
 	fold p.scionLayer.Mem()
 	assert p.path == p.scionLayer.getRawScionPath()
@@ -1596,14 +1621,18 @@ func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		// (tlino) get back access to p.scionLayer
 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
-		return processResult{}, err
+		pr, errRet = processResult{}, err
+		fold pr.Mem()
+		return 
 	}
 	p.infoField, err = p.path.GetCurrentInfoField()
 	if err != nil {
 		// TODO(lukedirtwalker) parameter problem invalid path?
 		// (tlino) get back access to p.scionLayer
 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
-		return processResult{}, err
+		pr, errRet = processResult{}, err
+		fold pr.Mem()
+		return 
 	}
 	// (tlino) get back access to p.scionLayer
 	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
@@ -1616,14 +1645,17 @@ func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 		unfold p.Mem()
 		return r, err
 	}
-	return processResult{}, nil
+	pr, errRet = processResult{}, nil
+	fold pr.Mem()
+	return 
 }
 
 // (tlino) partially verified
 // TODO: verify termination
 requires p.Mem()
 ensures p.Mem()
-func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error) {
+ensures pr.Mem()
+func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, errRet error) {
 	// (joao) Add to separate this in two lines
 	// expiration := util.SecsToTime(p.infoField.Timestamp).
 	//	Add(path.ExpTimeToDuration(p.hopField.ExpTime))
@@ -1633,7 +1665,9 @@ func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error)
 	expired := expiration.Before(time.Now())
 	if !expired {
 		fold p.Mem()
-		return processResult{}, nil
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return
 	} 
 	// (tlino) original code, adapted code is below
 	// return p.packSCMP(
@@ -1670,8 +1704,9 @@ func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, err error)
 // (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
+ensures pr.Mem()
 decreases
-func (p *scionPacketProcessor) validateIngressID() (pr processResult, err error) {
+func (p *scionPacketProcessor) validateIngressID() (pr processResult, errRet error) {
 	unfold p.Mem()
 	pktIngressID := unfolding acc(path.HopFieldInv(p.hopField), 1/1000) in p.hopField.ConsIngress
 	errCode := slayers.SCMPCodeUnknownHopFieldIngress
@@ -1701,7 +1736,9 @@ func (p *scionPacketProcessor) validateIngressID() (pr processResult, err error)
 		return p.packSCMP(scmpH, scmpP, e)
 	}
 	fold p.Mem()
-	return processResult{}, nil
+	pr, errRet = processResult{}, nil
+	fold pr.Mem()
+	return 
 }
 
 func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
@@ -2013,7 +2050,8 @@ func (p *scionPacketProcessor) validateEgressUp() (processResult, error) /*{
 }
 */
 
-// (tlino) Verified
+// (tlino) partially verified
+// (tlino) TODO: use scionPacketProcessor.Mem in contracts, show termination
 requires acc(&p.ingressID, 1/1000)
 requires p.ingressID != 0 ==> acc(&p.hopField) && path.HopFieldInv(p.hopField) && acc(&p.infoField) && acc(p.infoField)
 ensures acc(&p.ingressID, 1/1000)
@@ -2088,14 +2126,17 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 // (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
+ensures pr.Mem()
 decreases
-func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
+func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error) {
 	unfold p.Mem()
 	// (joao) adapted to avoid unfolding predicates
 	// if int(p.scionLayer.PayloadLen) == len(p.scionLayer.Payload) {
 	if int(p.scionLayer.getPayloadLen()) == len(p.scionLayer.LayerPayload()) {
 		fold p.Mem()
-		return processResult{}, nil
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return 
 	}
 	// (tlino) original code, adapted code is below
 	// return p.packSCMP(
@@ -2122,7 +2163,7 @@ func (p *scionPacketProcessor) validatePktLen() (processResult, error) {
 	return p.packSCMP(scmpH, scmpP, e)
 }
 
-// (tlino) TODO: reverify
+// (tlino) TODO: verify
 requires acc(p)
 requires acc(DataPlaneMutexInvariant(p.d), _)
 requires verifyutils.BytesAcc(p.origPacket)
@@ -2133,13 +2174,32 @@ ensures acc(p)
 ensures verifyutils.BytesAcc(p.origPacket)
 ensures cap(p.rawPkt) == bufSize
 ensures (p.buffer).Mem()
-ensures p.scionLayer != nil && (p.scionLayer).Mem()
 ensures pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt))
 func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //{
 	// if r, err := p.parsePath(); err != nil {
 	// 	// (tlino) create magic wand to later get back access to p.rawPkt
-	// 	// return r, err
+	// 	pr, errProcess := r, err
+
+	// 	assert pr.Mem()
+
+	// 	// get access to rawPkt, use new variables to make Gobra work
+	// 	assert p.scionLayer.Mem()
+	// 	sl := p.scionLayer
+	// 	rp := p.rawPkt
+	// 	sl.getRawPktAccWithoutPreservePath(rp)
+	// 	assert verifyutils.BytesAcc(rp) --* (sl.Mem() && rp == sl.getRawPkt())
+	// 	assert verifyutils.BytesAcc(rp)
+	// 	assert p.rawPkt == rp
+	// 	assert acc(&(p.rawPkt))
+	// 	assert verifyutils.BytesAcc(p.rawPkt)
+
+	// 	package pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt)) {}
+
+	// 	assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+	// 	assert pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt))
+	// 	return pr, errProcess
 	// }
+	// assume false
 
 	// if r, err := p.validatePktLen(); err != nil {
 	// 	return r, err
@@ -2488,6 +2548,7 @@ pred (s scmpPacker) Mem() {
 requires s.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures s.scionL.Mem()
 ensures b != nil ==> verifyutils.BytesAcc(b)
+decreases _
 // (tlino) use *scmpPacker instead of scmpPacker
 func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
 	incPath bool, cause error) (b []byte, e error) //{

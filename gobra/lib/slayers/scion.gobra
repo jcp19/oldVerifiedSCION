@@ -319,6 +319,14 @@ ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt() && s.getRawSc
 decreases
 func (s *SCION) getRawPktAcc(b []byte)
 
+ghost
+requires s.Mem()
+requires b == s.getRawPkt()
+ensures verifyutils.BytesAcc(b)
+ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt())
+decreases
+func(s *SCION) getRawPktAccWithoutPreservePath(b []byte)
+
 ghost 
 requires s.Mem()
 requires p != nil && p == s.getRawScionPath()
