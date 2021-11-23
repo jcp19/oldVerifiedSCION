@@ -1092,7 +1092,6 @@ func (s *SCION) DecodeAddrHdr(data []byte) (res error) {
 	s.RawDstAddr = data[offset : offset+dstAddrBytes]
 	fold verifyutils.BytesAcc(s.RawDstAddr)
 	offset += dstAddrBytes
-	assume false
 	assert forall i int :: 0 <= i && i < len(data[offset:offset+srcAddrBytes]) ==> &(data[offset:offset+srcAddrBytes])[i] == &data[offset + i]
 	s.RawSrcAddr = data[offset : offset+srcAddrBytes]
 	fold verifyutils.BytesAcc(s.RawSrcAddr)
