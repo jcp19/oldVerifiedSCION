@@ -22,4 +22,5 @@ jobs:
         with:
           imageVersion: verified-scion-preview-without-selective
           packageLocation: gobra
+          packageTimeout: 2h
           
