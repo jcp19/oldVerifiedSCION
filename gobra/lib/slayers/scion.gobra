@@ -509,7 +509,7 @@ pure func (s *SCION) getPathLen() (ret int) /* {
 // (joao) Partially Verified
 requires s.Mem() && b.Mem()
 ensures  retErr == nil ==> s.Mem() && b.Mem()
-func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) /*{
+func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
 	scnLen := CmnHdrLen + s.AddrHdrLen() + s.getPathLen()
 	buf, err := b.PrependBytes(scnLen)
 	if err != nil {
@@ -571,7 +571,6 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 	fold verifyutils.BytesAcc(buf)
 	b.CombinePrependBytesMem(buf)
 }
-*/
 
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
@@ -618,13 +617,13 @@ func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes
 	s.SrcAddrType = AddrType(data[9] >> 2 & 0x3)
 	s.SrcAddrLen = AddrLen(data[9] & 0x3)
 
+	assume false
 	// Decode address header.
 	assert forall i int :: 0 <= i && i < len(data[CmnHdrLen:]) ==> &data[CmnHdrLen:][i] == &data[CmnHdrLen+i]
 	if err := s.DecodeAddrHdr(data[CmnHdrLen:]); err != nil {
 		df.SetTruncated()
 		return err
 	}
-	assume false
 	/*
 	addrHdrLen := s.AddrHdrLen()
 	offset := CmnHdrLen + addrHdrLen
@@ -765,14 +764,13 @@ func (s *SCION) AddReadSrcAddr(addr net.Addr)
 // address.
 requires acc(s.Mem(), 1/200)
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadSrcAddr(resAddr)
-func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) /*{
+func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.SrcAddrType, s.SrcAddrLen, s.RawSrcAddr)
 	inhale err == nil ==> s.ReadSrcAddr(res)
 	return res, err
 }
-*/
 
 // (joao) Verified
 // SetDstAddr sets the destination address and updates the DstAddrLen/Type fields accordingly.
@@ -780,7 +778,7 @@ func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) /*{
 // Changes to dst might leave the layer in an inconsistent state.
 requires s.Mem() && dst.Mem()
 ensures ret == nil ==> s.Mem()
-func (s *SCION) SetDstAddr(dst net.Addr) (ret error) /* {
+func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	unfold s.Mem()
 	var err error
 	s.DstAddrLen, s.DstAddrType, s.RawDstAddr, err = packAddr(dst)
@@ -793,15 +791,14 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) /* {
 	}
 	return err
 }
-*/
 
+// (joao) Verified
 // SetSrcAddr sets the source address and updates the DstAddrLen/Type fields accordingly.
 // SetSrcAddr takes ownership of src and callers should not write to it after calling SetSrcAddr.
 // Changes to src might leave the layer in an inconsistent state.
-// (joao) Verified
 requires s.Mem() && src.Mem()
 ensures ret == nil ==> s.Mem()
-func (s *SCION) SetSrcAddr(src net.Addr) (ret error) /* {
+func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	var err error
 	unfold s.Mem()
 	s.SrcAddrLen, s.SrcAddrType, s.RawSrcAddr, err = packAddr(src)
@@ -814,7 +811,6 @@ func (s *SCION) SetSrcAddr(src net.Addr) (ret error) /* {
 	}
 	return err
 }
-*/
 
 requires addrLen == AddrLen4 ==> len(raw) == 4
 requires addrLen == AddrLen16 ==> len(raw) == 16
@@ -823,7 +819,7 @@ ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
 ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
 ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200)
-func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) /*{
+func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) {
 	switch addrLen {
 	case AddrLen4:
 		switch addrType {
@@ -857,7 +853,6 @@ func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr
 	return nil, serrors.New("unsupported address type/length combination",
 		"type", addrType, "len", addrLen)
 }
-*/
 
 // TODO: verify with assumption
 // (joao) Assumed
@@ -905,7 +900,7 @@ preserves acc(s.Mem(), 1/100)
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
 ensures len(buf) >= s.AddrHdrLen() ==> err == nil
 ensures len(buf) < s.AddrHdrLen()  ==> err != nil
-func (s *SCION) SerializeAddrHdr(buf []byte) (err error) /*{
+func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
 			"actual", len(buf))
@@ -943,7 +938,6 @@ func (s *SCION) SerializeAddrHdr(buf []byte) (err error) /*{
 	copyRawSrcAddr(s, buf[offset:offset+srcAddrBytes])
 	return nil
 }
-*/
 
 // (joao) verification does not terminate
 // (joao) function introduced for verification purposes
@@ -983,7 +977,7 @@ requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
 ensures  acc(s) && validAddrLen(s.SrcAddrLen) && validAddrLen(s.DstAddrLen)
 ensures  res == nil ==> verifyutils.BytesAcc(s.RawSrcAddr) && len(s.RawSrcAddr) == addrBytes(s.SrcAddrLen)
 ensures  res == nil ==> verifyutils.BytesAcc(s.RawDstAddr) && len(s.RawDstAddr) == addrBytes(s.DstAddrLen)
-func (s *SCION) DecodeAddrHdr(data []byte) (res error) /* {
+func (s *SCION) DecodeAddrHdr(data []byte) (res error) {
 	assert addrBytes(s.DstAddrLen) >= 0
 	assert addrBytes(s.SrcAddrLen) >= 0
 	// (joao) inline calls to s.AddrHdrLen due to missing s.Mem() permission
@@ -1017,7 +1011,6 @@ func (s *SCION) DecodeAddrHdr(data []byte) (res error) /* {
 	fold verifyutils.BytesAcc(s.RawSrcAddr)
 	return nil
 }
-*/
 
 // (joao) Verified
 // computeChecksum computes the checksum with the SCION pseudo header.
@@ -1026,7 +1019,7 @@ preserves forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 
 ensures retErr != nil ==> ret == 0
 ensures s == nil ==> retErr != nil
 ensures s != nil && s.getLenRawSrcAddr() > 0 && s.getLenRawDstAddr() > 0 ==> retErr == nil
-func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8) (ret uint16, retErr error) /*{
+func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8) (ret uint16, retErr error) {
 	if s == nil {
 		return 0, serrors.New("SCION header missing")
 	}
@@ -1038,7 +1031,6 @@ func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8) (ret uint16, 
 	folded := s.foldChecksum(csum)
 	return folded, nil
 }
-*/
 
 // (joao) Verified
 requires acc(s.Mem(), 1/100)
@@ -1046,7 +1038,7 @@ ensures acc(s.Mem(), 1/100)
 ensures s.getLenRawSrcAddr() == 0 ==> resErr != nil
 ensures s.getLenRawDstAddr() == 0 ==> resErr != nil
 ensures s.getLenRawSrcAddr() > 0 && s.getLenRawDstAddr() > 0 ==> resErr == nil
-func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32, resErr error) /*{
+func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32, resErr error) {
 	// (joao) len(s.RawDstAddr) replaced by s.getLenRawDstAddr() to avoid unfoldings
 	// if len(s.RawDstAddr) == 0 {
 	if s.getLenRawDstAddr() == 0 {
@@ -1123,7 +1115,6 @@ func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32
 	csum += uint32(protocol)
 	return csum, nil
 }
-*/
 
 // (joao) Verified
 requires len(srcIA) == 8 && len(dstIA) == 8
@@ -1133,7 +1124,7 @@ requires forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
 ensures  acc(s.Mem(), 1/200)
 ensures  forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
 ensures  forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
-func (s *SCION) pseudoHeaderChecksumOutlineBlock1(srcIA []byte, dstIA []byte) /*{
+func (s *SCION) pseudoHeaderChecksumOutlineBlock1(srcIA []byte, dstIA []byte) {
 	// (joao) Original code, omitted to avoid unfolding
 	// s.SrcIA.Write(srcIA)
 	(s.getSrcIA()).Write(srcIA)
@@ -1141,12 +1132,11 @@ func (s *SCION) pseudoHeaderChecksumOutlineBlock1(srcIA []byte, dstIA []byte) /*
 	// s.DstIA.Write(dstIA)
 	(s.getDstIA()).Write(srcIA)
 }
-*/
 
 // (joao) Verified
 requires forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/10000)
 ensures forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/10000)
-func (s *SCION) upperLayerChecksum(upperLayer []byte, csum uint32) uint32 /*{
+func (s *SCION) upperLayerChecksum(upperLayer []byte, csum uint32) uint32 {
 	// Compute safe boundary to ensure we do not access out of bounds.
 	// Odd lengths are handled at the end.
 	safeBoundary := len(upperLayer) - 1
@@ -1162,13 +1152,11 @@ func (s *SCION) upperLayerChecksum(upperLayer []byte, csum uint32) uint32 /*{
 	}
 	return csum
 }
-*/
 
 // (joao) Verified
-func (s *SCION) foldChecksum(csum uint32) uint16 /*{
+func (s *SCION) foldChecksum(csum uint32) uint16 {
 	for csum > 0xffff {
 		csum = (csum >> 16) + (csum & 0xffff)
 	}
 	return ^uint16(csum)
 }
-*/
