@@ -1733,9 +1733,10 @@ func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
 }
 */
 
-// (tlino) TODO: reverify
+// (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
+decreases
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 	// against construction dir the ingress router updates the SegID, ifID == 0
 	// means this comes from this AS itself, so nothing has to be done.
