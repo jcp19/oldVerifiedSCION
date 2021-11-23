@@ -106,8 +106,7 @@ func (i *SCMPExternalInterfaceDown) DecodeFromBytes(data []byte,
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 requires acc(i) && b.Mem()
-ensures  acc(i) 
-ensures  ret == nil ==> b.Mem()
+ensures  acc(i) && b.Mem()
 func (i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) (ret error) {
 
@@ -122,7 +121,7 @@ func (i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer,
     assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.IfID)
     fold verifyutils.BytesAcc(buf)
-    b.CombinePrependBytesMem(buf)
+	apply verifyutils.BytesAcc(buf) --* b.Mem()
     
 	return nil
 }
@@ -329,8 +328,12 @@ type SCMPParameterProblem struct {
 	Pointer uint16
 }
 
+pred (s *SCMPParameterProblem) Mem() {
+	acc(s)
+}
+
 // LayerType returns LayerTypeSCMPParameterProblem.
-func (*SCMPParameterProblem) LayerType() gopacket.LayerType {
+pure func (*SCMPParameterProblem) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMPParameterProblem
 	return LayerTypeSCMPParameterProblem()
 }
@@ -356,21 +359,33 @@ func (i *SCMPParameterProblem) DecodeFromBytes(data []byte, df gopacket.DecodeFe
 	}
 	return nil
 }
+*/
 
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
+requires i.Mem() && b.Mem()
+ensures  (i.Mem() && b.Mem())
 func (i *SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer,
-	opts gopacket.SerializeOptions) error {
-
+	opts gopacket.SerializeOptions) (err error) {
 	buf, err := b.PrependBytes(2 + 2)
 	if err != nil {
 		return err
 	}
+	// (tlino) added to make Gobra verify
+	unfold verifyutils.BytesAcc(buf)
+	assert &buf[0:2][0] == &buf[0]
+	assert &buf[0:2][1] == &buf[1]
+	assert &buf[2:4][0] == &buf[2]
+	assert &buf[2:4][1] == &buf[3]
 	binary.BigEndian.PutUint16(buf[0:2], uint16(0)) //Reserved
-	binary.BigEndian.PutUint16(buf[2:4], i.Pointer)
+	binary.BigEndian.PutUint16(buf[2:4], unfolding i.Mem() in i.Pointer)
+
+	// (tlino) get back access to b
+	fold verifyutils.BytesAcc(buf)
+	apply verifyutils.BytesAcc(buf) --* b.Mem()
 	return nil
 }
-
+/*
 func decodeSCMPParameterProblem(data []byte, pb gopacket.PacketBuilder) error {
 	s := &SCMPParameterProblem{}
 	if err := s.DecodeFromBytes(data, pb); err != nil {
@@ -380,6 +395,16 @@ func decodeSCMPParameterProblem(data []byte, pb gopacket.PacketBuilder) error {
 	return pb.NextDecoder(s.NextLayerType())
 }
 */
+
+(*SCMPParameterProblem) implements gopacket.SerializableLayer {
+	pure (s *SCMPParameterProblem) LayerType() gopacket.LayerType {
+		return s.LayerType()
+	}
+	
+	(s *SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = s.SerializeTo(b, opts)
+	}
+}
 
 // SCMPTraceroute represents the structure of a traceroute.
 //
