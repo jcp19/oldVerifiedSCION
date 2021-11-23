@@ -91,9 +91,11 @@ type bfdSession interface {
 
 	requires acc(Mem(), _)
 	ensures  acc(c.SendChannel(), _) && c.SendGivenPerm() == (*layers.BFD).Mem!<_!>;
+	decreases
 	Messages() (c chan<- *layers.BFD)
 
 	requires acc(Mem(), 1/1000)
+	decreases
 	IsUp() bool
 }
 
@@ -1177,12 +1179,11 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 // 	}
 // }
 
-// (tlino) partially Verified
-// (tlino) TODO show termination
+// (tlino) Verified
 // (joao) `oh` is not used anywhere in the function
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+decreases
 func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	if len(d.bfdSessions) == 0 {
