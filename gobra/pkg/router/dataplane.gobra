@@ -502,15 +502,17 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 			"isd_as", d.localIA.String(),
 			"neighbor_isd_as", dst.IA.String(),
 	 	}
+
+		// (joao) without these variables, Gobra cannot parse the following code
+		tmpMetrics1 := d.Metrics.InterfaceUp
+		tmpMetrics2 := d.Metrics.BFDInterfaceStateChanges
+		tmpMetrics3 := d.Metrics.BFDPacketsSent
+		tmpMetrics4 := d.Metrics.BFDPacketsReceived
 		m = bfd.Metrics{
-			Up: metrics.NewPromGauge(d.Metrics.InterfaceUp).
-				With(labels...),
-			StateChanges: metrics.NewPromCounter(d.Metrics.BFDInterfaceStateChanges).
-				With(labels...),
-			PacketsSent: metrics.NewPromCounter(d.Metrics.BFDPacketsSent).
-				With(labels...),
-			PacketsReceived: metrics.NewPromCounter(d.Metrics.BFDPacketsReceived).
-				With(labels...),
+			Up: (metrics.NewPromGauge(/*d.Metrics.InterfaceUp*/ tmpMetrics1)).With(labels...),
+			StateChanges: (metrics.NewPromCounter(/*d.Metrics.BFDInterfaceStateChanges*/ tmpMetrics2)).With(labels...),
+			PacketsSent: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsSent*/ tmpMetrics3)).With(labels...),
+			PacketsReceived: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsReceived*/tmpMetrics4)).With(labels...),
 		}
 	}
 	s := &bfdSend{
@@ -569,6 +571,7 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	return nil
 }
 
+// (joao) WIP
 // (joao) Partially Verified
 // AddSvc adds the address for the given service. This can be called multiple
 // times for the same service, with the address added to the list of addresses
@@ -590,6 +593,7 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	// 	d.svc = newServices()
 	// }
 	// d.svc.AddSvc(svc, a)
+	// TODO:
 	// if d.Metrics != nil {
 	// 	labels := serviceMetricLabels(d.localIA, svc)
 	// 	d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
@@ -600,6 +604,7 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	return nil
 }
 
+// (joao) WIP
 // (joao) Partially Verified
 // DelSvc deletes the address for the given service.
 requires acc(&d.mtx, _) && d.mtx.LockP()
@@ -714,15 +719,15 @@ func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg contro
 	var m bfd.Metrics
 	if d.Metrics != nil {
 		labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
+		tmpMetrics1 := d.Metrics.SiblingReachable
+		tmpMetrics2 := d.Metrics.SiblingBFDStateChanges
+		tmpMetrics3 := d.Metrics.SiblingBFDPacketsSent
+		tmpMetrics4 := d.Metrics.SiblingBFDPacketsReceived
 		m = bfd.Metrics{
-			Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
-				With(labels...),
-			StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
-				With(labels...),
-			PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
-				With(labels...),
-			PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
-				With(labels...),
+			Up: (metrics.NewPromGauge(/*d.Metrics.SiblingReachable*/ tmpMetrics1)).With(labels...),
+			StateChanges: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDStateChanges*/ tmpMetrics2)).With(labels...),
+			PacketsSent: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDPacketsSent*/ tmpMetrics3)).With(labels...),
+			PacketsReceived: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDPacketsReceived*/ tmpMetrics4)).With(labels...),
 		}
 	}
 	s := &bfdSend{
