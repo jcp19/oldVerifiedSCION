@@ -1742,51 +1742,96 @@ func (p *scionPacketProcessor) validateIngressID() (pr processResult, errRet err
 	return 
 }
 
-func (p *scionPacketProcessor) validateEgressID() (processResult, error) /*{
-//	pktEgressID := p.egressInterface()
-//	_, ih := p.d.internalNextHops[pktEgressID]
-//	_, eh := p.d.external[pktEgressID]
-//	if !ih && !eh {
-//		errCode := slayers.SCMPCodeUnknownHopFieldEgress
-//		if !p.infoField.ConsDir {
-//			errCode = slayers.SCMPCodeUnknownHopFieldIngress
-//		}
-//		return p.packSCMP(
-//			&slayers.SCMP{
-//				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
-//			},
-//			&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
-//			cannotRoute,
-//		)
-//	}
-//
-//	if !p.segmentChange {
-//		return processResult{}, nil
-//	}
-//	// Check that the interface pair is valid on a segment switch.
-//	// Having a segment change received from the internal interface is never valid.
-//	ingress, egress := p.d.linkTypes[p.ingressID], p.d.linkTypes[pktEgressID]
-//	switch {
-//	case ingress == topology.Core && egress == topology.Child:
-//		return processResult{}, nil
-//	case ingress == topology.Child && egress == topology.Core:
-//		return processResult{}, nil
-//	case ingress == topology.Child && egress == topology.Child:
-//		return processResult{}, nil
-//	default:
-//		return p.packSCMP(
-//			&slayers.SCMP{
-//				TypeCode: slayers.CreateSCMPTypeCode(
-//					slayers.SCMPTypeParameterProblem,
-//					slayers.SCMPCodeInvalidSegmentChange,
-//				),
-//			},
-//			&slayers.SCMPParameterProblem{Pointer: p.currentInfoPointer()},
-//			serrors.WithCtx(cannotRoute, "ingress_id", p.ingressID, "ingress_type", ingress,
-//				"egress_id", pktEgressID, "egress_type", egress))
-//	}
+// (tlino) Verified
+requires p.Mem()
+ensures p.Mem()
+ensures pr.Mem()
+decreases
+func (p *scionPacketProcessor) validateEgressID() (pr processResult, errRet error) {
+	pktEgressID := p.egressInterface()
+	unfold p.Mem()
+	unfold acc(DataPlaneMutexInvariant(p.d), _)
+	// (tlino) add parantheses to make it parse
+	// _, ih := p.d.internalNextHops[pktEgressID]
+	// _, eh := p.d.external[pktEgressID]
+	_, ih := (p.d.internalNextHops)[pktEgressID]
+	_, eh := (p.d.external)[pktEgressID]
+	if !ih && !eh {
+		errCode := slayers.SCMPCodeUnknownHopFieldEgress
+		if !p.infoField.ConsDir {
+			errCode = slayers.SCMPCodeUnknownHopFieldIngress
+		}
+		// (tlino) original code, adapted code is below
+		// return p.packSCMP(
+		// 	&slayers.SCMP{
+		// 		TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+		// 	},
+		// 	&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
+		// 	cannotRoute,
+		// )
+
+		scmpH := &slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+			}
+		fold scmpH.Mem()
+		fold p.Mem()
+		scmpP := &slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()}
+		fold scmpP.Mem()
+		e := cannotRoute()
+		return p.packSCMP(scmpH, scmpP, e)
+	}
+
+	if !p.segmentChange {
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		fold p.Mem()
+		return 
+	}
+	// Check that the interface pair is valid on a segment switch. // (tlino) original scion comment
+	// Having a segment change received from the internal interface is never valid. // (tlino) original scion comment
+	// (tlino) add parantheses to make it parse
+	// ingress, egress := p.d.linkTypes[p.ingressID], p.d.linkTypes[pktEgressID]
+	ingress, egress := (p.d.linkTypes)[p.ingressID], (p.d.linkTypes)[pktEgressID]
+	fold p.Mem()
+	switch {
+	case ingress == topology.Core && egress == topology.Child:
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return
+	case ingress == topology.Child && egress == topology.Core:
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return
+	case ingress == topology.Child && egress == topology.Child:
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return
+	default:
+		// (tlino) original code, adapted code is below
+		// return p.packSCMP(
+		// 	&slayers.SCMP{
+		// 		TypeCode: slayers.CreateSCMPTypeCode(
+		// 			slayers.SCMPTypeParameterProblem,
+		// 			slayers.SCMPCodeInvalidSegmentChange,
+		// 		),
+		// 	},
+		// 	&slayers.SCMPParameterProblem{Pointer: p.currentInfoPointer()},
+		// 	serrors.WithCtx(cannotRoute, "ingress_id", p.ingressID, "ingress_type", ingress,
+		// 		"egress_id", pktEgressID, "egress_type", egress))
+		scmpH := &slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(
+					slayers.SCMPTypeParameterProblem,
+					slayers.SCMPCodeInvalidSegmentChange,
+				),
+			}
+		fold scmpH.Mem()
+		scmpP := &slayers.SCMPParameterProblem{Pointer: p.currentInfoPointer()}
+		fold scmpP.Mem()
+		e := serrors.WithCtx(cannotRoute(), "ingress_id", unfolding acc(p.Mem(), 1/1000) in p.ingressID, "ingress_type", ingress,
+		 		"egress_id", pktEgressID, "egress_type", egress)
+		return p.packSCMP(scmpH, scmpP, e)
+	}
 }
-*/
 
 // (tlino) Verified
 requires p.Mem()
@@ -2129,12 +2174,6 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 	interfaceID uint16) (pr processResult, errRet error) //{
 // 	var scmpH slayers.SCMP
 // 	unfold p.Mem()
-
-// 	// (tlino) p.scionLayer.EmbeddedBaseLayer.Payload is a subslice of p.rawPkt
-// 	// (tlino) p.scionLayer.EmbeddedBaseLayer.Payload is being read and embedded
-// 	// (tlino) as a field in scmpH and scmpP. However the underlaying data isn't modified and
-// 	// (tlino) scmpH and scmpP with the subslice of p.rawPkt exists only in the begining of this function.
-// 	// (tlino) Thus, we don't explicitly transfer permissions
 
 // 	// (tlino) access Payload over EmbeddedBaseLayer, since Gobra has no support for embedded fields
 // 	// if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
