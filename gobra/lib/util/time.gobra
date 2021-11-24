@@ -65,16 +65,19 @@ func (t *UnixTime) String() string {
 }
 
 // SecsToTime takes seconds stored in a uint32.
+decreases
 func SecsToTime(t uint32) time.Time {
 	return time.Unix(int64(t), 0)
 }
 
 // TimeToSecs returns seconds stored as uint32.
+decreases
 func TimeToSecs(t time.Time) uint32 {
 	return uint32(t.Unix())
 }
 
 // TimeToString formats the time as a string.
+decreases
 func TimeToString(t time.Time) string /* {
 	return (t.UTC()).Format(common.TimeFmt)
 }

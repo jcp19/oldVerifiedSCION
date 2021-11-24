@@ -1650,11 +1650,11 @@ func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 	return 
 }
 
-// (tlino) partially verified
-// TODO: verify termination
+// (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
 ensures pr.Mem()
+decreases
 func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, errRet error) {
 	// (joao) Add to separate this in two lines
 	// expiration := util.SecsToTime(p.infoField.Timestamp).
