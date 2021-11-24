@@ -306,7 +306,8 @@ pred (s *SCION) Mem() {
 	s.TrafficClass >= 0 &&
 	s.FlowID >= 0 &&
 	s.HdrLen >= 0 &&
-	s.PayloadLen >= 0
+	s.PayloadLen >= 0 &&
+	verifyutils.BytesAcc(s.EmbeddedBaseLayer.Payload)
 	// TODO:
 	// - Relation between PathType and Path
 }
@@ -337,6 +338,21 @@ decreases
 func (s *SCION) getPathAcc(p *scion.Raw, b []byte) {
 	unfold s.Mem()
 	package p.Mem() --* (s.Mem() && p == s.getRawScionPath() && b == s.getRawPkt()) {
+		fold s.Mem()
+	}
+}
+
+ghost
+requires s.Mem()
+requires pld == s.LayerPayload()
+requires p != nil && p == s.getRawScionPath()
+requires r == s.getRawPkt()
+ensures verifyutils.BytesAcc(pld)
+ensures verifyutils.BytesAcc(pld) --* (s.Mem() && pld == s.LayerPayload() && r == s.getRawPkt() && p == s.getRawScionPath())
+decreases
+func (s *SCION) getLayerPayloadAcc(pld []byte, p *scion.Raw, r  []byte) {
+	unfold s.Mem()
+	package verifyutils.BytesAcc(pld) --* (s.Mem() && pld == s.LayerPayload() && r == s.getRawPkt() && p == s.getRawScionPath()) {
 		fold s.Mem()
 	}
 }
@@ -566,7 +582,9 @@ func (s *SCION) NextLayerType() gopacket.LayerType {
 //        This is useful if one only wants to compute the length of the returned slice.
 pure
 requires acc(s.Mem(), 1/10000)
-func (s *SCION) LayerPayload() []byte {
+ensures res == unfolding acc(s.Mem(), 1/10000) in (s.EmbeddedBaseLayer).Payload
+decreases
+func (s *SCION) LayerPayload() (res []byte) {
 	// (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`.
 	// (joao) embedded fields are broken.
 	// return s.Payload
