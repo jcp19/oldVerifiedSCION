@@ -39,6 +39,7 @@ import (
 	"gobra/lib/common"
 	// "github.com/scionproto/scion/go/lib/log"
 	// "github.com/scionproto/scion/go/lib/metrics"
+	"gobra/lib/metrics"
 	// "github.com/scionproto/scion/go/lib/scrypto"
 	// "github.com/scionproto/scion/go/lib/serrors"
 	"gobra/lib/serrors"
@@ -127,7 +128,7 @@ type DataPlane struct {
 	localIA          addr.IA
 	mtx              sync.Mutex
 	running          bool
-//	Metrics          *Metrics
+	Metrics          *Metrics
 }
 
 pred DataPlaneMutexInvariant(d *DataPlane) {
@@ -142,13 +143,15 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	acc(&d.bfdSessions) &&
 	acc(&d.localIA) &&
 	acc(&d.running) &&
+	acc(&d.Metrics) &&
 	(d.external != nil ==> acc(d.external)) &&
 	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
 	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
 	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
 	(d.svc != nil ==> (d.svc).Mem()) &&
 	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
-	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem())
+	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem()) &&
+	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
 ghost
@@ -494,24 +497,25 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 		// return emptyValue
 		return emptyValue()
 	}
-	// var m bfd.Metrics
+	var m bfd.Metrics
 	// if d.Metrics != nil {
-	// 	labels := []string{
-	//		"interface", fmt.Sprint(ifID),
+	//	labels := []string{
+	//		"interface", /* fmt.Sprint(ifID), */ // (joao) fmt Not supported yet
 	//		"isd_as", d.localIA.String(),
 	//		"neighbor_isd_as", dst.IA.String(),
-	// 	}
-	//	m = bfd.Metrics{
-	//		Up: metrics.NewPromGauge(d.Metrics.InterfaceUp).
-	//			With(labels...),
-	//		StateChanges: metrics.NewPromCounter(d.Metrics.BFDInterfaceStateChanges).
-	//			With(labels...),
-	//		PacketsSent: metrics.NewPromCounter(d.Metrics.BFDPacketsSent).
-	//			With(labels...),
-	//		PacketsReceived: metrics.NewPromCounter(d.Metrics.BFDPacketsReceived).
-	//			With(labels...),
 	//	}
-	// }
+	//	// (joao) without these variables, Gobra cannot parse the following code
+	//	tmpMetrics1 := d.Metrics.InterfaceUp
+	//	tmpMetrics2 := d.Metrics.BFDInterfaceStateChanges
+	//	tmpMetrics3 := d.Metrics.BFDPacketsSent
+	//	tmpMetrics4 := d.Metrics.BFDPacketsReceived
+	//	m = bfd.Metrics{
+	//		Up: (metrics.NewPromGauge(/*d.Metrics.InterfaceUp*/ tmpMetrics1)).With(labels...),
+	//		StateChanges: (metrics.NewPromCounter(/*d.Metrics.BFDInterfaceStateChanges*/ tmpMetrics2)).With(labels...),
+	//		PacketsSent: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsSent*/ tmpMetrics3)).With(labels...),
+	//		PacketsReceived: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsReceived*/tmpMetrics4)).With(labels...),
+	//	}
+	//}
 	s := &bfdSend{
 		conn:       conn,
 		// srcAddr:    src.Addr,
@@ -525,7 +529,7 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	// return d.addBFDController(ifID, s, cfg, m)
 	// changed code:
 	fold DataPlaneMutexInvariant(d)
-	res := d.addBFDController(ifID, s, cfg /*, m */)
+	res := d.addBFDController(ifID, s, cfg, m)
 	unfold DataPlaneMutexInvariant(d)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
@@ -537,7 +541,7 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
-	/* metrics bfd.Metrics */) error {
+	metrics bfd.Metrics) error {
 	unfold DataPlaneMutexInvariant(d)
 	if cfg.Disable {
 		fold DataPlaneMutexInvariant(d)
@@ -568,6 +572,7 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	return nil
 }
 
+// (joao) WIP
 // (joao) Partially Verified
 // AddSvc adds the address for the given service. This can be called multiple
 // times for the same service, with the address added to the list of addresses
@@ -599,6 +604,7 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	return nil
 }
 
+// (joao) WIP
 // (joao) Partially Verified
 // DelSvc deletes the address for the given service.
 requires d.mtx.LockP() && acc(a.Mem(), _)
@@ -676,7 +682,7 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	return nil
 }
 
-// (joao) Partially Verified
+// (joao) WIP
 // AddNextHopBFD adds the BFD session for the next hop address.
 // If the remote ifID belongs to an existing address, the existing
 // BFD session will be re-used.
@@ -715,18 +721,19 @@ func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg contro
 			}
 		}
 	}
+	*/
 	var m bfd.Metrics
 	if d.Metrics != nil {
 		labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
+		tmpMetrics1 := d.Metrics.SiblingReachable
+		tmpMetrics2 := d.Metrics.SiblingBFDStateChanges
+		tmpMetrics3 := d.Metrics.SiblingBFDPacketsSent
+		tmpMetrics4 := d.Metrics.SiblingBFDPacketsReceived
 		m = bfd.Metrics{
-			Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
-				With(labels...),
-			StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
-				With(labels...),
-			PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
-				With(labels...),
-			PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
-				With(labels...),
+			Up: (metrics.NewPromGauge(/*d.Metrics.SiblingReachable*/ tmpMetrics1)).With(labels...),
+			StateChanges: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDStateChanges*/ tmpMetrics2)).With(labels...),
+			PacketsSent: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDPacketsSent*/ tmpMetrics3)).With(labels...),
+			PacketsReceived: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDPacketsReceived*/ tmpMetrics4)).With(labels...),
 		}
 	}
 	s := &bfdSend{
@@ -736,10 +743,9 @@ func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg contro
 		srcIA:      d.localIA,
 		dstIA:      d.localIA,
 		ifID:       0,
-		macFactory: d.macFactory,
+		// macFactory: d.macFactory,
 	}
 	return d.addBFDController(ifID, s, cfg, m)
-	*/
 }
 
 // Run starts running the dataplane. Note that configuration is not possible
@@ -881,7 +887,8 @@ func (d *DataPlane) initMetrics() /* {
 		d.Metrics.OutputPacketsTotal.With(labels).Add(0)
 		d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
 	}
-} */
+}
+*/
 
 type processResult struct {
 	EgressID uint16

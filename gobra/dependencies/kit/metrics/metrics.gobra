@@ -9,7 +9,7 @@ type Counter interface {
     requires forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
     ensures  Mem()
     ensures  forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
-	With(labelValues ...string) Counter
+	With(labelValues ...string) (res Counter)
 
     requires Mem()
     ensures  Mem()

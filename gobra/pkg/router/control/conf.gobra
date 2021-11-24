@@ -15,35 +15,51 @@
 package control
 
 import (
-//	"crypto/sha256"
+	// "crypto/sha256"
 	"net"
-//	"sort"
+	// "sort"
 
-//	"golang.org/x/crypto/pbkdf2"
+	// "golang.org/x/crypto/pbkdf2"
 
-//	"github.com/scionproto/scion/go/lib/addr"
+	// "github.com/scionproto/scion/go/lib/addr"
 	"gobra/lib/addr"
-//	"github.com/scionproto/scion/go/lib/common"
+	// "github.com/scionproto/scion/go/lib/common"
     "gobra/lib/common"
-//	"github.com/scionproto/scion/go/lib/serrors"
+	// "github.com/scionproto/scion/go/lib/serrors"
     "gobra/lib/serrors"
-//	"github.com/scionproto/scion/go/lib/snet"
-//	"github.com/scionproto/scion/go/lib/topology"
+	// "github.com/scionproto/scion/go/lib/snet"
+	// "github.com/scionproto/scion/go/lib/topology"
     "gobra/lib/topology"
 )
 
 // Dataplane is the interface that a dataplane has to support to be controlled
 // by this controller.
 type Dataplane interface {
-	CreateIACtx(ia addr.IA) error
-//	AddInternalInterface(ia addr.IA, local net.UDPAddr) error
-//	AddExternalInterface(localIfID common.IFIDType, info LinkInfo, owned bool) error
-	AddSvc(ia addr.IA, svc addr.HostSVC, ip net.IP) error
-	DelSvc(ia addr.IA, svc addr.HostSVC, ip net.IP) error
-	SetKey(ia addr.IA, index int, key common.RawBytes) error
+	pred Mem()
 
-//	SetRevocation(ia addr.IA, ifid common.IFIDType, rev common.RawBytes) error
-//	DelRevocation(ia addr.IA, ifid common.IFIDType) error
+	preserves Mem()
+	CreateIACtx(ia addr.IA) error
+
+	requires forall i int :: 0 <= i && i < len(local.IP) ==> acc(&(local.IP)[i])
+	preserves err == nil ==> Mem()
+	AddInternalInterface(ia addr.IA, local net.UDPAddr) (err error)
+
+	// AddExternalInterface(localIfID common.IFIDType, info LinkInfo, owned bool) error
+
+	requires forall i int :: 0 <= i && i < len(ip) ==> acc(&ip[i])
+	preserves err == nil ==> Mem()
+	AddSvc(ia addr.IA, svc addr.HostSVC, ip net.IP) (err error)
+
+	requires forall i int :: 0 <= i && i < len(ip) ==> acc(&ip[i])
+	preserves err == nil ==> Mem()
+	DelSvc(ia addr.IA, svc addr.HostSVC, ip net.IP) (err error)
+
+	requires forall i int :: 0 <= i && i < len(key) ==> acc(&key[i])
+	preserves err == nil ==> Mem()
+	SetKey(ia addr.IA, index int, key common.RawBytes) (err error)
+
+	// SetRevocation(ia addr.IA, ifid common.IFIDType, rev common.RawBytes) error
+	// DelRevocation(ia addr.IA, ifid common.IFIDType) error
 }
 
 // LinkInfo contains the information about a link between an internal and
@@ -53,14 +69,14 @@ type LinkInfo struct {
 	Remote   LinkEnd
 	Instance string
 	LinkTo   topology.LinkType
-//	BFD      BFD
+	// BFD      BFD
 	MTU      int
 }
 
 // LinkEnd represents on end of a link.
 type LinkEnd struct {
 	IA   addr.IA
-//	Addr *net.UDPAddr
+	Addr *net.UDPAddr
 }
 
 // ConfigDataplane configures the data-plane with the new configuration.
