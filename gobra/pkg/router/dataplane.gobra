@@ -1931,10 +1931,11 @@ func (p *scionPacketProcessor) currentHopPointer() uint16 {
 
 // (tlino) not verified yet
 // (joao) currently not supported
-requires acc(p) && acc(p.infoField) && path.HopFieldInv(p.hopField)
-requires acc(DataPlaneMutexInvariant(p.d), _)
-ensures acc(p) && acc(p.infoField) && path.HopFieldInv(p.hopField)
-func (p *scionPacketProcessor) verifyCurrentMAC() (processResult, error) //{
+requires p.Mem()
+ensures p.Mem()
+ensures pr.Mem()
+decreases _
+func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) //{
 // 	if err := path.VerifyMAC(p.d.macFactory(), p.infoField, p.hopField); err != nil {
 // 		return p.packSCMP(
 // 			&slayers.SCMP{TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem,
@@ -2025,33 +2026,72 @@ func (p *scionPacketProcessor) processEgress() error {
 	return nil
 }
 
-func (p *scionPacketProcessor) doXover() (processResult, error) // {
-//	p.segmentChange = true
-//	if err := p.path.IncPath(); err != nil {
-//		// TODO parameter problem invalid path
-//		return processResult{}, serrors.WrapStr("incrementing path", err)
-//	}
-//	var err error
-//	if p.hopField, err = p.path.GetCurrentHopField(); err != nil {
-//		// TODO parameter problem invalid path
-//		return processResult{}, err
-//	}
-//	if p.infoField, err = p.path.GetCurrentInfoField(); err != nil {
-//		// TODO parameter problem invalid path
-//		return processResult{}, err
-//	}
-//	if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
-//		return processResult{}, err
-//	}
-//	if r, err := p.validateHopExpiry(); err != nil {
-//		return r, err
-//	}
-//	// verify the new block
-//	if r, err := p.verifyCurrentMAC(); err != nil {
-//		return r, serrors.WithCtx(err, "info", "after xover")
-//	}
-//	return processResult{}, nil
-//}
+// (tlino) Verified
+requires p.Mem()
+ensures errRet == nil ==> p.Mem()
+ensures errRet != nil ==> acc(p) && acc(DataPlaneMutexInvariant(p.d), _) && verifyutils.BytesAcc(p.origPacket)
+ensures errRet != nil ==> p.buffer.Mem() && p.scionLayer.Mem() && cap(p.rawPkt) == bufSize
+ensures errRet != nil ==> p.path != nil && p.scionLayer != nil && p.path == p.scionLayer.getRawScionPath()
+ensures errRet != nil ==> p.rawPkt == p.scionLayer.getRawPkt()
+ensures pr.Mem()
+decreases
+func (p *scionPacketProcessor) doXover() (pr processResult, errRet error) {
+	unfold p.Mem()
+	p.segmentChange = true
+
+	// (tlino) get access to p.path
+	sl := p.scionLayer
+	pp := p.path
+	rp := p.rawPkt
+	sl.getPathAcc(pp, rp)
+	assert pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rp == sl.getRawPkt())
+	assert pp.Mem()
+
+	if err := p.path.IncPath(); err != nil {
+		// TODO parameter problem invalid path // (tlino) original scion comment
+		apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rp == sl.getRawPkt())
+		pr, errRet = processResult{}, serrors.WrapStr("incrementing path", err)
+		fold pr.Mem()
+		return
+	}
+	var err error
+	if p.hopField, err = p.path.GetCurrentHopField(); err != nil {
+		// TODO parameter problem invalid path // (tlino) original scion comment
+		apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rp == sl.getRawPkt())
+		pr, errRet = processResult{}, err
+		fold pr.Mem()
+		return
+	}
+	if p.infoField, err = p.path.GetCurrentInfoField(); err != nil {
+		// TODO parameter problem invalid path // (tlino) original scion comment
+		apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rp == sl.getRawPkt())
+		pr, errRet = processResult{}, err
+		fold pr.Mem()
+		return 
+	}
+	// (tlino) get back access to scionLayer
+	apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rp == sl.getRawPkt())
+	if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
+		pr, errRet = processResult{}, err
+		fold pr.Mem()
+		return
+	}
+	fold p.Mem()
+	if r, err := p.validateHopExpiry(); err != nil {
+		pr, errRet = r, err
+		unfold p.Mem()
+		return 
+	}
+	// verify the new block
+	if r, err := p.verifyCurrentMAC(); err != nil {
+		pr, errRet = r, serrors.WithCtx(err, "info", "after xover")
+		unfold p.Mem()
+		return 
+	}
+	pr, errRet = processResult{}, nil
+	fold pr.Mem()
+	return
+}
 
 // (tlino) Verified
 // (joao) being able to write sequences of pure statements inside
