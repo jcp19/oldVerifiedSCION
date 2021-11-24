@@ -1374,11 +1374,10 @@ func (p *scionPacketProcessor) foo() {
 
 // (tlino) partially verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
-// TODO: verify termination
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures p.Mem()
 ensures pr.Mem()
-decreases _
+decreases
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 	cause error) (pr processResult, errRet error) {
 	unfold p.Mem()
