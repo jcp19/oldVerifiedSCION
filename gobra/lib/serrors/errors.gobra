@@ -189,6 +189,7 @@ type errList []error
 
 // (joao) Trusted
 // preserves forall i int :: 0 <= i && i < len(e) ==> acc(&e[i], 1/10000)
+decreases
 func (e errList) Error() string // {
 //	return fmtErrors(e)
 //}
