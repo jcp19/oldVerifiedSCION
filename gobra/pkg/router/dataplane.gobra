@@ -1372,7 +1372,7 @@ func (p *scionPacketProcessor) foo() {
 	fold p.Mem()
 }
 
-// (tlino) partially verified
+// (tlino) Verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 requires p.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures p.Mem()
