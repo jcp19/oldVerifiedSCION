@@ -444,8 +444,11 @@ func (*SCMPTraceroute) NextLayerType() gopacket.LayerType {
 	return gopacket.LayerTypePayload()
 }
 
-/*
+
 // DecodeFromBytes decodes the given bytes into this layer.
+requires acc(i) && df.Mem() && (forall j int :: 0 <= j && j < len(data) ==> acc(&data[j]))
+ensures acc(i) && df.Mem()
+decreases
 func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 	minLength := 2 + 2 + addr.IABytes + scmpRawInterfaceLen
 	if size := len(data); size < minLength {
@@ -453,21 +456,27 @@ func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback
 		return serrors.New("buffer too short", "min", minLength, "actual", size)
 	}
 	offset := 0
+	assert forall i int :: 0 <= i && i < len(data[offset: offset+2]) ==> &(data[offset : offset+2])[i] == &data[offset + i]
 	i.Identifier = binary.BigEndian.Uint16(data[offset : offset+2])
 	offset += 2
+	assert forall i int :: 0 <= i && i < len(data[offset: offset+2]) ==> &(data[offset : offset+2])[i] == &data[offset + i]
 	i.Sequence = binary.BigEndian.Uint16(data[offset : offset+2])
 	offset += 2
+	assert forall i int :: 0 <= i && i < len(data[offset: offset+addr.IABytes]) ==> &(data[offset : offset+addr.IABytes])[i] == &data[offset + i]
 	i.IA = addr.IAFromRaw(data[offset : offset+addr.IABytes])
 	offset += addr.IABytes
+	assert forall i int :: 0 <= i && i < len(data[offset: offset+scmpRawInterfaceLen]) ==> &(data[offset : offset+scmpRawInterfaceLen])[i] == &data[offset + i]
 	i.Interface = binary.BigEndian.Uint64(data[offset : offset+scmpRawInterfaceLen])
 	offset += scmpRawInterfaceLen
-	i.BaseLayer = layers.BaseLayer{
+	assert forall j int :: 0 <= j && j < len(data[:offset]) ==> &(data[:offset])[j] == &data[j]
+    assert forall j int :: 0 <= j && j < len(data[offset:]) ==> &(data[offset:])[j] == &data[offset + j]
+	i.EmbeddedBaseLayer = layers.BaseLayer{
 		Contents: data[:offset],
 		Payload:  data[offset:],
 	}
 	return nil
 }
-
+/*
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 func (i *SCMPTraceroute) SerializeTo(b gopacket.SerializeBuffer,

@@ -1073,7 +1073,6 @@ requires cap(rawPkt) == bufSize
 requires srcAddr.Mem()
 requires buffer.Mem()
 ensures isZeroSCION(s)
-ensures verifyutils.BytesAcc(rawPkt)
 ensures verifyutils.BytesAcc(origPacket)
 ensures cap(rawPkt) == bufSize
 ensures srcAddr.Mem()
@@ -2008,20 +2007,22 @@ func (p *scionPacketProcessor) doXover() (processResult, error) // {
 //	return processResult{}, nil
 //}
 
+// (tlino) Verified
 // (joao) being able to write sequences of pure statements inside
 // pure functions would be helpful here
-requires pm > 0
-requires acc(&p.infoField, pm) && acc(&p.infoField.ConsDir, pm)
-requires acc(&p.hopField, pm) && acc(&p.hopField.ConsIngress, pm)
-requires p.infoField.ConsDir ==> acc(&p.hopField.ConsEgress, pm)
-ensures acc(&p.infoField, pm) && acc(&p.infoField.ConsDir, pm)
-ensures acc(&p.hopField, pm) && acc(&p.hopField.ConsIngress, pm)
-ensures p.infoField.ConsDir ==> acc(&p.hopField.ConsEgress, pm)
-func (p *scionPacketProcessor) egressInterface(ghost pm perm) uint16 {
+requires p.Mem()
+ensures p.Mem()
+decreases
+func (p *scionPacketProcessor) egressInterface() (res uint16) {
+	unfold p.Mem()
 	if p.infoField.ConsDir {
-		return p.hopField.ConsEgress
+		res = unfolding path.HopFieldInv(p.hopField) in p.hopField.ConsEgress
+		fold p.Mem()
+		return
 	}
-	return p.hopField.ConsIngress
+	res = unfolding path.HopFieldInv(p.hopField) in p.hopField.ConsIngress
+	fold p.Mem()
+	return 
 }
 
 func (p *scionPacketProcessor) validateEgressUp() (processResult, error) /*{
@@ -2052,77 +2053,105 @@ func (p *scionPacketProcessor) validateEgressUp() (processResult, error) /*{
 */
 
 // (tlino) partially verified
-// (tlino) TODO: use scionPacketProcessor.Mem in contracts, show termination
-requires acc(&p.ingressID, 1/1000)
-requires p.ingressID != 0 ==> acc(&p.hopField) && path.HopFieldInv(p.hopField) && acc(&p.infoField) && acc(p.infoField)
-ensures acc(&p.ingressID, 1/1000)
-ensures p.ingressID != 0 ==>  acc(&p.hopField) && path.HopFieldInv(p.hopField) && acc(&p.infoField) && acc(p.infoField)
-func (p *scionPacketProcessor) handleIngressRouterAlert() (processResult, error) {
+// (tlino) TODO: verify termination
+requires p.Mem()
+ensures p.Mem()
+ensures pr.Mem()
+func (p *scionPacketProcessor) handleIngressRouterAlert() (pr processResult, errRet error) {
+	unfold p.Mem()
 	if p.ingressID == 0 {
-		return processResult{}, nil
+		fold p.Mem()
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return 
 	}
 	unfold path.HopFieldInv(p.hopField)
 	ingressAlert := (!p.infoField.ConsDir && p.hopField.EgressRouterAlert) ||
 		(p.infoField.ConsDir && p.hopField.IngressRouterAlert)
 	if !ingressAlert {
 		fold path.HopFieldInv(p.hopField)
-		return processResult{}, nil
+		fold p.Mem()
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return 
 	}
 	p.hopField.IngressRouterAlert = false
 	fold path.HopFieldInv(p.hopField)
-	return p.handleSCMPTraceRouteRequest(p.ingressID)
+	ingressID := p.ingressID
+	fold p.Mem()
+	// (tlino) use new variable for argument
+	// return p.handleSCMPTraceRouteRequest(p.ingressID)
+	return p.handleSCMPTraceRouteRequest(ingressID)
 }
 
-// (joao) TODO: clean-up, minimize permissions, write postconditions
-requires acc(&p.infoField) && acc(&p.infoField.ConsDir)
-requires acc(&p.hopField) && acc(&p.hopField.EgressRouterAlert) && acc(&p.hopField.IngressRouterAlert)
-requires acc(&p.hopField.ConsIngress) && acc(&p.hopField.ConsEgress)
-requires acc(&p.d) && acc(&p.d.external) && /* (p.d.external != nil ==> acc(p.d.external)) */ acc(p.d.external)
-func (p *scionPacketProcessor) handleEgressRouterAlert() (processResult, error) {
+// (tlino) partially verified
+// (tlino) TODO: verify termination 
+requires p.Mem()
+ensures p.Mem()
+ensures pr.Mem()
+func (p *scionPacketProcessor) handleEgressRouterAlert() (pr processResult, errRet error) {
+	unfold p.Mem()
+	unfold path.HopFieldInv(p.hopField)
 	egressAlert := (p.infoField.ConsDir && p.hopField.EgressRouterAlert) ||
 		(!p.infoField.ConsDir && p.hopField.IngressRouterAlert)
+	fold path.HopFieldInv(p.hopField)
+	fold p.Mem()
 	if !egressAlert {
-		return processResult{}, nil
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return 
 	}
-	egressID := p.egressInterface(1/2)
+	egressID := p.egressInterface()
 	// (joao) put parentheses surrounding p.d.external to make it parse
-	if _, ok := (p.d.external)[egressID]; !ok {
-		return processResult{}, nil
+	unfold p.Mem()
+	unfold path.HopFieldInv(p.hopField)
+	unfold acc(DataPlaneMutexInvariant(p.d), _) 
+	if _, ok :=( p.d.external)[egressID]; !ok {
+		fold path.HopFieldInv(p.hopField)
+		fold p.Mem()
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return 
 	}
 	p.hopField.EgressRouterAlert = false
+	fold path.HopFieldInv(p.hopField)
+	fold p.Mem()
 	return p.handleSCMPTraceRouteRequest(egressID)
 }
 
-
+// (tlino) TODO: verify
 // (tlino) p.scionLayer.Payload is subsliced in scmpH and scmpP
+requires p.Mem()
+ensures p.Mem()
+ensures pr.Mem()
 func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
-	interfaceID uint16) (processResult, error) // {
-//	var scmpH slayers.SCMP
-//	if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
-//		log.Debug("Parsing SCMP header of router alert", "err", err)
-//		return processResult{}, nil
-//	}
-//	if scmpH.TypeCode != slayers.CreateSCMPTypeCode(slayers.SCMPTypeTracerouteRequest, 0) {
-//		log.Debug("Packet with router alert, but not traceroute request",
-//			"type_code", scmpH.TypeCode)
-//		return processResult{}, nil
-//	}
-//	var scmpP slayers.SCMPTraceroute
-//	if err := scmpP.DecodeFromBytes(scmpH.Payload, gopacket.NilDecodeFeedback); err != nil {
-//		log.Debug("Parsing SCMPTraceroute", "err", err)
-//		return processResult{}, nil
-//	}
-//	scmpH = slayers.SCMP{
-//		TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeTracerouteReply, 0),
-//	}
-//	scmpP = slayers.SCMPTraceroute{
-//		Identifier: scmpP.Identifier,
-//		Sequence:   scmpP.Sequence,
-//		IA:         p.d.localIA,
-//		Interface:  uint64(interfaceID),
-//	}
-//	return p.packSCMP(&scmpH, &scmpP, nil)
-//}
+	interfaceID uint16) (pr processResult, errRet error) //{
+// 	var scmpH slayers.SCMP
+// 	if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
+// 		log.Debug("Parsing SCMP header of router alert", "err", err)
+// 		return processResult{}, nil
+// 	}
+// 	if scmpH.TypeCode != slayers.CreateSCMPTypeCode(slayers.SCMPTypeTracerouteRequest, 0) {
+// 		log.Debug("Packet with router alert, but not traceroute request",
+// 			"type_code", scmpH.TypeCode)
+// 		return processResult{}, nil
+// 	}
+// 	var scmpP slayers.SCMPTraceroute
+// 	if err := scmpP.DecodeFromBytes(scmpH.Payload, gopacket.NilDecodeFeedback); err != nil {
+// 		log.Debug("Parsing SCMPTraceroute", "err", err)
+// 		return processResult{}, nil
+// 	}
+// 	scmpH = slayers.SCMP{
+// 		TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeTracerouteReply, 0),
+// 	}
+// 	scmpP = slayers.SCMPTraceroute{
+// 		Identifier: scmpP.Identifier,
+// 		Sequence:   scmpP.Sequence,
+// 		IA:         p.d.localIA,
+// 		Interface:  uint64(interfaceID),
+// 	}
+// 	return p.packSCMP(&scmpH, &scmpP, nil)
+// }
 
 // (tlino) Verified
 requires p.Mem()

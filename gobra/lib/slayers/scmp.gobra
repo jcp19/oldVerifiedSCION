@@ -189,6 +189,7 @@ requires acc(s) && df.Mem() && (forall i int :: 0 <= i && i < len(data) ==> acc(
 ensures  acc(s) && df.Mem()
 ensures  ret == nil ==> forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Contents) ==> acc(&(s.BaseLayerEmbedded.Contents)[i])
 ensures  ret == nil ==> forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i])
+decreases
 func (s *SCMP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (ret error) {
 	if size := len(data); size < 4 {
 		df.SetTruncated()
