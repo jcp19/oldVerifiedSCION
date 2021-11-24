@@ -2111,38 +2111,56 @@ func (p *scionPacketProcessor) egressInterface() (res uint16) {
 	return 
 }
 
-func (p *scionPacketProcessor) validateEgressUp() (processResult, error) /*{
-//	egressID := p.egressInterface()
-//	if v, ok := p.d.bfdSessions[egressID]; ok {
-//		if !v.IsUp() {
-//			scmpH := &slayers.SCMP{
-//				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeExternalInterfaceDown, 0),
-//			}
-//			var scmpP gopacket.SerializableLayer = &slayers.SCMPExternalInterfaceDown{
-//				IA:   p.d.localIA,
-//				IfID: uint64(egressID),
-//			}
-//			if _, external := p.d.external[egressID]; !external {
-//				scmpH.TypeCode =
-//					slayers.CreateSCMPTypeCode(slayers.SCMPTypeInternalConnectivityDown, 0)
-//				scmpP = &slayers.SCMPInternalConnectivityDown{
-//					IA:      p.d.localIA,
-//					Ingress: uint64(p.ingressID),
-//					Egress:  uint64(egressID),
-//				}
-//			}
-//			return p.packSCMP(scmpH, scmpP, serrors.New("bfd session down"))
-//		}
-//	}
-	return processResult{}, nil
-}
-*/
+// (tlino) TODO: verify
+requires p.Mem()
+ensures p.Mem()
+ensures pr.Mem()
+decreases
+func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet error) //{
+// 	egressID := p.egressInterface()
+// 	unfold p.Mem()
+// 	unfold acc(DataPlaneMutexInvariant(p.d), _)
+// 	// (tlino) add parantheses to make it parse
+// 	// if v, ok := p.d.bfdSessions[egressID]; ok {
+// 	if v, ok := (p.d.bfdSessions)[egressID]; ok {
+// 		if !v.IsUp() {
+// 			scmpH := &slayers.SCMP{
+// 				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeExternalInterfaceDown, 0),
+// 			}
+// 			var scmpP gopacket.SerializableLayer = &slayers.SCMPExternalInterfaceDown{
+// 				IA:   p.d.localIA,
+// 				IfID: uint64(egressID),
+// 			}
+// 			// (tlino) add parantheses to make it parse
+// 			// if _, external := p.d.external[egressID]; !external {
+// 			if _, external := (p.d.external)[egressID]; !external {
+// 				scmpH.TypeCode =
+// 					slayers.CreateSCMPTypeCode(slayers.SCMPTypeInternalConnectivityDown, 0)
+// 				scmpP = &slayers.SCMPInternalConnectivityDown{
+// 					IA:      p.d.localIA,
+// 					Ingress: uint64(p.ingressID),
+// 					Egress:  uint64(egressID),
+// 				}
+// 			}
+// 			fold scmpH.Mem()
+// 			fold scmpP.Mem()
+// 			fold p.Mem()
+// 			pr, errRet =  p.packSCMP(scmpH, scmpP, serrors.New("bfd session down"))
+// 			return
+// 		}
+// 	}
+// 	fold p.Mem()
+// 	pr, errRet = processResult{}, nil
+// 	fold pr.Mem()
+// 	return 
+// }
 
-// (tlino) partially verified
+// (tlino) Verified
 // (tlino) TODO: verify termination
 requires p.Mem()
 ensures p.Mem()
 ensures pr.Mem()
+decreases
 func (p *scionPacketProcessor) handleIngressRouterAlert() (pr processResult, errRet error) {
 	unfold p.Mem()
 	if p.ingressID == 0 {
@@ -2170,11 +2188,12 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (pr processResult, err
 	return p.handleSCMPTraceRouteRequest(ingressID)
 }
 
-// (tlino) partially verified
+// (tlino) Verified
 // (tlino) TODO: verify termination 
 requires p.Mem()
 ensures p.Mem()
 ensures pr.Mem()
+decreases
 func (p *scionPacketProcessor) handleEgressRouterAlert() (pr processResult, errRet error) {
 	unfold p.Mem()
 	unfold path.HopFieldInv(p.hopField)
@@ -2210,6 +2229,7 @@ func (p *scionPacketProcessor) handleEgressRouterAlert() (pr processResult, errR
 requires p.Mem()
 ensures p.Mem()
 ensures pr.Mem()
+decreases _
 func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 	interfaceID uint16) (pr processResult, errRet error) //{
 // 	var scmpH slayers.SCMP
