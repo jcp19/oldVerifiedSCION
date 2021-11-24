@@ -235,7 +235,8 @@ type scmpError struct {
 	Cause    error
 }
 
-decreases
+// (tlino) TODO: built in error.Error() needs to terminate
+decreases _
 func (e scmpError) Error() string {
 	return (serrors.New("scmp", "typecode", e.TypeCode, "cause", e.Cause)).Error()
 }
@@ -2127,14 +2128,31 @@ ensures pr.Mem()
 func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 	interfaceID uint16) (pr processResult, errRet error) //{
 // 	var scmpH slayers.SCMP
-// 	if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
-// 		log.Debug("Parsing SCMP header of router alert", "err", err)
-// 		return processResult{}, nil
+// 	unfold p.Mem()
+
+// 	// (tlino) p.scionLayer.EmbeddedBaseLayer.Payload is a subslice of p.rawPkt
+// 	// (tlino) p.scionLayer.EmbeddedBaseLayer.Payload is being read and embedded
+// 	// (tlino) as a field in scmpH and scmpP. However the underlaying data isn't modified and
+// 	// (tlino) scmpH and scmpP with the subslice of p.rawPkt exists only in the begining of this function.
+// 	// (tlino) Thus, we don't explicitly transfer permissions
+
+// 	// (tlino) access Payload over EmbeddedBaseLayer, since Gobra has no support for embedded fields
+// 	// if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
+// 	if err := scmpH.DecodeFromBytes(p.scionLayer.EmbeddedBaseLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
+// 		// (tlino) log not supported yet
+// 		// log.Debug("Parsing SCMP header of router alert", "err", err)
+// 		pr, errRet = processResult{}, nil
+// 		fold pr.Mem()
+// 		return
 // 	}
 // 	if scmpH.TypeCode != slayers.CreateSCMPTypeCode(slayers.SCMPTypeTracerouteRequest, 0) {
-// 		log.Debug("Packet with router alert, but not traceroute request",
-// 			"type_code", scmpH.TypeCode)
-// 		return processResult{}, nil
+// 		// (tlino)  log not supported yet
+// 		// log.Debug("Packet with router alert, but not traceroute request",
+// 		// 	"type_code", scmpH.TypeCode)
+
+// 		pr, errRet = processResult{}, nil
+// 		fold pr.Mem()
+// 		return
 // 	}
 // 	var scmpP slayers.SCMPTraceroute
 // 	if err := scmpP.DecodeFromBytes(scmpH.Payload, gopacket.NilDecodeFeedback); err != nil {
