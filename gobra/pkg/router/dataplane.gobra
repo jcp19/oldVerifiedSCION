@@ -1585,6 +1585,7 @@ requires acc(DataPlaneMutexInvariant(p.d), _)
 ensures errRet != nil ==> acc(p) && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 ensures errRet != nil ==> (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
 ensures pr.Mem()
+decreases
 func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 	var ok bool
 	unfold p.scionLayer.Mem()
