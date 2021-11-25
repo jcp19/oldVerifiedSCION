@@ -2243,20 +2243,54 @@ ensures p.Mem()
 ensures pr.Mem()
 decreases _
 func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
-	interfaceID uint16) (pr processResult, errRet error) //{
-// 	var scmpH slayers.SCMP
-// 	unfold p.Mem()
-// 	p.scionLayer.Mem() --> BytesAcc(rawPkt)
+	interfaceID uint16) (pr processResult, errRet error) {
+	// (tlino) use pointer
+	// var scmpH slayers.SCMP
+	var scmpH *slayers.SCMP = &slayers.SCMP{}
+	unfold p.Mem()
 
-// 	// (tlino) access Payload over EmbeddedBaseLayer, since Gobra has no support for embedded fields
-// 	// if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
-// 	if err := scmpH.DecodeFromBytes(p.scionLayer.EmbeddedBaseLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
-// 		// (tlino) log not supported yet
-// 		// log.Debug("Parsing SCMP header of router alert", "err", err)
-// 		pr, errRet = processResult{}, nil
-// 		fold pr.Mem()
-// 		return
-// 	}
+	// (tlino) get access to payload, use new variables to make it work
+	sl := p.scionLayer
+	rp := p.rawPkt
+	pp := p.path
+	pl := p.scionLayer.LayerPayload()
+	sl.getLayerPayloadAcc(pl, pp, rp)
+	assert verifyutils.BytesAcc(pl) --* (sl.Mem() && pl == sl.LayerPayload() && rp == sl.getRawPkt() && pp == sl.getRawScionPath())
+	assert verifyutils.BytesAcc(pl)
+
+	assert acc(scmpH)
+
+	// (tlino) access Payload over EmbeddedBaseLayer, since Gobra has no support for embedded fields.
+	// (tlino) use gopacket.NilDecodeFeedback{} instead of var gopacket.NilDecodeFeedback.
+	// if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
+	df := gopacket.NilDecodeFeedback{}
+	fold df.Mem()
+	if err := scmpH.DecodeFromBytes(pl, df); err != nil {
+		// (tlino) log not supported yet
+		// log.Debug("Parsing SCMP header of router alert", "err", err)
+
+		// get back access to scionLayer
+		apply verifyutils.BytesAcc(pl) --* (sl.Mem() && pl == sl.LayerPayload() && rp == sl.getRawPkt() && pp == sl.getRawScionPath())
+		fold p.Mem()
+
+		pr, errRet = processResult{}, nil
+		fold pr.Mem()
+		return
+	}
+
+	// (tlino) get back access to payload from scmpH
+	scmpH.getRawPktAcc(pl)
+	assert verifyutils.BytesAcc(pl) --* scmpH.MemAfterDecode()
+	assert verifyutils.BytesAcc(pl)
+
+	// (tlino) get back access to scionLayer
+	apply verifyutils.BytesAcc(pl) --* (sl.Mem() && pl == sl.LayerPayload() && rp == sl.getRawPkt() && pp == sl.getRawScionPath())
+	fold p.Mem()
+
+	pr, errRet = processResult{}, nil
+	fold pr.Mem()
+	return
+	
 // 	if scmpH.TypeCode != slayers.CreateSCMPTypeCode(slayers.SCMPTypeTracerouteRequest, 0) {
 // 		// (tlino)  log not supported yet
 // 		// log.Debug("Packet with router alert, but not traceroute request",
@@ -2281,7 +2315,7 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 // 		Interface:  uint64(interfaceID),
 // 	}
 // 	return p.packSCMP(&scmpH, &scmpP, nil)
-// }
+}
 
 // (tlino) Verified
 requires p.Mem()

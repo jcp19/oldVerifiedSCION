@@ -350,7 +350,7 @@ requires r == s.getRawPkt()
 ensures verifyutils.BytesAcc(pld)
 ensures verifyutils.BytesAcc(pld) --* (s.Mem() && pld == s.LayerPayload() && r == s.getRawPkt() && p == s.getRawScionPath())
 decreases
-func (s *SCION) getLayerPayloadAcc(pld []byte, p *scion.Raw, r  []byte) {
+func (s *SCION) getLayerPayloadAcc(pld []byte, p *scion.Raw, r []byte) {
 	unfold s.Mem()
 	package verifyutils.BytesAcc(pld) --* (s.Mem() && pld == s.LayerPayload() && r == s.getRawPkt() && p == s.getRawScionPath()) {
 		fold s.Mem()

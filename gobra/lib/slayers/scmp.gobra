@@ -70,6 +70,9 @@ type SCMP struct {
 	Checksum uint16
 
 	scn *SCION
+
+	// ghost
+	rawPkt []byte
 }
 
 pred (s *SCMP) Mem() {
@@ -79,11 +82,58 @@ pred (s *SCMP) Mem() {
 	(s.scn != nil ==> s.scn.Mem())
 }
 
+pred (s *SCMP) MemAfterDecode() {
+	acc(s) &&
+	(len(s.rawPkt) == len(s.BaseLayerEmbedded.Contents) + len(s.BaseLayerEmbedded.Payload)) &&
+	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Contents) ==> acc(&(s.BaseLayerEmbedded.Contents)[i])) &&
+	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i])) &&
+	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Contents) ==> &(s.BaseLayerEmbedded.Contents)[i] == &(s.rawPkt)[i]) &&
+	(forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> &(s.BaseLayerEmbedded.Payload)[i] == &(s.rawPkt)[len(s.BaseLayerEmbedded.Contents) + i])
+}
+
+// (tlino) ghost functions to transfer permission from *SCMP
+
+ghost
+requires s.MemAfterDecode()
+requires r == s.GetRawPkt()
+ensures verifyutils.BytesAcc(r)
+ensures verifyutils.BytesAcc(r) --* s.MemAfterDecode()
+func (s *SCMP) getRawPktAcc(r []byte)
+
+ghost
+requires s.MemAfterDecode()
+requires p == s.GetPayload()
+requires r == s.GetRawPkt()
+ensures verifyutils.BytesAcc(p)
+ensures verifyutils.BytesAcc(p) --* (s.MemAfterDecode() && p == s.GetPayload() && r == s.GetRawPkt())
+func (s *SCMP) getPayloadAcc(p []byte, r []byte)
+
 // LayerType returns LayerTypeSCMP.
 pure func (s *SCMP) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMP
 	return LayerTypeSCMP()
 }
+
+// (tlino) start of getters
+// (tlino) added getters to make code easier to verify
+
+pure
+requires acc(s.MemAfterDecode(), 1/1000)
+decreases
+ensures b == unfolding acc(s.MemAfterDecode(), 1/1000) in s.rawPkt
+func (s *SCMP) GetRawPkt() (b []byte) {
+	return unfolding acc(s.MemAfterDecode(), 1/1000) in s.rawPkt
+}
+
+pure
+requires acc(s.MemAfterDecode(), 1/1000)
+decreases
+ensures b == unfolding acc(s.MemAfterDecode(), 1/1000) in s.BaseLayerEmbedded.Payload
+func (s *SCMP) GetPayload() (b []byte) {
+	return unfolding acc(s.MemAfterDecode(), 1/1000) in s.BaseLayerEmbedded.Payload
+}
+
+// (tlino) end of getters
 
 // CanDecode returns the set of layer types that this DecodingLayer can decode.
 /*
@@ -185,16 +235,17 @@ func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOp
 }
 
 // DecodeFromBytes decodes the given bytes into this layer.
-requires acc(s) && df.Mem() && (forall i int :: 0 <= i && i < len(data) ==> acc(&data[i]))
-ensures  acc(s) && df.Mem()
-ensures  ret == nil ==> forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Contents) ==> acc(&(s.BaseLayerEmbedded.Contents)[i])
-ensures  ret == nil ==> forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i])
+requires acc(s) && df.Mem() && verifyutils.BytesAcc(data)
+ensures df.Mem()
+ensures ret == nil ==> s.MemAfterDecode() && data == s.GetRawPkt()
+ensures ret != nil ==> acc(s) && verifyutils.BytesAcc(data)
 decreases
 func (s *SCMP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (ret error) {
 	if size := len(data); size < 4 {
 		df.SetTruncated()
 		return serrors.New("SCMP layer length is less then 4 bytes", "minimum", 4, "actual", size)
 	}
+	unfold verifyutils.BytesAcc(data)
 	s.TypeCode = CreateSCMPTypeCode(SCMPType(data[0]), SCMPCode(data[1]))
 	assert &(data[2:4])[0] == &data[2]
 	assert &(data[2:4])[1] == &data[3]
@@ -202,6 +253,9 @@ func (s *SCMP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (ret err
 	assert forall i int :: 0 <= i && i < 4 ==> &(data[:4])[i] == &data[i] 
 	assert forall i int :: 0 <= i && i < len(data[4:]) ==> &(data[4:])[i] == &data[4 + i] 
 	s.BaseLayerEmbedded = layers.BaseLayer{Contents: data[:4], Payload: data[4:]}
+	s.rawPkt = data
+	assert len(data) == len(s.BaseLayerEmbedded.Contents) + len(s.BaseLayerEmbedded.Payload)
+	fold s.MemAfterDecode()
 	return nil
 }
 
