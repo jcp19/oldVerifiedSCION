@@ -163,12 +163,12 @@ func (s *Raw) ToDecoded() (resDecoded *Decoded, resErr error) {
 	}
 	assert forall i int :: 0 <= i && i < len((s.Raw)[0:MetaLen]) ==> acc(&((s.Raw)[0:MetaLen])[i])
 	assert forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
-	assert forall i int :: 0 <= i && i < len(s.rawPacket) ==> acc(&(s.rawPacket)[i])
 	decoded := &Decoded{}
 	if err := decoded.DecodeFromBytes(s.Raw); err != nil {
 		fold s.Mem()
 		return nil, err
 	}
+	assert forall i int :: 0 <= i && i < len(s.rawPacket) ==> acc(&(s.rawPacket)[i])
 	fold s.Mem()
 	return decoded, nil
 }
