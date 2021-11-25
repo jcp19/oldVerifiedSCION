@@ -23,5 +23,5 @@ jobs:
           imageVersion: verified-scion-preview-without-selective
           packageLocation: gobra
           globalTimeout: 4h
-          packageTimeout: 2h
+          packageTimeout: 4h
           
