@@ -90,7 +90,7 @@ type bfdSession interface {
 	Run() (err error)
 
 	requires acc(Mem(), _)
-	ensures  acc(c.SendChannel(), _) && c.SendGivenPerm() == (*layers.BFD).Mem!<_!>;
+	ensures  acc(c.SendChannel(), _) && c.SendGivenPerm() == (*layers.BFD).MemWithOutSlices!<_!>;
 	decreases
 	Messages() (c chan<- *layers.BFD)
 
@@ -1187,7 +1187,8 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 // (tlino) Verified
 // (joao) `oh` is not used anywhere in the function
 requires acc(DataPlaneMutexInvariant(d), _)
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+requires verifyutils.BytesAcc(data)
+ensures verifyutils.BytesAcc(data)
 decreases
 func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
 	unfold acc(DataPlaneMutexInvariant(d), _)
@@ -1205,9 +1206,12 @@ func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []by
 	//}
 	tmp := gopacket.NilDecodeFeedback{}
 	fold tmp.Mem()
+	unfold verifyutils.BytesAcc(data)
 	if err := p.DecodeFromBytes(data, tmp); err != nil {
+		fold verifyutils.BytesAcc(data)
 		return err
 	}
+	fold verifyutils.BytesAcc(data)
 
 	translateBFDMemPred(p)
 
@@ -1223,19 +1227,20 @@ func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []by
 }
 
 ghost
-requires b.Mem()
-ensures  (*layers.BFD).Mem!<_!>(b)
+requires b.MemWithOutSlices()
+ensures  (*layers.BFD).MemWithOutSlices!<_!>(b)
 decreases
 func translateBFDMemPred(b *layers.BFD) {
-	unfold (*layers.BFD).Mem(b)
-	fold (*layers.BFD).Mem!<_!>(b)
+	unfold (*layers.BFD).MemWithOutSlices(b)
+	fold (*layers.BFD).MemWithOutSlices!<_!>(b)
 }
 
 // (tlino) partially verified 
 // depends on issue #341
 preserves src.Mem()
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+requires verifyutils.BytesAcc(data)
 requires acc(DataPlaneMutexInvariant(d), _)
+ensures verifyutils.BytesAcc(data)
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 	// (tlino) add unfolding
 	// if len(d.bfdSessions) == 0 {
@@ -1258,10 +1263,12 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 
 	tmp := gopacket.NilDecodeFeedback{}
 	fold tmp.Mem()
+	unfold verifyutils.BytesAcc(data)
 	if err := p.DecodeFromBytes(data, tmp); err != nil {
+		fold verifyutils.BytesAcc(data)
 		return err
 	}
-
+	fold verifyutils.BytesAcc(data)
 	translateBFDMemPred(p)
 
 // 	ifID := uint16(0)

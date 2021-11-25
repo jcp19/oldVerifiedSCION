@@ -292,6 +292,10 @@ pred (d *BFD) Mem() {
 	acc(d) && (d.AuthPresent ==> (d.AuthHeader).Mem())
 }
 
+pred (d *BFD) MemWithOutSlices() {
+	acc(d)
+}
+
 ensures bfd.Mem()
 func satisfiableBFDMem() (bfd *BFD) {
 	h := &BFDAuthHeader{}
@@ -358,6 +362,8 @@ func decodeBFD(data []byte, p gopacket.PacketBuilder) error {
 ensures err != nil
 func havocError() (err error)
 
+// (tlino) The sbuslices of data are not used by the scion router.
+// (tlino) Thus, we can give back access to the data slice
 // DecodeFromBytes analyses a byte slice and attempts to decode it as a BFD
 // control packet.
 //
@@ -366,8 +372,10 @@ func havocError() (err error)
 // Upon failure, it returns an error (non nil).
 requires acc(d) && df.Mem()
 requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-ensures  df.Mem()
-ensures  err == nil ==> d.Mem()
+ensures forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
+ensures df.Mem()
+ensures err == nil ==> d.MemWithOutSlices()
+ensures err != nil ==> acc(d)
 decreases _
 func (d *BFD) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (err error) /* {
 
