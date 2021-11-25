@@ -98,6 +98,7 @@ requires s.MemAfterDecode()
 requires r == s.GetRawPkt()
 ensures verifyutils.BytesAcc(r)
 ensures verifyutils.BytesAcc(r) --* s.MemAfterDecode()
+decreases
 func (s *SCMP) getRawPktAcc(r []byte)
 
 ghost
@@ -106,9 +107,11 @@ requires p == s.GetPayload()
 requires r == s.GetRawPkt()
 ensures verifyutils.BytesAcc(p)
 ensures verifyutils.BytesAcc(p) --* (s.MemAfterDecode() && p == s.GetPayload() && r == s.GetRawPkt())
+decreases
 func (s *SCMP) getPayloadAcc(p []byte, r []byte)
 
 // LayerType returns LayerTypeSCMP.
+decreases
 pure func (s *SCMP) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMP
 	return LayerTypeSCMP()
@@ -146,6 +149,7 @@ func (s *SCMP) CanDecode() gopacket.LayerClass {
 // NextLayerType use the typecode to select the right next decoder.
 // If the SCMP type is unknown, the next layer is gopacket.LayerTypePayload.
 preserves s.Mem()
+decreases
 func (s *SCMP) NextLayerType() gopacket.LayerType {
 	switch unfolding s.Mem() in s.TypeCode.Type() {
 	case SCMPTypeDestinationUnreachable:

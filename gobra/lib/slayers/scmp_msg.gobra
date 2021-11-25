@@ -430,6 +430,32 @@ type SCMPTraceroute struct {
 	Sequence   uint16
 	IA         addr.IA
 	Interface  uint64
+
+	// ghost
+	rawPkt []byte
+}
+
+pred (s *SCMPTraceroute) Mem() {
+	acc(s) &&
+	verifyutils.BytesAcc(s.EmbeddedBaseLayer.Contents) &&
+	verifyutils.BytesAcc(s.EmbeddedBaseLayer.Payload)
+}
+
+// (tlino) ghost function to obtain access to rawPkt
+ghost
+requires s.Mem()
+requires r == s.GetRawPkt()
+ensures verifyutils.BytesAcc(r)
+ensures verifyutils.BytesAcc(r) --* (s.Mem() && r == s.GetRawPkt())
+decreases
+func (s *SCMPTraceroute) GetRawPktAcc(r []byte)
+
+pure
+requires acc(s.Mem(), 1/1000)
+ensures res == unfolding acc(s.Mem(), 1/1000) in s.rawPkt
+decreases
+func (s *SCMPTraceroute) GetRawPkt() (res []byte) {
+	return unfolding acc(s.Mem(), 1/1000) in s.rawPkt
 }
 
 // LayerType returns LayerTypeSCMPTraceroute.
@@ -446,15 +472,18 @@ func (*SCMPTraceroute) NextLayerType() gopacket.LayerType {
 
 
 // DecodeFromBytes decodes the given bytes into this layer.
-requires acc(i) && df.Mem() && (forall j int :: 0 <= j && j < len(data) ==> acc(&data[j]))
-ensures acc(i) && df.Mem()
+requires acc(i) && df.Mem() && verifyutils.BytesAcc(data)
+ensures df.Mem()
+ensures err == nil ==> i.Mem() && data == i.GetRawPkt()
+ensures err != nil ==> acc(i)
 decreases
-func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
+func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (err error) {
 	minLength := 2 + 2 + addr.IABytes + scmpRawInterfaceLen
 	if size := len(data); size < minLength {
 		df.SetTruncated()
 		return serrors.New("buffer too short", "min", minLength, "actual", size)
 	}
+	unfold verifyutils.BytesAcc(data)
 	offset := 0
 	assert forall i int :: 0 <= i && i < len(data[offset: offset+2]) ==> &(data[offset : offset+2])[i] == &data[offset + i]
 	i.Identifier = binary.BigEndian.Uint16(data[offset : offset+2])
@@ -474,6 +503,11 @@ func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback
 		Contents: data[:offset],
 		Payload:  data[offset:],
 	}
+	// ghost
+	i.rawPkt = data
+	fold verifyutils.BytesAcc(i.EmbeddedBaseLayer.Contents)
+	fold verifyutils.BytesAcc(i.EmbeddedBaseLayer.Payload)
+	fold i.Mem()
 	return nil
 }
 /*
