@@ -822,6 +822,7 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 requires n >= 0
 ensures msgs.MemPartiallyInitialized()
 ensures len(msgs) == n
+decreases _
 func NewReadMessages(n int) (msgs Messages) //{
 // 	m := make(Messages, n)
 // 	for i := range m {

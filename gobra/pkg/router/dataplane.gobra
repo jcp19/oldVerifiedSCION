@@ -867,6 +867,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 // (tlino) used to be part of the read closure
 ensures msgs.Mem()
 ensures forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
+decreases
 func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta) {
 	msgs := conn.NewReadMessages(inputBatchCnt)
 	unfold msgs.MemPartiallyInitialized()
@@ -879,6 +880,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 	invariant 0 <= i && i <= len(msgs)
 	invariant forall j int :: 0 <= j && j < i ==> (&msgs[j]).Mem()
 	invariant forall j int :: i <= j && j < len(msgs) ==> (&msgs[j]).MemPartiallyInitialized()
+	decreases len(msgs) - i
 	for i := 0; i < len(msgs); i++ {
 		unfold (&msgs[i]).MemPartiallyInitialized()
 		(msgs[i].Buffers)[0] = make([]byte, bufSize)
@@ -891,6 +893,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 	invariant 0 <= i && i <= len(metas)
 	invariant forall j int :: i <= j && j < len(metas) ==> acc(&metas[j]) && metas[j].Src == nil && metas[j].Local == nil
 	invariant forall j int :: 0 <= j && j < i ==> (&metas[j]).Mem()
+	decreases len(metas) - i
 	for i := 0; i < len(metas); i++ {
 		fold (&metas[i]).Mem()
 	}
@@ -987,6 +990,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 requires msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs)
 ensures msgs.Mem()
+decreases
 func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
 	unfold msgs.Mem()
 
@@ -998,6 +1002,7 @@ func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
 
 	invariant 0 <= i && i <= pkts
 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
+	decreases pkts - i
 	for i := 0; i < pkts; i++ {
 		unfold (&msgs[i]).Mem()
 		(msgs[i].Buffers)[0] = ((msgs[i].Buffers)[0])[:bufSize]
@@ -2234,6 +2239,7 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 	interfaceID uint16) (pr processResult, errRet error) //{
 // 	var scmpH slayers.SCMP
 // 	unfold p.Mem()
+// 	p.scionLayer.Mem() --> BytesAcc(rawPkt)
 
 // 	// (tlino) access Payload over EmbeddedBaseLayer, since Gobra has no support for embedded fields
 // 	// if err := scmpH.DecodeFromBytes(p.scionLayer.Payload, gopacket.NilDecodeFeedback); err != nil {
