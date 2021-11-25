@@ -31,21 +31,26 @@ import (
 type Raw struct {
 	Base
 	Raw []byte
+
+	/* ghost */
+	rawPacket []byte
 }
 
 pred (r *Raw) Mem() {
 	BaseInvariant(&r.Base) &&
 	acc(&r.Raw) && 
+	acc(&r.rawPacket) && 
 	// assumption clarified in https://github.com/scionproto/scion/issues/4094
-	len(r.Raw) >= r.Len() &&
-	forall i int :: 0 <= i && i < len(r.Raw) ==> acc(&(r.Raw)[i])
+	len(r.Raw) >= r.Len() && r.Len() > 0 &&
+	len(r.rawPacket) >= r.Len() &&
+	(r.rawPacket)[0:r.Len()] == r.Raw
 }
 
 // DecodeFromBytes only decodes the PathMetaHeader. Otherwise the nothing is decoded and simply kept
 // as raw bytes.
 requires acc(s)
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-ensures res == nil ==> s.Mem()
+preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/10)
+ensures res == nil ==> s.Mem() && s.GetRawPacket() == data
 ensures res != nil ==> acc(s)
 decreases
 func (s *Raw) DecodeFromBytes(data []byte) (res error) {
@@ -53,18 +58,26 @@ func (s *Raw) DecodeFromBytes(data []byte) (res error) {
 		return err
 	}
 	assert BaseInvariant(&s.Base)
-	pathLen := s.Len()
+	/* ghost */ pathLen := s.Len()
+	s.rawPacket = data
 	if len(data) < pathLen {
 		unfold BaseInvariant(&s.Base)
 		return serrors.New("RawPath raw too short", "expected", pathLen, "actual", len(data))
 	}
 	assert BaseInvariant(&s.Base)
 	assert len(data) >= pathLen
-	assert forall i int :: 0 <= i && i < pathLen ==> &data[:pathLen][i] == &data[i] && acc(&data[i])
+	assert forall i int :: 0 <= i && i < pathLen ==> &data[:pathLen][i] == &data[i] // && acc(&data[i])
 	assert 0 <= pathLen
+	assert pathLen == s.Len()
 	s.Raw = data[:pathLen]
 	fold s.Mem()
 	return nil
+}
+
+/* ghost */
+requires acc(s.Mem(), _)
+pure func (s *Raw) GetRawPacket() []byte {
+	return unfolding s.Mem() in s.rawPacket
 }
 
 // SerializeTo writes the path to a slice. The slice must be big enough to hold the entire data,
@@ -73,6 +86,7 @@ func (s *Raw) DecodeFromBytes(data []byte) (res error) {
 //        it modifies the underlying buffer
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+preserves forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i])
 decreases
 func (s *Raw) SerializeTo(b []byte) error {
 	unfold s.Mem()
@@ -97,6 +111,7 @@ func (s *Raw) SerializeTo(b []byte) error {
 	// (joao) use a "weaker" form of copy to prove memory safety to
 	//        decrease verification time
 	// copy(b, s.Raw, perm(1/2))
+	assert forall i int :: 0 <= i && i < len(s.Raw) ==> &(s.rawPacket)[i] == &(s.Raw)[i]
 	verifyutils.OutlineMemorySafeCopy(b, s.Raw)
 	fold BaseInvariant(&s.Base)
 	fold s.Mem()
@@ -105,7 +120,9 @@ func (s *Raw) SerializeTo(b []byte) error {
 
 // Reverse reverses the path such that it can be used in the reverse direction.
 requires s.Mem()
+requires forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i])
 ensures res == nil ==> s.Mem()
+ensures res == nil ==> forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i])
 decreases
 func (s *Raw) Reverse() (res error) {
 	// XXX(shitz): The current implementation is not the most performant, since it parses the entire
@@ -129,11 +146,14 @@ func (s *Raw) Reverse() (res error) {
 
 // ToDecoded transforms a scion.Raw to a scion.Decoded.
 preserves s.Mem()
+preserves forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i])
 ensures resErr == nil ==> DecodedInvariant(resDecoded)
 decreases
 func (s *Raw) ToDecoded() (resDecoded *Decoded, resErr error) {
 	unfold s.Mem()
-	assert forall i int :: 0 <= i && i < MetaLen ==> &(s.Raw)[:MetaLen][i] == &(s.Raw)[i]
+	assert forall i int :: 0 <= i && i < len(s.rawPacket) ==> acc(&(s.rawPacket)[i])
+	assert forall i int :: 0 <= i && i < len(s.Raw) ==> &(s.rawPacket)[i] == &(s.Raw)[i]
+	assert forall i int :: 0 <= i && i < MetaLen ==> &(s.Raw)[0:MetaLen][i] == &(s.Raw)[i]
 	// Serialize PathMeta to ensure potential changes are reflected Raw.
 	// (joao) Added parentheses, replaced call to `SerializeTo` by call to `SerializePathMetaTo`
 	// if err := s.PathMeta.SerializeTo((s.Raw)[:MetaLen]); err != nil {
@@ -141,6 +161,9 @@ func (s *Raw) ToDecoded() (resDecoded *Decoded, resErr error) {
 		fold s.Mem()
 		return nil, err
 	}
+	assert forall i int :: 0 <= i && i < len((s.Raw)[0:MetaLen]) ==> acc(&((s.Raw)[0:MetaLen])[i])
+	assert forall i int :: 0 <= i && i < len(s.Raw) ==> acc(&(s.Raw)[i])
+	assert forall i int :: 0 <= i && i < len(s.rawPacket) ==> acc(&(s.rawPacket)[i])
 	decoded := &Decoded{}
 	if err := decoded.DecodeFromBytes(s.Raw); err != nil {
 		fold s.Mem()
@@ -153,6 +176,7 @@ func (s *Raw) ToDecoded() (resDecoded *Decoded, resErr error) {
 // GetInfoField returns the InfoField at a given index.
 requires 0 <= idx
 preserves  acc(s.Mem(), 1/100)
+preserves forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i], 1/100)
 ensures retErr != nil ==> retInfo == nil
 ensures retErr == nil ==> acc(retInfo)
 decreases
@@ -183,6 +207,7 @@ func (s *Raw) GetInfoField(idx int) (retInfo *path.InfoField, retErr error) {
 // GetCurrentInfoField is a convenience method that returns the current hop field pointed to by the
 // CurrINF index in the path meta header.
 preserves acc(s.Mem(), 1/100)
+preserves forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i], 1/100)
 ensures retErr != nil ==> retInfo == nil
 ensures retErr == nil ==> acc(retInfo)
 decreases
@@ -201,6 +226,7 @@ func (s *Raw) GetCurrentInfoField() (retInfo *path.InfoField, retErr error) {
 // SetInfoField updates the InfoField at a given index.
 requires idx >= 0
 preserves s.Mem() && acc(info, 1/1000)
+preserves forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i])
 decreases
 func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
 	unfold s.Mem()
@@ -230,6 +256,7 @@ func (s *Raw) SetInfoField(info *path.InfoField, idx int) error {
 // GetHopField returns the HopField at a given index.
 requires 0 <= idx
 preserves acc(s.Mem(), 1/100)
+preserves forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i], 1/100)
 ensures retErr != nil ==> retHop == nil
 ensures retErr == nil ==> path.HopFieldInv(retHop)
 decreases
@@ -260,6 +287,7 @@ func (s *Raw) GetHopField(idx int) (retHop *path.HopField, retErr error) {
 // GetCurrentHopField is a convenience method that returns the current hop field pointed to by the
 // CurrHF index in the path meta header.
 preserves acc(s.Mem(), 1/100)
+preserves forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i], 1/100)
 ensures retErr != nil ==> retHop == nil
 ensures retErr == nil ==> path.HopFieldInv(retHop)
 decreases
@@ -279,6 +307,7 @@ func (s *Raw) GetCurrentHopField() (retHop *path.HopField, retErr error) {
 requires idx >= 0
 preserves s.Mem() 
 preserves hop != nil ==> acc(path.HopFieldInv(hop), 1/100)
+preserves forall i int :: 0 <= i && i < len(s.GetRawPacket()) ==> acc(&(s.GetRawPacket())[i])
 // preserves hop != nil && forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i], 1/100)
 decreases
 func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
@@ -304,7 +333,8 @@ func (s *Raw) SetHopField(hop *path.HopField, idx int) error {
 	// (joao) add parentheses surrounding (s.Raw)
 	// (joao) introduced `ret` var
 	ret := hop.SerializeTo((s.Raw)[hopOffset : hopOffset+path.HopLen])
-	fold acc(BaseInvariant(&s.Base), 1/2) 
+	unfold acc(BaseInvariant(&s.Base), 1/4) 
+	fold acc(BaseInvariant(&s.Base), 3/4) 
 	fold s.Mem()
 	return ret
 }
@@ -320,7 +350,8 @@ func (r *Raw) ExchangePerms() {
 // (joao) this method did not exist before but it is required to handle
 // with Gobra's bugs with embedded fields + interfaces 
 requires acc(BaseInvariant(&r.Base), _)
+ensures  res >= 0
 decreases
-pure func (r*Raw) Len() int {
+pure func (r*Raw) Len() (res int) {
 	return (&r.Base).Len()
 }
