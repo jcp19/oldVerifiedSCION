@@ -357,7 +357,7 @@ pure func (r *Raw) GetNumHops() (res int) {
 	return unfolding acc(r.Mem(), 1/1000) in getNumHops(&(r.Base))
 }
 
-// (tlino) added to speed up verification, this function deligates the IncPath call
+// (tlino) added to speed up verification, this function delegates the IncPath call
 requires r.Mem()
 ensures r.Mem()
 decreases

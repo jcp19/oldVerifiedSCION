@@ -1511,7 +1511,6 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	// (tlino) use Gobra's copy function
 	// copy(quote[len(updated):], p.origPacket[len(updated):quoteLen])
 	unfold verifyutils.BytesAcc(p.origPacket)
-	assume quoteLen <= len(p.origPacket)
 	assert forall i int :: 0 <= i && i < (len(quote) - len(updated)) ==> &(quote[len(updated):])[i] == &quote[i + len(updated)]
 	assert forall i int :: 0 <= i && i < (len(quote) - len(updated)) ==> acc(&(quote[len(updated):])[i])
 	assert forall i int :: 0 <= i && i < len(p.origPacket) ==>  acc(&(p.origPacket)[i], 1/100000)
@@ -2108,18 +2107,18 @@ func (p *scionPacketProcessor) doXover() (pr processResult, errRet error) {
 // (tlino) Verified
 // (joao) being able to write sequences of pure statements inside
 // pure functions would be helpful here
-requires p.Mem()
-ensures p.Mem()
+requires acc(p.Mem(), 1/10)
+ensures acc(p.Mem(), 1/10)
 decreases
 func (p *scionPacketProcessor) egressInterface() (res uint16) {
-	unfold p.Mem()
+	unfold acc(p.Mem(), 1/10)
 	if p.infoField.ConsDir {
-		res = unfolding path.HopFieldInv(p.hopField) in p.hopField.ConsEgress
-		fold p.Mem()
+		res = unfolding acc(path.HopFieldInv(p.hopField), 1/100) in p.hopField.ConsEgress
+		fold acc(p.Mem(), 1/10)
 		return
 	}
-	res = unfolding path.HopFieldInv(p.hopField) in p.hopField.ConsIngress
-	fold p.Mem()
+	res = unfolding acc(path.HopFieldInv(p.hopField), 1/100) in p.hopField.ConsIngress
+	fold acc(p.Mem(), 1/10)
 	return 
 }
 
@@ -2168,7 +2167,6 @@ func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet erro
 // }
 
 // (tlino) Verified
-// (tlino) TODO: verify termination
 requires p.Mem()
 ensures p.Mem()
 ensures pr.Mem()
@@ -2201,7 +2199,6 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (pr processResult, err
 }
 
 // (tlino) Verified
-// (tlino) TODO: verify termination 
 requires p.Mem()
 ensures p.Mem()
 ensures pr.Mem()
@@ -2223,7 +2220,7 @@ func (p *scionPacketProcessor) handleEgressRouterAlert() (pr processResult, errR
 	unfold p.Mem()
 	unfold path.HopFieldInv(p.hopField)
 	unfold acc(DataPlaneMutexInvariant(p.d), _) 
-	if _, ok :=( p.d.external)[egressID]; !ok {
+	if _, ok := (p.d.external)[egressID]; !ok {
 		fold path.HopFieldInv(p.hopField)
 		fold p.Mem()
 		pr, errRet = processResult{}, nil

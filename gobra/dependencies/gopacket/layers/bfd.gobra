@@ -363,6 +363,7 @@ ensures err != nil
 func havocError() (err error)
 
 // (tlino) The sbuslices of data are not used by the scion router.
+// (tlino) See discussion here: https://github.com/scionproto/scion/issues/4131
 // (tlino) Thus, we can give back access to the data slice
 // DecodeFromBytes analyses a byte slice and attempts to decode it as a BFD
 // control packet.
