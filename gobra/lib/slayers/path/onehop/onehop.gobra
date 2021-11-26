@@ -140,57 +140,55 @@ func (o *Path) SerializeTo(b []byte) error {
 
 // ToSCIONDecoded converts the one hop path in to a normal SCION path in the
 // decoded format.
-// (joao) The spec for this method is currently assumed
-requires acc(o.Mem(), 1/100)
-ensures acc(o.Mem(), 1/100)
-ensures err == nil ==> scion.DecodedInvariant(dec)
+requires o.Mem()
+// ensures err == nil ==> scion.DecodedInvariant(dec)
 decreases
 func (o *Path) ToSCIONDecoded() (dec *scion.Decoded, err error) {
-	unfold acc(o.Mem(), 1/100)
-	unfold acc(path.HopFieldInv(&o.SecondHop), 1/1000)
+	unfold o.Mem()
+	unfold path.HopFieldInv(&o.SecondHop)
 	if o.SecondHop.ConsIngress == 0 {
-		fold acc(path.HopFieldInv(&o.SecondHop), 1/1000)
-		fold acc(o.Mem(), 1/100)
 		return nil, serrors.New("incomplete path can't be converted")
 	}
-	assume false
-//// (joao) Gobra Error: Causes "node not in tree: Base" exception
-//	unfold path.HopFieldInv(&o.FirstHop)
-//	p := &scion.Decoded{
-//		Base: scion.Base{
-//			PathMeta: scion.MetaHdr{
-//				SegLen: [3]uint8{2, 0, 0},
-//			},
-//			NumHops: 2,
-//			NumINF:  1,
-//		},
-//		InfoFields: []*path.InfoField{
-//			{
-//				ConsDir:   true,
-//				SegID:     o.Info.SegID,
-//				Timestamp: o.Info.Timestamp,
-//			},
-//		},
-//		HopFields: []*path.HopField{
-//			{
-//				IngressRouterAlert: o.FirstHop.IngressRouterAlert,
-//				EgressRouterAlert:  o.FirstHop.EgressRouterAlert,
-//				ConsIngress:        o.FirstHop.ConsIngress,
-//				ConsEgress:         o.FirstHop.ConsEgress,
-//				ExpTime:            o.FirstHop.ExpTime,
-//				Mac:                append([]byte(nil), o.FirstHop.Mac...),
-//			},
-//			{
-//				IngressRouterAlert: o.SecondHop.IngressRouterAlert,
-//				EgressRouterAlert:  o.SecondHop.EgressRouterAlert,
-//				ConsIngress:        o.SecondHop.ConsIngress,
-//				ConsEgress:         o.SecondHop.ConsEgress,
-//				ExpTime:            o.SecondHop.ExpTime,
-//				Mac:                append([]byte(nil), o.SecondHop.Mac...),
-//			},
-//		},
-//	}
-//	return p, nil
+	unfold path.HopFieldInv(&o.FirstHop)
+	p := &scion.Decoded{
+		Base: scion.Base{
+			PathMeta: scion.MetaHdr{
+				SegLen: [3]uint8{2, 0, 0},
+			},
+			NumHops: 2,
+			NumINF:  1,
+		},
+		InfoFields: []*path.InfoField{
+			&path.InfoField{
+				ConsDir:   true,
+				SegID:     o.Info.SegID,
+				Timestamp: o.Info.Timestamp,
+			},
+		},
+		HopFields: []*path.HopField{
+			&path.HopField{
+				IngressRouterAlert: o.FirstHop.IngressRouterAlert,
+				EgressRouterAlert:  o.FirstHop.EgressRouterAlert,
+				ConsIngress:        o.FirstHop.ConsIngress,
+				ConsEgress:         o.FirstHop.ConsEgress,
+				ExpTime:            o.FirstHop.ExpTime,
+				Mac:                append(perm(1/2), []byte(nil), o.FirstHop.Mac...),
+			},
+			&path.HopField{
+				IngressRouterAlert: o.SecondHop.IngressRouterAlert,
+				EgressRouterAlert:  o.SecondHop.EgressRouterAlert,
+				ConsIngress:        o.SecondHop.ConsIngress,
+				ConsEgress:         o.SecondHop.ConsEgress,
+				ExpTime:            o.SecondHop.ExpTime,
+				Mac:                append(perm(1/2), []byte(nil), o.SecondHop.Mac...),
+			},
+		},
+	}
+	// fold scion.BaseInvariant(&p.Base)
+	// fold path.HopFieldInv((p.HopFields)[0])
+	// fold path.HopFieldInv((p.HopFields)[1])
+	// fold scion.DecodedInvariant(p)
+	return p, nil
 }
 
 decreases
