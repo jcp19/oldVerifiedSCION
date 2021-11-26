@@ -496,7 +496,7 @@ func (s *SCMPTraceroute) GetRawPkt() (res []byte) {
 }
 
 // LayerType returns LayerTypeSCMPTraceroute.
-func (*SCMPTraceroute) LayerType() gopacket.LayerType {
+pure func (*SCMPTraceroute) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMPTraceroute
 	return LayerTypeSCMPTraceroute()
 }
@@ -547,9 +547,11 @@ func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback
 	fold i.Mem()
 	return nil
 }
-/*
+
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
+requires i.Mem() && b.Mem()
+ensures i.Mem() && b.Mem()
 func (i *SCMPTraceroute) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) error {
 
@@ -558,16 +560,25 @@ func (i *SCMPTraceroute) SerializeTo(b gopacket.SerializeBuffer,
 		return err
 	}
 	offset := 0
+	unfold i.Mem()
+    unfold verifyutils.BytesAcc(buf)
+	assert forall j int :: 0 <= j && j < len(buf[offset:2]) ==> &(buf[offset:2])[j] == &buf[offset + j]
 	binary.BigEndian.PutUint16(buf[:2], i.Identifier)
 	offset += 2
+	assert forall j int :: 0 <= j && j < len(buf[offset:offset+2]) ==> &(buf[offset:offset+2])[j] == &buf[offset + j]
 	binary.BigEndian.PutUint16(buf[offset:offset+2], i.Sequence)
 	offset += 2
+	assert forall j int :: 0 <= j && j < len(buf[offset:offset+addr.IABytes]) ==> &(buf[offset:offset+addr.IABytes])[j] == &buf[offset + j]
 	i.IA.Write(buf[offset : offset+addr.IABytes])
 	offset += addr.IABytes
+	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Interface)
+	fold verifyutils.BytesAcc(buf)
+	apply verifyutils.BytesAcc(buf) --* b.Mem()
+	fold i.Mem()
 	return nil
 }
-
+/*
 func decodeSCMPTraceroute(data []byte, pb gopacket.PacketBuilder) error {
 	s := &SCMPTraceroute{}
 	if err := s.DecodeFromBytes(data, pb); err != nil {
@@ -577,6 +588,16 @@ func decodeSCMPTraceroute(data []byte, pb gopacket.PacketBuilder) error {
 	return pb.NextDecoder(s.NextLayerType())
 }
 */
+
+(*SCMPTraceroute) implements gopacket.SerializableLayer{
+	pure (i *SCMPTraceroute) LayerType() gopacket.LayerType {
+		return i.LayerType()
+	}
+
+	(i *SCMPTraceroute) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = i.SerializeTo(b, opts)
+	}
+}
 
 // SCMPDestinationUnreachable represents the structure of a destination
 // unreachable message.
