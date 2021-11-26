@@ -94,7 +94,8 @@ type bfdSession interface {
 	decreases
 	Messages() (c chan<- *layers.BFD)
 
-	requires acc(Mem(), 1/1000)
+	pure
+	requires acc(Mem(), _)
 	decreases
 	IsUp() bool
 }
@@ -2122,49 +2123,50 @@ func (p *scionPacketProcessor) egressInterface() (res uint16) {
 	return 
 }
 
-// (tlino) TODO: verify
+// (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
 ensures pr.Mem()
 decreases
-func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet error) //{
-// 	egressID := p.egressInterface()
-// 	unfold p.Mem()
-// 	unfold acc(DataPlaneMutexInvariant(p.d), _)
-// 	// (tlino) add parantheses to make it parse
-// 	// if v, ok := p.d.bfdSessions[egressID]; ok {
-// 	if v, ok := (p.d.bfdSessions)[egressID]; ok {
-// 		if !v.IsUp() {
-// 			scmpH := &slayers.SCMP{
-// 				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeExternalInterfaceDown, 0),
-// 			}
-// 			var scmpP gopacket.SerializableLayer = &slayers.SCMPExternalInterfaceDown{
-// 				IA:   p.d.localIA,
-// 				IfID: uint64(egressID),
-// 			}
-// 			// (tlino) add parantheses to make it parse
-// 			// if _, external := p.d.external[egressID]; !external {
-// 			if _, external := (p.d.external)[egressID]; !external {
-// 				scmpH.TypeCode =
-// 					slayers.CreateSCMPTypeCode(slayers.SCMPTypeInternalConnectivityDown, 0)
-// 				scmpP = &slayers.SCMPInternalConnectivityDown{
-// 					IA:      p.d.localIA,
-// 					Ingress: uint64(p.ingressID),
-// 					Egress:  uint64(egressID),
-// 				}
-// 			}
-// 			fold scmpH.Mem()
-// 			fold scmpP.Mem()
-// 			fold p.Mem()
-// 			pr, errRet =  p.packSCMP(scmpH, scmpP, serrors.New("bfd session down"))
-// 			return
-// 		}
-// 	}
-// 	fold p.Mem()
-// 	pr, errRet = processResult{}, nil
-// 	fold pr.Mem()
-// 	return 
-// }
+func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet error) {
+	egressID := p.egressInterface()
+	unfold p.Mem()
+	unfold acc(DataPlaneMutexInvariant(p.d), _)
+	// (tlino) add parantheses to make it parse
+	// if v, ok := p.d.bfdSessions[egressID]; ok {
+	if v, ok := (p.d.bfdSessions)[egressID]; ok {
+		assert acc(v.Mem(), _)
+		if !v.IsUp() {
+			scmpH := &slayers.SCMP{
+				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeExternalInterfaceDown, 0),
+			}
+			var scmpP gopacket.SerializableLayer = &slayers.SCMPExternalInterfaceDown{
+				IA:   p.d.localIA,
+				IfID: uint64(egressID),
+			}
+			// (tlino) add parantheses to make it parse
+			// if _, external := p.d.external[egressID]; !external {
+			if _, external := (p.d.external)[egressID]; !external {
+				scmpH.TypeCode =
+					slayers.CreateSCMPTypeCode(slayers.SCMPTypeInternalConnectivityDown, 0)
+				scmpP = &slayers.SCMPInternalConnectivityDown{
+					IA:      p.d.localIA,
+					Ingress: uint64(p.ingressID),
+					Egress:  uint64(egressID),
+				}
+			}
+			fold scmpH.Mem()
+			fold scmpP.Mem()
+			fold p.Mem()
+			pr, errRet =  p.packSCMP(scmpH, scmpP, serrors.New("bfd session down"))
+			return
+		}
+	}
+	fold p.Mem()
+	pr, errRet = processResult{}, nil
+	fold pr.Mem()
+	return 
+}
 
 // (tlino) Verified
 requires p.Mem()

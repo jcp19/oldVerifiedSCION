@@ -54,11 +54,15 @@ type SCMPExternalInterfaceDown struct {
 	IfID uint64
 }
 
+pred (i *SCMPExternalInterfaceDown) Mem() {
+	acc(i)
+}
+
 // (joao) spec and verification still incomplete
 // (joao) make every type introduced here a subtype of Layer
 
 // LayerType returns LayerTypeSCMPExternalInterfaceDown.
-func (i *SCMPExternalInterfaceDown) LayerType() gopacket.LayerType {
+pure func (i *SCMPExternalInterfaceDown) LayerType() gopacket.LayerType {
     // (joao) no support for global variables
 	// return LayerTypeSCMPExternalInterfaceDown
 	return LayerTypeSCMPExternalInterfaceDown()
@@ -105,8 +109,8 @@ func (i *SCMPExternalInterfaceDown) DecodeFromBytes(data []byte,
 
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-requires acc(i) && b.Mem()
-ensures  acc(i) && b.Mem()
+requires i.Mem() && b.Mem()
+ensures  i.Mem() && b.Mem()
 func (i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) (ret error) {
 
@@ -115,6 +119,7 @@ func (i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer,
 		return err
 	}
 	offset := 0
+	unfold i.Mem()
     unfold verifyutils.BytesAcc(buf)
 	i.IA.Write(buf[offset:])
 	offset += addr.IABytes
@@ -122,7 +127,7 @@ func (i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer,
 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.IfID)
     fold verifyutils.BytesAcc(buf)
 	apply verifyutils.BytesAcc(buf) --* b.Mem()
-    
+    fold i.Mem()
 	return nil
 }
 
@@ -137,6 +142,16 @@ func decodeSCMPExternalInterfaceDown(data []byte, pb gopacket.PacketBuilder) err
 	return pb.NextDecoder(gopacket.LayerTypePayload)
 }
 */
+
+(*SCMPExternalInterfaceDown) implements gopacket.SerializableLayer {
+	pure (i *SCMPExternalInterfaceDown) LayerType() gopacket.LayerType {
+		return i.LayerType()
+	}
+
+	(i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = i.SerializeTo(b, opts)
+	}
+}
 
 // SCMPInternalConnectivityDown indicates the AS internal connection between 2
 // routers is down. The format is as follows:
@@ -166,15 +181,18 @@ type SCMPInternalConnectivityDown struct {
 	Egress  uint64
 }
 
+pred (i *SCMPInternalConnectivityDown) Mem() {
+	acc(i)
+}
 
 // LayerType returns LayerTypeSCMPInternalConnectivityDown.
-func (*SCMPInternalConnectivityDown) LayerType() gopacket.LayerType {
+pure func (i *SCMPInternalConnectivityDown) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMPInternalConnectivityDown
 	return LayerTypeSCMPInternalConnectivityDown()
 }
 
 // NextLayerType returns the layer type contained by this DecodingLayer.
-func (*SCMPInternalConnectivityDown) NextLayerType() gopacket.LayerType {
+func (i *SCMPInternalConnectivityDown) NextLayerType() gopacket.LayerType {
 	// return gopacket.LayerTypePayload
 	return gopacket.LayerTypePayload()
 }
@@ -214,9 +232,11 @@ func (i *SCMPInternalConnectivityDown) DecodeFromBytes(data []byte,
 	return nil
 }
 
-/*
+
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
+requires i.Mem() && b.Mem()
+ensures  i.Mem() && b.Mem()
 func (i *SCMPInternalConnectivityDown) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) error {
 
@@ -225,14 +245,21 @@ func (i *SCMPInternalConnectivityDown) SerializeTo(b gopacket.SerializeBuffer,
 		return err
 	}
 	offset := 0
+	unfold i.Mem()
+    unfold verifyutils.BytesAcc(buf)
 	i.IA.Write(buf[offset:])
 	offset += addr.IABytes
+	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Ingress)
 	offset += scmpRawInterfaceLen
+	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Egress)
+	fold verifyutils.BytesAcc(buf)
+	apply verifyutils.BytesAcc(buf) --* b.Mem()
+	fold i.Mem()
 	return nil
 }
-
+/*
 func decodeSCMPInternalConnectivityDown(data []byte, pb gopacket.PacketBuilder) error {
 	s := &SCMPInternalConnectivityDown{}
 	if err := s.DecodeFromBytes(data, pb); err != nil {
@@ -242,6 +269,16 @@ func decodeSCMPInternalConnectivityDown(data []byte, pb gopacket.PacketBuilder) 
 	return pb.NextDecoder(s.NextLayerType())
 }
 */
+
+(*SCMPInternalConnectivityDown) implements gopacket.SerializableLayer {
+	pure (i *SCMPInternalConnectivityDown) LayerType() gopacket.LayerType {
+		return i.LayerType()
+	}
+
+	(i *SCMPInternalConnectivityDown) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = i.SerializeTo(b, opts)
+	}
+}
 
 // SCMPEcho represents the structure of a ping.
 //
