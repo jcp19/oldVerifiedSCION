@@ -37,6 +37,7 @@ const (
 //	L4SCMP: true, L4TCP: true, L4UDP: true,
 //}
 
+decreases
 func (p L4ProtocolType) String() string {
 	switch p {
 	case L4None:

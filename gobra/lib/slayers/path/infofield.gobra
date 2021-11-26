@@ -19,6 +19,7 @@ import (
 	// "fmt"
 	"gobra/lib/serrors"
 	// "github.com/scionproto/scion/go/lib/util"
+	"gobra/lib/util"
 )
 
 // InfoLen is the size of an InfoField in bytes.

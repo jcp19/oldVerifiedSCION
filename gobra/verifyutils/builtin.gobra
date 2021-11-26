@@ -10,6 +10,7 @@ func OutlineMemorySafeCopy(dst, src []byte) {
 
 // Produces unknown string, useful to model unsupported operations that produce strings without requiring
 // any permissions
+decreases
 func HavocString() string
 
 pred BytesAcc(b []byte) {
