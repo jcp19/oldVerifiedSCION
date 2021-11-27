@@ -6,6 +6,7 @@ type DecodeFeedback interface {
 
 	requires Mem()
 	ensures  Mem()
+	decreases
 	SetTruncated()
 }
 
@@ -86,6 +87,7 @@ pred (n NilDecodeFeedback) Mem() {true}
 // (lhalm) make global since the actual global variable is not supported
 type NilDecodeFeedback struct{}
 
+decreases
 func (n NilDecodeFeedback) SetTruncated() {}
 
 // (lhalm) doesn't work
