@@ -68,6 +68,7 @@ type Histogram = metrics.Histogram
 // This is a no-op if c is nil.
 requires c != nil ==> c.Mem()
 ensures  c != nil ==> c.Mem()
+decreases
 func CounterAdd(c Counter, delta float64) {
 	if c != nil {
 		c.Add(delta)
@@ -78,6 +79,7 @@ func CounterAdd(c Counter, delta float64) {
 // This is a no-op if c is nil.
 requires c != nil ==> c.Mem()
 ensures  c != nil ==> c.Mem()
+decreases
 func CounterInc(c Counter) {
     // (joao) "1" is not a valid float literal yet
 	// CounterAdd(c, 1)
@@ -89,6 +91,7 @@ requires c != nil ==> c.Mem()
 requires forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
 ensures  c != nil ==> c.Mem()
 ensures  forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
+decreases
 func CounterWith(c Counter, labelValues ...string) Counter {
 	if c == nil {
 		return nil
@@ -102,6 +105,7 @@ func CounterWith(c Counter, labelValues ...string) Counter {
 // This is a no-op if g is nil.
 requires g != nil ==> g.Mem()
 ensures  g != nil ==> g.Mem()
+decreases
 func GaugeSet(g Gauge, value float64) {
 	if g != nil {
 		g.Set(value)
@@ -113,6 +117,7 @@ requires g != nil ==> g.Mem()
 requires forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
 ensures  g != nil ==> g.Mem()
 ensures  forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
+decreases
 func GaugeWith(g Gauge, labelValues ...string) Gauge {
 	if g == nil {
 		return nil
@@ -126,6 +131,7 @@ func GaugeWith(g Gauge, labelValues ...string) Gauge {
 // This is a no-op if h is nil.
 requires h != nil ==> h.Mem()
 ensures  h != nil ==> h.Mem()
+decreases
 func HistogramObserve(h Histogram, value float64) {
 	if h != nil {
 		h.Observe(value)
@@ -137,6 +143,7 @@ requires h != nil ==> h.Mem()
 requires forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
 ensures  h != nil ==> h.Mem()
 ensures  forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
+decreases
 func HistogramWith(h Histogram, labelValues ...string) Histogram {
 	if h == nil {
 		return nil
