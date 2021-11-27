@@ -62,6 +62,7 @@ pred (m *Metrics) Mem() {
 // NewMetrics initializes the metrics for the Border Router, and registers them
 // with the default registry.
 ensures res.Mem() 
+decreases
 func NewMetrics() (res *Metrics) {
 	tmp := &Metrics{
 		InputBytesTotal: promauto.NewCounterVec(
