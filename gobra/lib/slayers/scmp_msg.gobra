@@ -107,29 +107,30 @@ func (i *SCMPExternalInterfaceDown) DecodeFromBytes(data []byte,
 	return nil
 }
 
+// (tlino) Verified, but commented out to speed up verification
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 requires i.Mem() && b.Mem()
 ensures  i.Mem() && b.Mem()
 func (i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer,
-	opts gopacket.SerializeOptions) (ret error) {
+	opts gopacket.SerializeOptions) (ret error) //{
 
-	buf, err := b.PrependBytes(addr.IABytes + scmpRawInterfaceLen)
-	if err != nil {
-		return err
-	}
-	offset := 0
-	unfold i.Mem()
-    unfold verifyutils.BytesAcc(buf)
-	i.IA.Write(buf[offset:])
-	offset += addr.IABytes
-    assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
-	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.IfID)
-    fold verifyutils.BytesAcc(buf)
-	apply verifyutils.BytesAcc(buf) --* b.Mem()
-    fold i.Mem()
-	return nil
-}
+// 	buf, err := b.PrependBytes(addr.IABytes + scmpRawInterfaceLen)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	offset := 0
+// 	unfold i.Mem()
+//     unfold verifyutils.BytesAcc(buf)
+// 	i.IA.Write(buf[offset:])
+// 	offset += addr.IABytes
+//     assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
+// 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.IfID)
+//     fold verifyutils.BytesAcc(buf)
+// 	apply verifyutils.BytesAcc(buf) --* b.Mem()
+//     fold i.Mem()
+// 	return nil
+// }
 
 /*
 func decodeSCMPExternalInterfaceDown(data []byte, pb gopacket.PacketBuilder) error {
@@ -232,33 +233,33 @@ func (i *SCMPInternalConnectivityDown) DecodeFromBytes(data []byte,
 	return nil
 }
 
-
+// (tlino) Verified, but commented out to speed up verification
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 requires i.Mem() && b.Mem()
 ensures  i.Mem() && b.Mem()
 func (i *SCMPInternalConnectivityDown) SerializeTo(b gopacket.SerializeBuffer,
-	opts gopacket.SerializeOptions) error {
+	opts gopacket.SerializeOptions) error //{
 
-	buf, err := b.PrependBytes(addr.IABytes + 2*scmpRawInterfaceLen)
-	if err != nil {
-		return err
-	}
-	offset := 0
-	unfold i.Mem()
-    unfold verifyutils.BytesAcc(buf)
-	i.IA.Write(buf[offset:])
-	offset += addr.IABytes
-	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
-	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Ingress)
-	offset += scmpRawInterfaceLen
-	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
-	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Egress)
-	fold verifyutils.BytesAcc(buf)
-	apply verifyutils.BytesAcc(buf) --* b.Mem()
-	fold i.Mem()
-	return nil
-}
+// 	buf, err := b.PrependBytes(addr.IABytes + 2*scmpRawInterfaceLen)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	offset := 0
+// 	unfold i.Mem()
+//     unfold verifyutils.BytesAcc(buf)
+// 	i.IA.Write(buf[offset:])
+// 	offset += addr.IABytes
+// 	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
+// 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Ingress)
+// 	offset += scmpRawInterfaceLen
+// 	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
+// 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Egress)
+// 	fold verifyutils.BytesAcc(buf)
+// 	apply verifyutils.BytesAcc(buf) --* b.Mem()
+// 	fold i.Mem()
+// 	return nil
+// }
 /*
 func decodeSCMPInternalConnectivityDown(data []byte, pb gopacket.PacketBuilder) error {
 	s := &SCMPInternalConnectivityDown{}
@@ -398,30 +399,31 @@ func (i *SCMPParameterProblem) DecodeFromBytes(data []byte, df gopacket.DecodeFe
 }
 */
 
+// (tlino) Verified, but commented out to speed up verification
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 requires i.Mem() && b.Mem()
 ensures  (i.Mem() && b.Mem())
 func (i *SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer,
-	opts gopacket.SerializeOptions) (err error) {
-	buf, err := b.PrependBytes(2 + 2)
-	if err != nil {
-		return err
-	}
-	// (tlino) added to make Gobra verify
-	unfold verifyutils.BytesAcc(buf)
-	assert &buf[0:2][0] == &buf[0]
-	assert &buf[0:2][1] == &buf[1]
-	assert &buf[2:4][0] == &buf[2]
-	assert &buf[2:4][1] == &buf[3]
-	binary.BigEndian.PutUint16(buf[0:2], uint16(0)) //Reserved
-	binary.BigEndian.PutUint16(buf[2:4], unfolding i.Mem() in i.Pointer)
+	opts gopacket.SerializeOptions) (err error) //{
+// 	buf, err := b.PrependBytes(2 + 2)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	// (tlino) added to make Gobra verify
+// 	unfold verifyutils.BytesAcc(buf)
+// 	assert &buf[0:2][0] == &buf[0]
+// 	assert &buf[0:2][1] == &buf[1]
+// 	assert &buf[2:4][0] == &buf[2]
+// 	assert &buf[2:4][1] == &buf[3]
+// 	binary.BigEndian.PutUint16(buf[0:2], uint16(0)) //Reserved
+// 	binary.BigEndian.PutUint16(buf[2:4], unfolding i.Mem() in i.Pointer)
 
-	// (tlino) get back access to b
-	fold verifyutils.BytesAcc(buf)
-	apply verifyutils.BytesAcc(buf) --* b.Mem()
-	return nil
-}
+// 	// (tlino) get back access to b
+// 	fold verifyutils.BytesAcc(buf)
+// 	apply verifyutils.BytesAcc(buf) --* b.Mem()
+// 	return nil
+// }
 /*
 func decodeSCMPParameterProblem(data []byte, pb gopacket.PacketBuilder) error {
 	s := &SCMPParameterProblem{}
@@ -474,8 +476,8 @@ type SCMPTraceroute struct {
 
 pred (s *SCMPTraceroute) Mem() {
 	acc(s) &&
-	verifyutils.BytesAcc(s.EmbeddedBaseLayer.Contents) &&
-	verifyutils.BytesAcc(s.EmbeddedBaseLayer.Payload)
+	(forall i int:: 0 <= i && i < len(s.EmbeddedBaseLayer.Contents) ==> acc(&(s.EmbeddedBaseLayer.Contents)[i])) &&
+	(forall i int:: 0 <= i && i < len(s.EmbeddedBaseLayer.Payload) ==> acc(&(s.EmbeddedBaseLayer.Payload)[i]))
 }
 
 // (tlino) ghost function to obtain access to rawPkt
@@ -495,6 +497,33 @@ func (s *SCMPTraceroute) GetRawPkt() (res []byte) {
 	return unfolding acc(s.Mem(), 1/1000) in s.rawPkt
 }
 
+// (tlino) added getters to make code easier to verify
+pure
+requires acc(s.Mem(), 1/1000)
+ensures res == unfolding acc(s.Mem(), 1/1000) in s.Identifier
+decreases
+func (s *SCMPTraceroute) GetIdentifier() (res uint16) {
+	return unfolding acc(s.Mem(), 1/1000) in s.Identifier
+}
+
+pure
+requires acc(s.Mem(), 1/1000)
+ensures res == unfolding acc(s.Mem(), 1/1000) in s.Sequence
+decreases
+func (s *SCMPTraceroute) GetSequence() (res uint16) {
+	return unfolding acc(s.Mem(), 1/1000) in s.Sequence
+}
+
+pure
+requires acc(s.Mem(), 1/1000)
+ensures res == unfolding acc(s.Mem(), 1/1000) in s.Interface
+decreases
+func (s *SCMPTraceroute) GetInterface() (res uint64) {
+	return unfolding acc(s.Mem(), 1/1000) in s.Interface
+}
+
+// (tlino) end of getters
+
 // LayerType returns LayerTypeSCMPTraceroute.
 pure func (*SCMPTraceroute) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMPTraceroute
@@ -512,7 +541,7 @@ func (*SCMPTraceroute) NextLayerType() gopacket.LayerType {
 requires acc(i) && df.Mem() && verifyutils.BytesAcc(data)
 ensures df.Mem()
 ensures err == nil ==> i.Mem() && data == i.GetRawPkt()
-ensures err != nil ==> acc(i)
+ensures err != nil ==> acc(i) && verifyutils.BytesAcc(data)
 decreases
 func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (err error) {
 	minLength := 2 + 2 + addr.IABytes + scmpRawInterfaceLen
@@ -542,42 +571,41 @@ func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback
 	}
 	// ghost
 	i.rawPkt = data
-	fold verifyutils.BytesAcc(i.EmbeddedBaseLayer.Contents)
-	fold verifyutils.BytesAcc(i.EmbeddedBaseLayer.Payload)
 	fold i.Mem()
 	return nil
 }
 
+// (tlino) Verified, but commented out to speed up verification
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
 requires i.Mem() && b.Mem()
 ensures i.Mem() && b.Mem()
 func (i *SCMPTraceroute) SerializeTo(b gopacket.SerializeBuffer,
-	opts gopacket.SerializeOptions) error {
+	opts gopacket.SerializeOptions) error //{
 
-	buf, err := b.PrependBytes(2 + 2 + addr.IABytes + scmpRawInterfaceLen)
-	if err != nil {
-		return err
-	}
-	offset := 0
-	unfold i.Mem()
-    unfold verifyutils.BytesAcc(buf)
-	assert forall j int :: 0 <= j && j < len(buf[offset:2]) ==> &(buf[offset:2])[j] == &buf[offset + j]
-	binary.BigEndian.PutUint16(buf[:2], i.Identifier)
-	offset += 2
-	assert forall j int :: 0 <= j && j < len(buf[offset:offset+2]) ==> &(buf[offset:offset+2])[j] == &buf[offset + j]
-	binary.BigEndian.PutUint16(buf[offset:offset+2], i.Sequence)
-	offset += 2
-	assert forall j int :: 0 <= j && j < len(buf[offset:offset+addr.IABytes]) ==> &(buf[offset:offset+addr.IABytes])[j] == &buf[offset + j]
-	i.IA.Write(buf[offset : offset+addr.IABytes])
-	offset += addr.IABytes
-	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
-	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Interface)
-	fold verifyutils.BytesAcc(buf)
-	apply verifyutils.BytesAcc(buf) --* b.Mem()
-	fold i.Mem()
-	return nil
-}
+// 	buf, err := b.PrependBytes(2 + 2 + addr.IABytes + scmpRawInterfaceLen)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	offset := 0
+// 	unfold i.Mem()
+//     unfold verifyutils.BytesAcc(buf)
+// 	assert forall j int :: 0 <= j && j < len(buf[offset:2]) ==> &(buf[offset:2])[j] == &buf[offset + j]
+// 	binary.BigEndian.PutUint16(buf[:2], i.Identifier)
+// 	offset += 2
+// 	assert forall j int :: 0 <= j && j < len(buf[offset:offset+2]) ==> &(buf[offset:offset+2])[j] == &buf[offset + j]
+// 	binary.BigEndian.PutUint16(buf[offset:offset+2], i.Sequence)
+// 	offset += 2
+// 	assert forall j int :: 0 <= j && j < len(buf[offset:offset+addr.IABytes]) ==> &(buf[offset:offset+addr.IABytes])[j] == &buf[offset + j]
+// 	i.IA.Write(buf[offset : offset+addr.IABytes])
+// 	offset += addr.IABytes
+// 	assert forall j int :: 0 <= j && j < len(buf[offset:offset+scmpRawInterfaceLen]) ==> &(buf[offset:offset+scmpRawInterfaceLen])[j] == &buf[offset + j]
+// 	binary.BigEndian.PutUint64(buf[offset:offset+scmpRawInterfaceLen], i.Interface)
+// 	fold verifyutils.BytesAcc(buf)
+// 	apply verifyutils.BytesAcc(buf) --* b.Mem()
+// 	fold i.Mem()
+// 	return nil
+// }
 /*
 func decodeSCMPTraceroute(data []byte, pb gopacket.PacketBuilder) error {
 	s := &SCMPTraceroute{}

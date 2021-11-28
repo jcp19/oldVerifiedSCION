@@ -136,6 +136,14 @@ func (s *SCMP) GetPayload() (b []byte) {
 	return unfolding acc(s.MemAfterDecode(), 1/1000) in s.BaseLayerEmbedded.Payload
 }
 
+pure
+requires acc(s.MemAfterDecode(), 1/1000)
+ensures typeCode == unfolding acc(s.MemAfterDecode(), 1/1000) in s.TypeCode
+decreases
+func (s *SCMP) GetTypeCode() (typeCode SCMPTypeCode) {
+	return unfolding acc(s.MemAfterDecode(), 1/1000) in s.TypeCode
+}
+
 // (tlino) end of getters
 
 // CanDecode returns the set of layer types that this DecodingLayer can decode.
