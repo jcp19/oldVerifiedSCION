@@ -55,7 +55,9 @@ type SCMPExternalInterfaceDown struct {
 }
 
 pred (i *SCMPExternalInterfaceDown) Mem() {
-	acc(i)
+	acc(i) &&
+	(forall j int:: 0 <= j && j < len(i.EmbeddedBaseLayer.Contents) ==> acc(&(i.EmbeddedBaseLayer.Contents)[j])) &&
+	(forall j int:: 0 <= j && j < len(i.EmbeddedBaseLayer.Payload) ==> acc(&(i.EmbeddedBaseLayer.Payload)[j]))
 }
 
 // (joao) spec and verification still incomplete
@@ -183,7 +185,9 @@ type SCMPInternalConnectivityDown struct {
 }
 
 pred (i *SCMPInternalConnectivityDown) Mem() {
-	acc(i)
+	acc(i) &&
+	(forall j int:: 0 <= j && j < len(i.EmbeddedBaseLayer.Contents) ==> acc(&(i.EmbeddedBaseLayer.Contents)[j])) &&
+	(forall j int:: 0 <= j && j < len(i.EmbeddedBaseLayer.Payload) ==> acc(&(i.EmbeddedBaseLayer.Payload)[j]))
 }
 
 // LayerType returns LayerTypeSCMPInternalConnectivityDown.
@@ -367,7 +371,9 @@ type SCMPParameterProblem struct {
 }
 
 pred (s *SCMPParameterProblem) Mem() {
-	acc(s)
+	acc(s) &&
+	(forall j int:: 0 <= j && j < len(s.EmbeddedBaseLayer.Contents) ==> acc(&(s.EmbeddedBaseLayer.Contents)[j])) &&
+	(forall j int:: 0 <= j && j < len(s.EmbeddedBaseLayer.Payload) ==> acc(&(s.EmbeddedBaseLayer.Payload)[j]))
 }
 
 // LayerType returns LayerTypeSCMPParameterProblem.
