@@ -75,6 +75,42 @@ pred HopFieldInv(h *HopField) {
 	i < len(h.Mac) ==> acc(&(h.Mac)[i])
 }
 
+// (tlino) added getters to simplify verification
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.IngressRouterAlert
+decreases
+pure func (h *HopField) GetIngressRouterAlert() (res bool) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.IngressRouterAlert
+}
+
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.EgressRouterAlert
+decreases
+pure func (h *HopField) GetEgressRouterAlert() (res bool) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.EgressRouterAlert
+}
+
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.ExpTime
+decreases
+pure func (h *HopField) GetExpTime() (res uint8) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.ExpTime
+}
+
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.ConsIngress
+decreases
+pure func (h *HopField) GetConsIngress() (res uint16) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.ConsIngress
+}
+
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.ConsEgress
+decreases
+pure func (h *HopField) GetConsEgress() (res uint16) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.ConsEgress
+}
+
 // (joao) verifies, as expected
 // func soundHopFieldInv() {
 // 	hop := &HopField{}

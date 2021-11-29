@@ -337,10 +337,12 @@ func (ia IA) IAInt() IAInt // {
 //	return IAInt(ia.I)<<ASBits | IAInt(ia.A&MaxAS)
 // }
 
+decreases
 func (ia IA) IsZero() bool {
 	return ia.I == 0 && ia.A == 0
 }
 
+decreases
 func (ia IA) Equal(other IA) bool {
 	return ia.I == other.I && ia.A == other.A
 }

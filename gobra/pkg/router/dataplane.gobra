@@ -161,6 +161,13 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem())
 }
 
+// (tlino) start of getter functions to avoid unfolding DataPlaneMutexInvariant
+requires acc(DataPlaneMutexInvariant(d), _)
+decreases
+pure func (d *DataPlane) GetLocalAI() addr.IA {
+	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.localIA
+}
+
 ghost
 ensures DataPlaneMutexInvariant(res)
 decreases
@@ -2539,72 +2546,126 @@ func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //
 	// )
 //}
 
+// (tlino) partially verified
 requires acc(DataPlaneMutexInvariant(d), _)
 requires s.Mem() && s.getRawPkt() == rawPkt
 requires buffer.Mem()
 ensures buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
 // (tlino) s is now a *slayers.SCION
 // func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
 func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	buffer gopacket.SerializeBuffer) (pr processResult, err error) //{
-
-// 	// (tlino) add path variable
-// 	p, ok := (s.Path).(*onehop.Path)
-// 	if !ok {
-// 		// TODO parameter problem -> invalid path // (tlino) original scion comment
-// 		// (tlino) globals not supported
-// 		// return processResult{}, malformedPath
-// 		return processResult{}, malformedPath()
-// 	}
-// 	if !p.Info.ConsDir {
-// 		// TODO parameter problem -> invalid path // (tlino) original scion comment
+	buffer gopacket.SerializeBuffer) (pr processResult, errRet error) {
 		
-// 		// (tlino) globals not supported
-// 		// return processResult{}, serrors.WrapStr(
-// 		// 	"OneHop path in reverse construction direction is not allowed",
-// 		// 	malformedPath, "srcIA", s.SrcIA, "dstIA", s.DstIA)
-
-// 		return processResult{}, serrors.WrapStr(
-// 			"OneHop path in reverse construction direction is not allowed",
-// 			malformedPath(), "srcIA", s.SrcIA, "dstIA", s.DstIA)
-// 	}
-// 	if !d.localIA.Equal(s.DstIA) && !d.localIA.Equal(s.SrcIA) {
-// 		// TODO parameter problem -> invalid path // (tlino) original scion comment
+	// (tlino) add path variable
+	unfold s.Mem()
+	p, ok := (s.Path).(*onehop.Path)
+	if !ok {
+		// TODO parameter problem -> invalid path // (tlino) original scion comment
+		// (tlino) globals not supported
+		// return processResult{}, malformedPath
+		pr, errRet = processResult{}, malformedPath()
+		fold pr.Mem()
+		fold s.Mem()
+		// (tlino) create the magic wand
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+			s.getRawPktAccWithoutPreservePath(rawPkt)
+			assert verifyutils.BytesAcc(rawPkt)
+		}
+		return 
+	}
+	// (tlino) the deserializer enforces that p != nil holds
+	// (tlino) however, gobra cannot deduce that after
+	// (tlino) asserting the dynamic type ((s.Path).(*onehop.Path))
+	assume p != nil
+	assert p.Mem()
+	
+	// (tlino) use getter to simplify verification
+	// if !p.Info.ConsDir {
+	if !p.GetConsDir() {
+		// TODO parameter problem -> invalid path // (tlino) original scion comment
 		
-// 		// (tlino) globals not supported
-// 		// return processResult{}, serrors.WrapStr("OneHop neither destined or originating from IA",
-// 		// 	cannotRoute, "localIA", d.localIA, "srcIA", s.SrcIA, "dstIA", s.DstIA)
+		// (tlino) globals not supported
+		// return processResult{}, serrors.WrapStr(
+		// 	"OneHop path in reverse construction direction is not allowed",
+		// 	malformedPath, "srcIA", s.SrcIA, "dstIA", s.DstIA)
 
-// 		return processResult{}, serrors.WrapStr("OneHop neither destined or originating from IA",
-// 			cannotRoute(), "localIA", d.localIA, "srcIA", s.SrcIA, "dstIA", s.DstIA)
-// 	}
-// 	// OHP leaving our IA
-// 	if d.localIA.Equal(s.SrcIA) {
-// 		// if err := path.VerifyMAC(d.macFactory(), &p.Info, &p.FirstHop); err != nil {
-// 		// 	// TODO parameter problem -> invalid MAC
-// 		// 	return processResult{}, serrors.WithCtx(err, "type", "ohp")
-// 		// }
-// 		// p.Info.UpdateSegID(p.FirstHop.Mac)
+		pr, errRet = processResult{}, serrors.WrapStr(
+			"OneHop path in reverse construction direction is not allowed",
+			malformedPath(), "srcIA", s.SrcIA, "dstIA", s.DstIA)
+		fold pr.Mem()
+		fold s.Mem()
+		// (tlino) create the magic wand
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+			s.getRawPktAccWithoutPreservePath(rawPkt)
+			assert verifyutils.BytesAcc(rawPkt)
+		}
+		return 
+	}
+	
+	// (tlino) use getter to simplify verification
+	// if !d.localIA.Equal(s.DstIA) && !d.localIA.Equal(s.SrcIA) {
+	if !(d.GetLocalAI()).Equal(s.DstIA) && !(d.GetLocalAI()).Equal(s.SrcIA) {
+		// TODO parameter problem -> invalid path // (tlino) original scion comment
+		
+		// (tlino) globals not supported
+		// return processResult{}, serrors.WrapStr("OneHop neither destined or originating from IA",
+		// 	cannotRoute, "localIA", d.localIA, "srcIA", s.SrcIA, "dstIA", s.DstIA)
 
-// 		// if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
-// 		// 	return processResult{}, err
-// 		// }
-// 		// // OHP should always be directed to the correct BR.
-// 		// if c, ok := d.external[p.FirstHop.ConsEgress]; ok {
-// 		// 	// buffer should already be correct
-//		//  // (tlino) insert here magic wand
-// 		// 	return processResult{EgressID: p.FirstHop.ConsEgress, OutConn: c, OutPkt: rawPkt}, nil
-// 		// }
-// 		// // TODO parameter problem invalid interface
-// 		// return processResult{}, serrors.WithCtx(cannotRoute, "type", "ohp",
-// 		// 	"egress", p.FirstHop.ConsEgress, "consDir", p.Info.ConsDir)
+		pr, errRet = processResult{}, serrors.WrapStr("OneHop neither destined or originating from IA",
+			cannotRoute(), "localIA", d.GetLocalAI(), "srcIA", s.SrcIA, "dstIA", s.DstIA)
 
-// 		// (tlino) dummy result, remove later
-// 		return processResult{}, nil
-// 	}
+		fold pr.Mem()
+		fold s.Mem()
+		// (tlino) create the magic wand
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+			s.getRawPktAccWithoutPreservePath(rawPkt)
+		}
+		return 
+	}
+
+	// OHP leaving our IA
+
+	// (tlino) use getter to simplify verification
+	// if d.localIA.Equal(s.SrcIA) {
+	if (d.GetLocalAI()).Equal(s.SrcIA) {
+		// if err := path.VerifyMAC(d.macFactory(), &p.Info, &p.FirstHop); err != nil {
+		// 	// TODO parameter problem -> invalid MAC
+		// 	return processResult{}, serrors.WithCtx(err, "type", "ohp")
+		// }
+		// p.Info.UpdateSegID(p.FirstHop.Mac)
+
+		// if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
+		// 	return processResult{}, err
+		// }
+		// // OHP should always be directed to the correct BR.
+		// if c, ok := d.external[p.FirstHop.ConsEgress]; ok {
+		// 	// buffer should already be correct
+		//  // (tlino) insert here magic wand
+		// 	return processResult{EgressID: p.FirstHop.ConsEgress, OutConn: c, OutPkt: rawPkt}, nil
+		// }
+		
+		// TODO parameter problem invalid interface
+		// (tlino) use getter to simplify verification
+		// return processResult{}, serrors.WithCtx(cannotRoute, "type", "ohp",
+		// 	"egress", p.FirstHop.ConsEgress, "consDir", p.Info.ConsDir)
+
+		pr, errRet = processResult{}, serrors.WithCtx(cannotRoute(), "type", "ohp",
+			"egress", p.GetFristHopConsEgress(), "consDir", p.GetConsDir())
+
+		fold pr.Mem()
+		fold s.Mem()
+		// (tlino) create the magic wand
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+			s.getRawPktAccWithoutPreservePath(rawPkt)
+		}
+		return 
+	}
+
+	assume false
 
 // 	// OHP entering our IA
 // 	// p.SecondHop = path.HopField{
@@ -2625,7 +2686,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 // 	// (tlino) dummy result, remove later
 // 	return processResult{}, nil
-// }
+}
 
 // (tlino) reverify
 // (tlino) TODO d.svc not supported yet

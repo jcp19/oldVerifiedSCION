@@ -45,6 +45,93 @@ pred (o *Path) Mem() {
 	path.HopFieldInv(&o.SecondHop)
 }
 
+// (tlino) add getter to simplifiy verification
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetPeer() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.Info.Peer
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetConsDir() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.Info.ConsDir
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSegID() uint16 {
+	return unfolding acc(p.Mem(), 1/1000) in p.Info.SegID
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetTimestamp() uint32 {
+	return unfolding acc(p.Mem(), 1/1000) in p.Info.Timestamp
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetFristHopConsEgress() uint16 {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetConsEgress()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetFristHopConsIngress() uint16 {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetConsIngress()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetFristHopConsEgressRouterAlert() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetEgressRouterAlert()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetFristHopConsIngressRouterAlert() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetIngressRouterAlert()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetFirstHopExpTime() uint8 {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetExpTime()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSecondHopConsEgress() uint16 {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetConsEgress()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSecondHopConsIngress() uint16 {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetConsIngress()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSecondHopConsEgressRouterAlert() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetEgressRouterAlert()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSecondHopConsIngressRouterAlert() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetIngressRouterAlert()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSecondHopExpTime() uint8 {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetExpTime()
+}
+
+// (tlino) end of getters
+
 //func satisfiableOneHopInv() {
 //	o := &Path{}
 //
