@@ -131,10 +131,23 @@ pure func (p *Path) GetSecondHopExpTime() uint8 {
 }
 // (tlino) end of getters
 
-// (tlino) add setters to simplify verification
+// (tlino) add setters and update methods to simplify verification
+requires p.Mem()
+ensures p.Mem()
+decreases
+func (p *Path) InfoUpdateSegID() {
+	unfold p.Mem()
+	unfold path.HopFieldInv(&p.FirstHop)
+	mac := p.FirstHop.Mac
+	p.Info.UpdateSegID(mac)
+	fold path.HopFieldInv(&p.FirstHop)
+	fold p.Mem()
+}
+
 requires len(hop.Mac) == path.MacLen
 requires forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i])
 preserves p.Mem()
+decreases
 func (p *Path) SetSecondHop(hop path.HopField) {
 	unfold p.Mem()
 	unfold path.HopFieldInv(&p.SecondHop)
@@ -142,7 +155,7 @@ func (p *Path) SetSecondHop(hop path.HopField) {
 	fold path.HopFieldInv(&p.SecondHop)
 	fold p.Mem()
 }
-// (tlino) end of setters
+// (tlino) end of setters and update methods
 
 //func satisfiableOneHopInv() {
 //	o := &Path{}

@@ -1055,6 +1055,7 @@ pred (pr processResult) Mem() {
 	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
 }
 
+decreases
 pure func isZeroSCION(s slayers.SCION) bool {
 	return s.EmbeddedBaseLayer.Contents == nil &&
 		s.EmbeddedBaseLayer.Payload == nil &&
@@ -2446,6 +2447,7 @@ ensures verifyutils.BytesAcc(p.origPacket)
 ensures cap(p.rawPkt) == bufSize
 ensures (p.buffer).Mem()
 ensures pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt))
+// use ghost return
 func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //{
 	// if r, err := p.parsePath(); err != nil {
 	// 	// (tlino) create magic wand to later get back access to p.rawPkt
@@ -2458,7 +2460,6 @@ func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //
 	// 	sl := p.scionLayer
 	// 	rp := p.rawPkt
 	// 	sl.getRawPktAccWithoutPreservePath(rp)
-	// 	assert verifyutils.BytesAcc(rp) --* (sl.Mem() && rp == sl.getRawPkt())
 	// 	assert verifyutils.BytesAcc(rp)
 	// 	assert p.rawPkt == rp
 	// 	assert acc(&(p.rawPkt))
@@ -2544,9 +2545,16 @@ func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //
 	// 	&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
 	// 	cannotRoute,
 	// )
-//}
+// }
 
-// (tlino) partially verified
+// (tlino) Verified
+// (tlino) added helper function to simulate the result of a MAC computation
+ensures len(res) == path.MacLen
+ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
+decreases
+func getDummyMac() (res []byte)
+
+// (tlino) Partially verified
 // TODO: no access to OutConn
 requires acc(DataPlaneMutexInvariant(d), _)
 requires s.Mem() && s.getRawPkt() == rawPkt
@@ -2633,14 +2641,20 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 	// (tlino) use getter to simplify verification
 	// if d.localIA.Equal(s.SrcIA) {
 	if (d.GetLocalAI()).Equal(s.SrcIA) {
+		// (tlino) function pointers (macFactory) aren't supported yet
 		// if err := path.VerifyMAC(d.macFactory(), &p.Info, &p.FirstHop); err != nil {
 		// 	// TODO parameter problem -> invalid MAC // (tlino) original scion comment
 		// 	return processResult{}, serrors.WithCtx(err, "type", "ohp")
 		// }
+
+		// (tlino) use update function to avoid unfolding p
 		// p.Info.UpdateSegID(p.FirstHop.Mac)
+		p.InfoUpdateSegID()
 
 		fold s.Mem()
 		if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
+			// (tlino) original code, adapted code is below
+			// return processResult{}, err
 			pr, errRet = processResult{}, err
 			fold pr.Mem()
 			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
@@ -2696,15 +2710,48 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		return 
 	}
 
-	// (tlino) TODO: wait for macFactory support
+	// (tlino) outlined the rest of the method
+	fold s.Mem()
+	pr, errRet = d.processOHP2(ingressID, rawPkt, s, buffer, p)
+	return
+}
+
+// (tlino) Partially verified
+// (tlino) added method to simplify verification
+requires acc(DataPlaneMutexInvariant(d), _)
+requires s.Mem() && s.getRawPkt() == rawPkt
+requires p != nil && p == s.getOHPPath() 
+requires buffer.Mem()
+ensures buffer.Mem()
+ensures pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
+func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCION,
+	buffer gopacket.SerializeBuffer, p *onehop.Path) (pr processResult, errRet error) {
+
+	// (tlino) get access to p.Mem()
+	unfold s.Mem()
+	assert p.Mem()
+
+	// (tlino) use setter function to avoid unfolding p
+	// (tlino) macFactory isn't supported, usse dummy MAC instead
 	// OHP entering our IA
 	// p.SecondHop = path.HopField{
 	// 	ConsIngress: ingressID,
 	// 	ExpTime:     p.FirstHop.ExpTime,
 	// }
 	// p.SecondHop.Mac = path.MAC(d.macFactory(), &p.Info, &p.SecondHop)
+	secondHop := path.HopField{
+		ConsIngress: ingressID,
+		ExpTime:     p.GetFirstHopExpTime(),
+		Mac:		 getDummyMac(),
+	}
+	p.SetSecondHop(secondHop)
+
 	fold s.Mem()
 	if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
+		// (tlino) original code, adapted code is below
+		// return processResult{}, err
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
 		// (tlino) create the magic wand
@@ -2720,9 +2767,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 // 	// }
 //  // // (tlino) insert here magic wand
 // 	// return processResult{OutConn: d.internal, OutAddr: a, OutPkt: rawPkt}, nil
-
-// 	// (tlino) dummy result, remove later
-// 	return processResult{}, nil
 }
 
 // (tlino) reverify
