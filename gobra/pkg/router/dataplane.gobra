@@ -2547,6 +2547,7 @@ func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //
 //}
 
 // (tlino) partially verified
+// TODO: no access to OutConn
 requires acc(DataPlaneMutexInvariant(d), _)
 requires s.Mem() && s.getRawPkt() == rawPkt
 requires buffer.Mem()
@@ -2633,22 +2634,52 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 	// if d.localIA.Equal(s.SrcIA) {
 	if (d.GetLocalAI()).Equal(s.SrcIA) {
 		// if err := path.VerifyMAC(d.macFactory(), &p.Info, &p.FirstHop); err != nil {
-		// 	// TODO parameter problem -> invalid MAC
+		// 	// TODO parameter problem -> invalid MAC // (tlino) original scion comment
 		// 	return processResult{}, serrors.WithCtx(err, "type", "ohp")
 		// }
 		// p.Info.UpdateSegID(p.FirstHop.Mac)
 
-		// if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
-		// 	return processResult{}, err
-		// }
-		// // OHP should always be directed to the correct BR.
+		fold s.Mem()
+		if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
+			pr, errRet = processResult{}, err
+			fold pr.Mem()
+			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+				s.getRawPktAccWithoutPreservePath(rawPkt)
+			}
+			return 
+		}
+
+		// (tlino) added code to get back relation between p and s.Path
+		p = s.getOHPPath()
+		assume p != nil
+		unfold s.Mem()
+		assert p.Mem()
+
+		// OHP should always be directed to the correct BR. // (tlino) original scion comment
+		// (tlino) use getter to simplify verification
 		// if c, ok := d.external[p.FirstHop.ConsEgress]; ok {
-		// 	// buffer should already be correct
-		//  // (tlino) insert here magic wand
-		// 	return processResult{EgressID: p.FirstHop.ConsEgress, OutConn: c, OutPkt: rawPkt}, nil
-		// }
+		unfold acc(DataPlaneMutexInvariant(d), _)
+		fristHopConsEgress := p.GetFristHopConsEgress()
+		if c, ok := (d.external)[fristHopConsEgress]; ok {
+			// buffer should already be correct // (tlino) original scion comment
+
+			// (tlino) get access to rawPkt
+			fold s.Mem()
+			s.getRawPktAccWithoutPreservePath(rawPkt)
+			assert verifyutils.BytesAcc(rawPkt)
+
+			// (tlino) use getter to simplify verification
+			// return processResult{EgressID: p.FirstHop.ConsEgress, OutConn: c, OutPkt: rawPkt}, nil
+			// assert acc(c.Mem(), _)
+			pr, errRet = processResult{EgressID: fristHopConsEgress, OutPkt: rawPkt}, nil
+			fold pr.Mem()
+			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+				unfold pr.Mem()
+			}
+			return 
+		}
 		
-		// TODO parameter problem invalid interface
+		// TODO parameter problem invalid interface // (tlino) original scion comment
 		// (tlino) use getter to simplify verification
 		// return processResult{}, serrors.WithCtx(cannotRoute, "type", "ohp",
 		// 	"egress", p.FirstHop.ConsEgress, "consDir", p.Info.ConsDir)
@@ -2665,18 +2696,24 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		return 
 	}
 
+	// (tlino) TODO: wait for macFactory support
+	// OHP entering our IA
+	// p.SecondHop = path.HopField{
+	// 	ConsIngress: ingressID,
+	// 	ExpTime:     p.FirstHop.ExpTime,
+	// }
+	// p.SecondHop.Mac = path.MAC(d.macFactory(), &p.Info, &p.SecondHop)
+	fold s.Mem()
+	if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
+		pr, errRet = processResult{}, err
+		fold pr.Mem()
+		// (tlino) create the magic wand
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+			s.getRawPktAccWithoutPreservePath(rawPkt)
+		}
+		return 
+	}
 	assume false
-
-// 	// OHP entering our IA
-// 	// p.SecondHop = path.HopField{
-// 	// 	ConsIngress: ingressID,
-// 	// 	ExpTime:     p.FirstHop.ExpTime,
-// 	// }
-// 	// p.SecondHop.Mac = path.MAC(d.macFactory(), &p.Info, &p.SecondHop)
-
-// 	// if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
-// 	// 	return processResult{}, err
-// 	// }
 // 	// a, err := d.resolveLocalDst(s)
 // 	// if err != nil {
 // 	// 	return processResult{}, err

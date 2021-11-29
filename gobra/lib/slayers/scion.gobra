@@ -545,6 +545,14 @@ decreases _
 func (s *SCION) getRawScionPath() (res *scion.Raw) {
 	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
 }
+
+pure
+requires acc(s.Mem(), _)
+ensures res == unfolding acc(s.Mem(), _) in typeOf(s.Path) == *onehop.Path ? (s.Path).(*onehop.Path) : (*onehop.Path)(nil)
+decreases _
+func (s *SCION) getOHPPath() (res *onehop.Path) {
+	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *onehop.Path ? (s.Path).(*onehop.Path) : (*onehop.Path)(nil)
+}
 /** End of Getters **/
 
 ensures res == (int(addrLen) + 1) * LineLen
