@@ -843,10 +843,14 @@ func (s *SCION) AddReadDstAddr(addr net.Addr)
 // the destination address.
 requires acc(s.Mem(), 1/200)
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadDstAddr(resAddr)
+ensures resErr != nil ==> acc(s.Mem(), 1/200)
 func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
+	if err != nil {
+		fold acc(s.Mem(), 1/200)
+	}
 	inhale err == nil ==> s.ReadDstAddr(res)
 	return res, err
 }
@@ -923,6 +927,7 @@ ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
 ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
 ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200)
+ensures resErr != nil ==> acc(verifyutils.BytesAcc(raw), 1/200)
 func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) {
 	switch addrLen {
 	case AddrLen4:
