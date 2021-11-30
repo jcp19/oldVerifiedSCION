@@ -546,6 +546,7 @@ func (s *SCION) getRawScionPath() (res *scion.Raw) {
 	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
 }
 
+ghost
 pure
 requires acc(s.Mem(), _)
 ensures res == unfolding acc(s.Mem(), _) in typeOf(s.Path) == *onehop.Path ? (s.Path).(*onehop.Path) : (*onehop.Path)(nil)

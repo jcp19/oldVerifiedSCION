@@ -2664,8 +2664,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		}
 
 		// (tlino) added code to get back relation between p and s.Path
-		p = s.getOHPPath()
-		assume p != nil
+		assume p != nil && p == s.getOHPPath()
 		unfold s.Mem()
 		assert p.Mem()
 
