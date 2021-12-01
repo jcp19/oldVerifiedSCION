@@ -1062,7 +1062,8 @@ ghost
 requires pr.Mem()
 requires pr.OutAddr != nil
 ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10)
-ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) --* pr.Mem()
+ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10)) --* pr.Mem()
+decreases
 func (pr processResult) getAddrAndRawPktAcc()
 
 pred (pr processResult) Mem() {
@@ -1338,27 +1339,29 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 requires acc(DataPlaneMutexInvariant(d), _)
 requires verifyutils.BytesAcc(origPacket)
 requires cap(rawPkt) == bufSize
-requires buffer.Mem()
-requires s.Mem() && s.getRawPkt() == rawPkt
+requires buffer.Mem() && isComparable(buffer)
+requires s != nil && s.Mem() && s.getRawPkt() == rawPkt
 ensures verifyutils.BytesAcc(origPacket)
 ensures buffer.Mem()
-ensures s.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, err error) //{
+	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, err error) {
 
-// 	// (joao) added `&` before `scionPacketProcessor` to make this type check
-// 	p := &scionPacketProcessor{
-// 		d:          d,
-// 		ingressID:  ingressID,
-// 		rawPkt:     rawPkt,
-// 		scionLayer: s,
-// 		origPacket: origPacket,
-// 		buffer:     buffer,
-// 	}
-// 	p.process()
-// }
+	// (joao) added `&` before `scionPacketProcessor` to make this type check
+	p := &scionPacketProcessor{
+		d:          d,
+		ingressID:  ingressID,
+		rawPkt:     rawPkt,
+		scionLayer: s,
+		origPacket: origPacket,
+		buffer:     buffer,
+	}
+	// (tlino) use ghost arguments to relate the arguments of processSCION to process
+	// return p.process()
+	return p.process(rawPkt, origPacket, buffer)
+}
 
 type scionPacketProcessor struct {
 	// d is a reference to the dataplane instance that initiated this processor.
@@ -2451,15 +2454,16 @@ requires acc(p)
 requires acc(DataPlaneMutexInvariant(p.d), _)
 requires verifyutils.BytesAcc(p.origPacket)
 requires cap(p.rawPkt) == bufSize
-requires (p.buffer).Mem()
+requires (p.buffer).Mem() && isComparable(p.buffer)
 requires p.scionLayer != nil && (p.scionLayer).Mem() && (p.scionLayer).getRawPkt() == p.rawPkt
+requires r == p.rawPkt && o == p.origPacket && b == p.buffer
 ensures acc(p)
-ensures verifyutils.BytesAcc(p.origPacket)
+ensures verifyutils.BytesAcc(o)
 ensures cap(p.rawPkt) == bufSize
-ensures (p.buffer).Mem()
-ensures pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt))
+ensures b.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(r)
 // use ghost return
-func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //{
+func (p *scionPacketProcessor) process(ghost r []byte, ghost o []byte, ghost b  gopacket.SerializeBuffer) (pr processResult, errProcess error) //{
 	// if r, err := p.parsePath(); err != nil {
 	// 	// (tlino) create magic wand to later get back access to p.rawPkt
 	// 	pr, errProcess := r, err
@@ -2476,10 +2480,9 @@ func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //
 	// 	assert acc(&(p.rawPkt))
 	// 	assert verifyutils.BytesAcc(p.rawPkt)
 
-	// 	package pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt)) {}
+	// 	package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
 
 	// 	assert pr.Mem() --* (verifyutils.BytesAcc(rp))
-	// 	assert pr.Mem() --* (verifyutils.BytesAcc(p.rawPkt))
 	// 	return pr, errProcess
 	// }
 	// assume false
@@ -2556,7 +2559,7 @@ func (p *scionPacketProcessor) process() (pr processResult, errProcess error) //
 	// 	&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
 	// 	cannotRoute,
 	// )
-// }
+//}
 
 // (tlino) Verified
 // (tlino) added helper function to simulate the result of a MAC computation
@@ -2828,24 +2831,25 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet erro
 	return res, nil
 }
 
-// (tlino) partially Verified
+// (tlino) Verified
 requires acc(dst.Mem(), 1/200)
 ensures acc(ret.Mem(), 1/200)
 ensures acc(ret.Mem(), 1/200) --* acc(dst.Mem(), 1/200)
 decreases
 func addEndhostPort(dst net.Addr) (ret net.Addr) {
-	// if ip, ok := dst.(*net.IPAddr); ok {
-	// 	unfold acc(dst.Mem(), 1/200)
-	// 	ret := &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
-	// 	fold acc(ret.Mem(), 1/200)
-	// 	package acc(ret.Mem(), 1/200) --* acc(dst.Mem(), 1/200) {
-	// 		unfold acc(ret.Mem(), 1/200)
-	// 		assert forall i int :: 0 <= i && i < len(ret.IP) ==> acc(&(ret.IP)[i], 1/200)
-	// 		assume typeOf(dst) == *net.IPAddr && (forall i int :: 0 <= i && i < len(dst.IP) ==> acc(&(dst.IP)[i], 1/200))
-	// 		fold acc(dst.Mem(), 1/200)
-	// 	}
-	// 	return ret
-	// }
+	if ip, ok := dst.(*net.IPAddr); ok {
+		unfold acc(ip.Mem(), 1/200)
+		ret := &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
+		fold acc(ret.Mem(), 1/200)
+		package acc(ret.Mem(), 1/200) --* acc(dst.Mem(), 1/200) {
+			unfold acc(ret.Mem(), 1/200)
+			assert forall i int :: 0 <= i && i < len(ret.IP) ==> acc(&(ret.IP)[i], 1/200)
+			inhale acc(&ip.IP)
+			assume (forall i int :: 0 <= i && i < len(ip.IP) ==> acc(&(ip.IP)[i], 1/200))
+			fold acc(ip.Mem(), 1/200)
+		}
+		return ret
+	}
 	ret := dst
 	package acc(ret.Mem(), 1/200) --* acc(dst.Mem(), 1/200) {}
 	return dst
