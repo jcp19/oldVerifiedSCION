@@ -159,7 +159,8 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
 	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
 	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem()) &&
-	(forall btc BatchConn :: btc in range(d.external) ==> btc.Mem())
+	(forall btc BatchConn :: btc in range(d.external) ==> btc.Mem()) &&
+	(d.internal).Mem()
 }
 
 // (tlino) start of getter functions to avoid unfolding DataPlaneMutexInvariant
@@ -2007,7 +2008,7 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
 requires p.Mem()
 ensures pr.Mem()
-ensures e != nil ==> p.Mem()
+ensures p.Mem()
 decreases _
 func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, e error) //{
 // 	unfold p.Mem()
@@ -2078,7 +2079,10 @@ func (p *scionPacketProcessor) processEgress() error {
 // (tlino) Verified
 requires p.Mem()
 ensures errRet == nil ==> p.Mem()
-ensures errRet != nil ==> acc(p) && acc(DataPlaneMutexInvariant(p.d), _) && verifyutils.BytesAcc(p.origPacket)
+ensures errRet != nil ==> acc(&p.d, _) && acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4)
+ensures errRet != nil ==> acc(&p.origPacket, 1/4) && acc(&p.buffer, 1/4) && acc(&p.path) && acc(&p.hopField)
+ensures errRet != nil ==> acc(&p.infoField) && acc(&p.segmentChange)
+ensures errRet != nil ==> acc(DataPlaneMutexInvariant(p.d), _) && verifyutils.BytesAcc(p.origPacket)
 ensures errRet != nil ==> p.buffer.Mem() && p.scionLayer.Mem() && cap(p.rawPkt) == bufSize
 ensures errRet != nil ==> p.path != nil && p.scionLayer != nil && p.path == p.scionLayer.getRawScionPath()
 ensures errRet != nil ==> p.rawPkt == p.scionLayer.getRawPkt()
@@ -2464,7 +2468,7 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 	return p.packSCMP(scmpH, scmpP, e)
 }
 
-// (tlino) TODO: verify
+// (tlino) partially verified
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 requires acc(&p.infoField) && acc(&p.segmentChange)
@@ -2598,7 +2602,6 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		return pr, errProcess
 	}
 	
-
 	// (tlino) added code, get some values
 	unfold p.Mem()
 	dstIA := p.scionLayer.getDstIA()
@@ -2644,20 +2647,65 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
 			return pr, errProcess
 		}
-		// (tlino) insert here magic wand
+		// (tlino) original code, adapted code below
 		// return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
-		assume false
+		unfold p.Mem()
+		unfold acc(DataPlaneMutexInvariant(p.d), _)
+		assert acc(p.d.internal.Mem(), _)
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		pr, errProcess = processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+		fold pr.Mem()
+		assert pr.Mem()
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
+			unfold pr.Mem()
+		}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+
+	// Outbound: pkts leaving the local IA.
+	// BRTransit: pkts leaving from the same BR different interface.
+
+	// (tlino) check acces to p.path
+	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+	assert pp.Mem()
+
+	if p.path.IsXover() {
+		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+		fold p.Mem()
+
+		if r, err := p.doXover(); err != nil {
+			// (tlino) original code, adapted code below
+			// return r, err
+
+			pr, errProcess = r, err
+			assert pr.Mem()
+
+			// get access to rawPkt, use new variables to make Gobra work
+			assert p.scionLayer.Mem()
+			sl := p.scionLayer
+			rp := p.rawPkt
+			sl.getRawPktAccWithoutPreservePath(rp)
+			assert verifyutils.BytesAcc(rp)
+			assert verifyutils.BytesAcc(p.rawPkt)
+
+			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			return pr, errProcess
+		}
 	}
 	assume false
-	// // Outbound: pkts leaving the local IA.
-	// // BRTransit: pkts leaving from the same BR different interface.
-
-	// // (joao) initially, we will assume that there is no crossOver
-	// if p.path.IsXover() {
-	// 	if r, err := p.doXover(); err != nil {
-	// 		return r, err
-	// 	}
-	// }
 	// if r, err := p.validateEgressID(); err != nil {
 	// 	return r, err
 	// }
