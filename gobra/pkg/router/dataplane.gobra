@@ -194,47 +194,47 @@ func soundDataPlaneMutexInvariant() (res *DataPlane) {
 
 /** Globals **/
 // (joao): begin alternative to final global variables defined in the previous var block
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func alreadySet() (e error) { return serrors.New("already set") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func cannotRoute() (e error) { return serrors.New("cannot route, dropping pkt") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func emptyValue() (e error) { return serrors.New("empty value") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func malformedPath() (e error) { return serrors.New("malformed path content") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func modifyExisting() (e error) { return serrors.New("modifying a running dataplane is not allowed") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func noSVCBackend() (e error) { return serrors.New("cannot find internal IP for the SVC") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func unsupportedPathType() (e error) { return serrors.New("unsupported path type") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func unsupportedPathTypeNextHeader() (e error) { return serrors.New("unsupported combination") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func noBFDSessionFound() (e error) { return serrors.New("no BFD sessions was found") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func noBFDSessionConfigured() (e error) { return serrors.New("no BFD sessions have been configured") }
 
-ensures e != nil
+ensures isComparable(e) && e != nil
 decreases
 func errBFDDisabled() (e error) { return serrors.New("BFD is disabled") }
 
