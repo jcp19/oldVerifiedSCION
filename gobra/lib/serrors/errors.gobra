@@ -158,7 +158,7 @@ func WrapStr(msg string, cause error, logCtx ...interface{}) (res error) {
 }
 
 // New creates a new error with the given message and context.
-ensures res != nil
+ensures isComparable(res) && res != nil
 decreases 
 func New(msg string, logCtx ...interface{}) (res error) {
 	if len(logCtx) == 0 {

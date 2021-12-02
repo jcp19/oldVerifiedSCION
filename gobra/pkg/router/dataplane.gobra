@@ -1358,9 +1358,9 @@ func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCI
 		origPacket: origPacket,
 		buffer:     buffer,
 	}
-	// (tlino) use ghost arguments to relate the arguments of processSCION to process
+	// (tlino) use ghost argument to relate the argument of processSCION to process
 	// return p.process()
-	return p.process(rawPkt, origPacket, buffer)
+	return p.process(rawPkt)
 }
 
 type scionPacketProcessor struct {
@@ -1392,7 +1392,16 @@ type scionPacketProcessor struct {
 }
 
 pred (p *scionPacketProcessor) Mem() {
-	acc(p) &&
+	acc(&p.d, _) &&
+	acc(&p.ingressID, 1/4) &&
+	acc(&p.rawPkt, 1/4) &&
+	acc(&p.scionLayer, 1/4) &&
+	acc(&p.origPacket, 1/4) &&
+	acc(&p.buffer, 1/4) &&
+	acc(&p.path) &&
+	acc(&p.hopField) &&
+	acc(&p.infoField) &&
+	acc(&p.segmentChange) &&
 	acc(DataPlaneMutexInvariant(p.d), _) &&
 	verifyutils.BytesAcc(p.origPacket) &&
 	acc(p.infoField) &&
@@ -1617,11 +1626,16 @@ func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, 
 // }
 
 // (tlino) Verified
-requires acc(p) && p.scionLayer != nil && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
+requires acc(&p.d, _) && acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4) && acc(&p.origPacket, 1/4)
+requires acc(&p.buffer, 1/4) && acc(&p.path) && acc(&p.hopField) && acc(&p.infoField) && acc(&p.segmentChange)
+requires p.scionLayer != nil && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 requires (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
 requires acc(DataPlaneMutexInvariant(p.d), _)
-ensures errRet != nil ==> acc(p) && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
+ensures errRet != nil ==> acc(&p.d, _) && acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4) && acc(&p.origPacket, 1/4)
+ensures errRet != nil ==> acc(&p.buffer, 1/4) && acc(&p.path) && acc(&p.hopField) && acc(&p.infoField) && acc(&p.segmentChange)
+ensures errRet != nil ==> (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 ensures errRet != nil ==> (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
+ensures errRet == nil ==> p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
@@ -1994,6 +2008,7 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 requires p.Mem()
 ensures pr.Mem()
 ensures e != nil ==> p.Mem()
+decreases _
 func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, e error) //{
 // 	unfold p.Mem()
 // 	sl := p.scionLayer
@@ -2450,68 +2465,190 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 }
 
 // (tlino) TODO: verify
-requires acc(p)
+requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
+requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
+requires acc(&p.infoField) && acc(&p.segmentChange)
 requires acc(DataPlaneMutexInvariant(p.d), _)
 requires verifyutils.BytesAcc(p.origPacket)
 requires cap(p.rawPkt) == bufSize
 requires (p.buffer).Mem() && isComparable(p.buffer)
 requires p.scionLayer != nil && (p.scionLayer).Mem() && (p.scionLayer).getRawPkt() == p.rawPkt
-requires r == p.rawPkt && o == p.origPacket && b == p.buffer
-ensures acc(p)
-ensures verifyutils.BytesAcc(o)
+requires r == p.rawPkt
+ensures acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
+ensures acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
+ensures acc(&p.infoField) && acc(&p.segmentChange)
+ensures verifyutils.BytesAcc(p.origPacket)
 ensures cap(p.rawPkt) == bufSize
-ensures b.Mem()
+ensures (p.buffer).Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(r)
-// use ghost return
-func (p *scionPacketProcessor) process(ghost r []byte, ghost o []byte, ghost b  gopacket.SerializeBuffer) (pr processResult, errProcess error) //{
-	// if r, err := p.parsePath(); err != nil {
-	// 	// (tlino) create magic wand to later get back access to p.rawPkt
-	// 	pr, errProcess := r, err
+decreases
+func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errProcess error) {
+	if r, err := p.parsePath(); err != nil {
+		// (tlino) create magic wand to later get back access to p.rawPkt
+		pr, errProcess := r, err
+		assert pr.Mem()
 
-	// 	assert pr.Mem()
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
 
-	// 	// get access to rawPkt, use new variables to make Gobra work
-	// 	assert p.scionLayer.Mem()
-	// 	sl := p.scionLayer
-	// 	rp := p.rawPkt
-	// 	sl.getRawPktAccWithoutPreservePath(rp)
-	// 	assert verifyutils.BytesAcc(rp)
-	// 	assert p.rawPkt == rp
-	// 	assert acc(&(p.rawPkt))
-	// 	assert verifyutils.BytesAcc(p.rawPkt)
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
 
-	// 	package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
 
-	// 	assert pr.Mem() --* (verifyutils.BytesAcc(rp))
-	// 	return pr, errProcess
-	// }
-	// assume false
+	// (tlino) keep read access to fields, they arn't modified
+	assert acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4) && acc(&p.origPacket, 1/4) && acc(&p.buffer, 1/4)
 
-	// if r, err := p.validatePktLen(); err != nil {
-	// 	return r, err
-	// }
-	// // (tlino) TODO: needs p.path.Mem()
-	// // if err := p.updateNonConsDirIngressSegID(); err != nil {
-	// // 	return processResult{}, err
-	// // }
-	// if r, err := p.verifyCurrentMAC(); err != nil {
-	// 	return r, err
-	// }
-	// if r, err := p.handleIngressRouterAlert(); err != nil {
-	// 	return r, err
-	// }
+	if r, err := p.validatePktLen(); err != nil {
+		// (tlino) original code, adapted code is below
+		// return r, err
 
-	// (tlino) TODO: needs p.path.Mem()
-	// // Inbound: pkts destined to the local IA.
+		unfold p.Mem()
+
+		pr, errProcess = r, err
+		assert pr.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+
+	if err := p.updateNonConsDirIngressSegID(); err != nil {
+		// (tlino) original code, adapted code is below
+		// return processResult{}, err
+
+		unfold p.Mem()
+
+		pr, errProcess = processResult{}, err
+		fold pr.Mem()
+		assert pr.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+	
+	if r, err := p.verifyCurrentMAC(); err != nil {
+		// (tlino) original code, adapted code is below
+		// return r, err
+
+		unfold p.Mem()
+
+		pr, errProcess = r, err
+		assert pr.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+	
+	if r, err := p.handleIngressRouterAlert(); err != nil {
+		// (tlino) original code, adapted code is below
+		// return r, err
+
+		unfold p.Mem()
+
+		pr, errProcess = r, err
+		assert pr.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+	
+
+	// (tlino) added code, get some values
+	unfold p.Mem()
+	dstIA := p.scionLayer.getDstIA()
+	localIA := p.d.GetLocalAI()
+
+	// (tlino) get access to path. Use new local variables to make gobra work
+	pp := p.path
+	rp := p.rawPkt
+	scionL := p.scionLayer
+	scionL.getPathAcc(pp, rp)
+	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+	assert pp.Mem()
+
+	currHF := pp.GetCurrHF()
+	numHops := pp.GetNumHops()
+
+	// Inbound: pkts destined to the local IA.
+	// (tlino) use getters above to avoid unfoldings
 	// if p.scionLayer.DstIA.Equal(p.d.localIA) && int(p.path.PathMeta.CurrHF)+1 == p.path.NumHops {
-	// 	a, r, err := p.resolveInbound()
-	// 	if err != nil {
-	// 		return r, err
-	// 	}
-	//	// (tlino) insert here magic wand
-	// 	return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
-	// }
+	if dstIA.Equal(localIA) && int(currHF)+1 == numHops {
+		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+		fold p.Mem()
+		a, r, err := p.resolveInbound()
+		if err != nil {
+			// (tlino) original code, adapted code below
+			// return r, err
 
+			unfold p.Mem()
+
+			pr, errProcess = r, err
+			assert pr.Mem()
+
+			// get access to rawPkt, use new variables to make Gobra work
+			assert p.scionLayer.Mem()
+			sl := p.scionLayer
+			rp := p.rawPkt
+			sl.getRawPktAccWithoutPreservePath(rp)
+			assert verifyutils.BytesAcc(rp)
+			assert verifyutils.BytesAcc(p.rawPkt)
+
+			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			return pr, errProcess
+		}
+		// (tlino) insert here magic wand
+		// return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+		assume false
+	}
+	assume false
 	// // Outbound: pkts leaving the local IA.
 	// // BRTransit: pkts leaving from the same BR different interface.
 
@@ -2559,7 +2696,7 @@ func (p *scionPacketProcessor) process(ghost r []byte, ghost o []byte, ghost b  
 	// 	&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
 	// 	cannotRoute,
 	// )
-//}
+}
 
 // (tlino) Verified
 // (tlino) added helper function to simulate the result of a MAC computation
