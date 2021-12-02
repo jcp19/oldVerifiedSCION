@@ -2801,6 +2801,9 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 
 // (tlino) partially Verified
 // (tlino) TODO d.svc not supported yet
+// (tlino) res contains a subslice of s.rawPkt
+// (tlino) This method doesn't establish res.Mem(), since the caller embedds res
+// (tlino) in a processResult together with the rawPkt. 
 requires acc(s.Mem(), 1/100)
 requires acc(DataPlaneMutexInvariant(d), _)
 ensures acc(s.Mem(), 1/100)
@@ -2825,35 +2828,23 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet erro
 	// 	// return a, nil
 	// }
 	res = addEndhostPort(dst)
-	assert acc(res.Mem(), 1/200) --* acc(dst.Mem(), 1/200)
-	apply acc(res.Mem(), 1/200) --* acc(dst.Mem(), 1/200)
 	s.AddReadDstAddr(dst)
 	return res, nil
 }
 
-// (tlino) partially Verified
+// (tlino) Verified
+// (tlino) This method may not establish ret.Mem()
 requires acc(dst.Mem(), 1/200)
-ensures acc(ret.Mem(), 1/200)
-ensures acc(ret.Mem(), 1/200) --* acc(dst.Mem(), 1/200)
+ensures acc(dst.Mem(), 1/200)
 decreases
 func addEndhostPort(dst net.Addr) (ret net.Addr) {
-	// if ip, ok := dst.(*net.IPAddr); ok {
-	// 	unfold acc(ip.Mem(), 1/200)
-	// 	ret := &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
-	// 	fold acc(ret.Mem(), 1/200)
-	// 	package acc(ret.Mem(), 1/200) --* acc(dst.Mem(), 1/200) {
-	// 		unfold acc(ret.Mem(), 1/200)
-	// 		assert forall i int :: 0 <= i && i < len(ret.IP) ==> acc(&(ret.IP)[i], 1/200)
-	// 		assert acc(&ip.IP, 1/200)
-	// 		assume (forall i int :: 0 <= i && i < len(ip.IP) ==> &(ip.IP)[i] == &(ret.IP)[i])
-	// 		assert (forall i int :: 0 <= i && i < len(ip.IP) ==> &(ip.IP)[i] == &(ret.IP)[i])
-	// 		assume (forall i int :: 0 <= i && i < len(ip.IP) ==> acc(&(ip.IP)[i], 1/200))
-	// 		fold acc(ip.Mem(), 1/200)
-	// 	}
-	// 	return ret
-	// }
+	if ip, ok := dst.(*net.IPAddr); ok {
+		unfold acc(ip.Mem(), 1/200)
+		ret := &net.UDPAddr{IP: ip.IP, Port: topology.EndhostPort}
+		fold acc(ip.Mem(), 1/200)
+		return ret
+	}
 	ret := dst
-	package acc(ret.Mem(), 1/200) --* acc(dst.Mem(), 1/200) {}
 	return dst
 }
 
