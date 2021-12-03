@@ -2958,7 +2958,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		}
 		return 
 	}
-	assume false
+	
 	a, err := d.resolveLocalDst(s)
 	if err != nil {
 		// (tlino) original code, adapted code is below
@@ -2976,6 +2976,8 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	// (tlino) get access to rawPkt
 	s.getRawPktAccWithoutPreservePath(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt)
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	assert acc((d.internal).Mem(), _)
 	pr, errRet = processResult{OutConn: d.internal, OutAddr: a, OutPkt: rawPkt}, nil
 	fold pr.Mem()
 	// (tlino) create the magic wand
@@ -2993,8 +2995,9 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 requires acc(s.Mem(), 1/100)
 requires acc(DataPlaneMutexInvariant(d), _)
 ensures acc(s.Mem(), 1/100)
+decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
-// func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error) 
+// func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error)
 func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet error) {
 	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 	dst, err := s.DstAddr()

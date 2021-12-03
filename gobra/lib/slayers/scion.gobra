@@ -834,6 +834,7 @@ ghost
 requires acc(s.Mem(), 1/200) && acc(addr.Mem(), 1/200)
 requires s.ReadDstAddr(addr)
 ensures acc(s.Mem(), 1/100)
+decreases
 func (s *SCION) AddReadDstAddr(addr net.Addr)
 
 // (joao) Verified
@@ -844,6 +845,7 @@ func (s *SCION) AddReadDstAddr(addr net.Addr)
 requires acc(s.Mem(), 1/200)
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadDstAddr(resAddr)
 ensures resErr != nil ==> acc(s.Mem(), 1/200)
+decreases
 func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
@@ -928,6 +930,7 @@ ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> res
 ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200)
 ensures resErr != nil ==> acc(verifyutils.BytesAcc(raw), 1/200)
+decreases
 func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) {
 	switch addrLen {
 	case AddrLen4:
