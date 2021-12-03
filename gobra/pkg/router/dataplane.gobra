@@ -351,6 +351,7 @@ func (d *DataPlane) SetKey(key []byte) error {
 // dataplane.
 requires acc(&d.mtx, _) && d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+requires conn.Mem()
 ensures acc(&d.mtx, _) && d.mtx.LockP()
 func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error {
 	d.mtx.Lock()
