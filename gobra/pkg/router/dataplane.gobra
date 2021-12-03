@@ -1344,6 +1344,7 @@ requires cap(rawPkt) == bufSize
 requires buffer.Mem() && isComparable(buffer)
 requires s != nil && s.Mem() && s.getRawPkt() == rawPkt
 ensures verifyutils.BytesAcc(origPacket)
+ensures cap(rawPkt) == bufSize
 ensures buffer.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 // (joao) s is now a *slayers.SCION
@@ -2469,7 +2470,7 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 	return p.packSCMP(scmpH, scmpP, e)
 }
 
-// (tlino) partially verified
+// (tlino) Verified
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 requires acc(&p.infoField) && acc(&p.segmentChange)
@@ -2681,10 +2682,13 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 	assert pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 	assert pp.Mem()
 
-	if p.path.IsXover() {
-		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
-		fold p.Mem()
+	isXover := p.path.IsXover()
+	apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
+	fold p.Mem()
 
+	// (tlino) use variable instead of p.path.IsXover()
+	// if p.path.IsXover() {
+	if isXover {
 		if r, err := p.doXover(); err != nil {
 			// (tlino) original code, adapted code below
 			// return r, err
@@ -2706,38 +2710,170 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 			return pr, errProcess
 		}
 	}
-	assume false
-	// if r, err := p.validateEgressID(); err != nil {
-	// 	return r, err
-	// }
-	// // handle egress router alert before we check if it's up because we want to
-	// // send the reply anyway, so that trace route can pinpoint the exact link
-	// // that failed.
-	// if r, err := p.handleEgressRouterAlert(); err != nil {
-	// 	return r, err
-	// }
-	// if r, err := p.validateEgressUp(); err != nil {
-	// 	return r, err
-	// }
+	
+	if r, err := p.validateEgressID(); err != nil {
+		// (tlino) original code, adapted code below
+		// return r, err
+		unfold p.Mem()
 
-	// egressID := p.egressInterface()
+		pr, errProcess = r, err
+		assert pr.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+	
+	// handle egress router alert before we check if it's up because we want to
+	// send the reply anyway, so that trace route can pinpoint the exact link
+	// that failed.
+	if r, err := p.handleEgressRouterAlert(); err != nil {
+		// (tlino) original code, adapted code below
+		// return r, err
+		unfold p.Mem()
+
+		pr, errProcess = r, err
+		assert pr.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+	if r, err := p.validateEgressUp(); err != nil {
+		// (tlino) original code, adapted code below
+		// return r, err
+		unfold p.Mem()
+
+		pr, errProcess = r, err
+		assert pr.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+	egressID := p.egressInterface()
+
+	unfold acc(DataPlaneMutexInvariant(p.d), _)
+	// (tlino) use parantheses to make it parse
 	// if c, ok := p.d.external[egressID]; ok {
-	// 	if err := p.processEgress(); err != nil {
-	// 		return processResult{}, err
-	// 	}
-	//  // (tlino) insert here magic wand
-	// 	return processResult{EgressID: egressID, OutConn: c, OutPkt: p.rawPkt}, nil
-	// }
+	if c, ok := (p.d.external)[egressID]; ok {
+		if err := p.processEgress(); err != nil {
+			// (tlino) original code,  adapted code below
+			// return processResult{}, err
+			unfold p.Mem()
 
-	// // ASTransit: pkts leaving from another AS BR.
+			pr, errProcess = processResult{}, err
+			fold pr.Mem()
+			assert pr.Mem()
+
+			// get access to rawPkt, use new variables to make Gobra work
+			assert p.scionLayer.Mem()
+			sl := p.scionLayer
+			rp := p.rawPkt
+			sl.getRawPktAccWithoutPreservePath(rp)
+			assert verifyutils.BytesAcc(rp)
+			assert verifyutils.BytesAcc(p.rawPkt)
+
+			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
+
+			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			return pr, errProcess
+		}
+		// (tlino) original code, adapted code is below
+		// return processResult{EgressID: egressID, OutConn: c, OutPkt: p.rawPkt}, nil
+
+		unfold p.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+		
+		assert acc(c.Mem(), _)
+
+		pr, errProcess = processResult{EgressID: egressID, OutConn: c, OutPkt: p.rawPkt}, nil
+		fold pr.Mem()
+		assert pr.Mem()
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
+			unfold pr.Mem()
+		}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+	
+	// ASTransit: pkts leaving from another AS BR.
+
+	// (tlino) added parantheses to make it parse
 	// if a, ok := p.d.internalNextHops[egressID]; ok {
-	//	// (tlino) insert here magic wand
-	// 	return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
-	// }
-	// errCode := slayers.SCMPCodeUnknownHopFieldEgress
+	if a, ok := (p.d.internalNextHops)[egressID]; ok {
+		// (tlino) original code, adapted code is below
+		// return processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+
+		unfold p.Mem()
+
+		// get access to rawPkt, use new variables to make Gobra work
+		assert p.scionLayer.Mem()
+		sl := p.scionLayer
+		rp := p.rawPkt
+		sl.getRawPktAccWithoutPreservePath(rp)
+		assert verifyutils.BytesAcc(rp)
+		assert verifyutils.BytesAcc(p.rawPkt)
+
+		pr, errProcess = processResult{OutConn: p.d.internal, OutAddr: a, OutPkt: p.rawPkt}, nil
+		fold pr.Mem()
+		assert pr.Mem()
+
+		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
+			unfold pr.Mem()
+		}
+
+		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		return pr, errProcess
+	}
+
+	assert p.Mem()
+
+	errCode := slayers.SCMPCodeUnknownHopFieldEgress
+	consDir := unfolding acc(p.Mem(), 1/1000) in p.infoField.ConsDir
+	// (tlino) use variable for ConsDir, simplifies verification
 	// if !p.infoField.ConsDir {
-	// 	errCode = slayers.SCMPCodeUnknownHopFieldIngress
-	// }
+	if !consDir {
+		errCode = slayers.SCMPCodeUnknownHopFieldIngress
+	}
+
+	// (tlino) original code, adapted code is below
 	// return p.packSCMP(
 	// 	&slayers.SCMP{
 	// 		TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
@@ -2745,6 +2881,32 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 	// 	&slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()},
 	// 	cannotRoute,
 	// )
+	scmpH := &slayers.SCMP{
+		TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeParameterProblem, errCode),
+	}
+	fold scmpH.Mem()
+	scmpP := &slayers.SCMPParameterProblem{Pointer: p.currentHopPointer()}
+	fold scmpP.Mem()
+	e := cannotRoute()
+	pr, errProcess = p.packSCMP(scmpH, scmpP, e)
+
+	assert pr.Mem()
+	unfold p.Mem()
+
+	// get access to rawPkt, use new variables to make Gobra work
+	assert p.scionLayer.Mem()
+	sl := p.scionLayer
+	rp := p.rawPkt
+	sl.getRawPktAccWithoutPreservePath(rp)
+	assert verifyutils.BytesAcc(rp)
+	assert verifyutils.BytesAcc(p.rawPkt)
+
+	package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
+		unfold pr.Mem()
+	}
+
+	assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+	return pr, errProcess
 }
 
 // (tlino) Verified
