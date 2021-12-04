@@ -1099,7 +1099,7 @@ pure func isZeroSCION(s slayers.SCION) bool {
 		s.Path == nil
 }
 
-// (tlino) TODO: reverify
+// (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
 requires isZeroSCION(s)
 requires verifyutils.BytesAcc(rawPkt)
@@ -1114,104 +1114,167 @@ ensures srcAddr.Mem()
 ensures buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, err error) //{
-// 	// (joao) `s` should always have the zero value of slayers.SCION;
-// 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
-// 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
-// 	//        that gets mutated
-// 	sNew := &slayers.SCION{}
+	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, errRet error) {
+	// (joao) `s` should always have the zero value of slayers.SCION;
+	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
+	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
+	//        that gets mutated
+	sNew := &slayers.SCION{}
 
-// 	fold (gopacket.NilDecodeFeedback{}).Mem()
-// 	// (joao) Adapted to conform to changes in gopacket and sNew
-// 	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
-// 	if err := sNew.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback{}); err != nil {
-// 		return processResult{}, err
-// 	}
-	
-// 	// (joao) already lost access to rawPkt here
-// 	if err := buffer.Clear(); err != nil {
-// 		return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
-// 	}
+	df := gopacket.NilDecodeFeedback{}
+	fold df.Mem()
+	// (joao) Adapted to conform to changes in gopacket and sNew
+	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
+	if err := sNew.DecodeFromBytes(rawPkt, df); err != nil {
+		// (tlino) original code, adapted code is below 
+		// return processResult{}, err
 
-// 	// (tlino) use sNew.getPathType() instead of s
-// 	// switch s.PathType {
-	
-// 	// assert false // doesn't verify
-// 	switch sNew.getPathType() {
-// 	case slayers.PathTypeEmpty:
-// 		// (tlino) use sNew instead of s and use getters
-// 		// if s.NextHdr == common.L4BFD {
-// 		//	return processResult{}, d.processIntraBFD(srcAddr, s.Payload)
-// 		// }
-// 		if sNew.getNextHdr() == common.L4BFD {
-
-// 			// add Here magic wand
-
-// 			return processResult{}, d.processIntraBFD(srcAddr, sNew.Payload)
-// 		}
-// 		// (tlino) use sNew instead of s and use getters
-// 		// return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader,
-// 		// 	"type", s.PathType, "header", s.NextHdr)
+		pr, errRet =  processResult{}, err
+		fold pr.Mem()
+		assert pr.Mem()
+		assert verifyutils.BytesAcc(rawPkt)
 		
-// 			// add Here magic wand
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		return
+	}
+	
+	// (joao) already lost access to rawPkt here
+	if err := buffer.Clear(); err != nil {
+		// (tlino) original code, adapted code is below 
+		// return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 
-// 		return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader(),
-// 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
-// 	case slayers.PathTypeOneHop:
-// 		// (tlino) use sNew instead of s and use getters
-// 		// if s.NextHdr == common.L4BFD {
-// 		if sNew.getNextHdr() == common.L4BFD {
-// 			// (tlino) use sNew instead of s and use getters
-// 			// ohp, ok := s.Path.(*onehop.Path)
-// 			// if !ok {
-// 			// 	return processResult{}, malformedPath
-// 			// }
-// 			// (tlino) use getter to return path and payload
-// 			path, payload := sNew.GetPathAndPayload()
-// 			// (tlino) use path instead of s.Path
-// 			// ohp, ok := s.Path.(*onehop.Path)
-// 			ohp, ok := path.(*onehop.Path)
-// 			// (tlino) globals aren't supported yet
-// 			// if !ok {
-// 			// 	return processResult{}, malformedPath
-// 			// }
-// 			if !ok {
-// 				return processResult{}, malformedPath()
-// 			}
-// 			// (tlino) use result from getter
-// 			// return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
+		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
+		fold pr.Mem()
+		assert pr.Mem()
 
-// 			// add here magic wand
+		// get access to rawPkt
+		assert sNew.Mem()
+		sNew.getRawPktAccWithoutPreservePath(rawPkt)
+		assert verifyutils.BytesAcc(rawPkt)
 
-// 			return processResult{}, d.processInterBFD(ingressID, ohp, payload)
-// 		}
-// 		// (tlino) use sNew instead of s
-// 		// return d.processOHP(ingressID, rawPkt, s, buffer)
-// 		// assert forall i int :: 0 <= i && i < len(rawPkt) ==> acc(&rawPkt[i])
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		return
+	}
 
-// 		// add here magic wand
+	// (tlino) use sNew.getPathType() instead of s
+	// switch s.PathType {
+	switch sNew.getPathType() {
+	case slayers.PathTypeEmpty:
+		// (tlino) use sNew instead of s and use getters
+		// if s.NextHdr == common.L4BFD {
+		if sNew.getNextHdr() == common.L4BFD {
+			// (tlino) original code, adapted code is below
+			// return processResult{}, d.processIntraBFD(srcAddr, s.Payload)
+			unfold sNew.Mem()
+			pr, errRet = processResult{}, d.processIntraBFD(srcAddr, sNew.EmbeddedBaseLayer.Payload)
+			fold sNew.Mem()
+			fold pr.Mem()
 
-// 		return d.processOHP(ingressID, rawPkt, sNew, buffer)
-// 	case slayers.PathTypeSCION:
-// 		assert acc(DataPlaneMutexInvariant(d), _)
-// 		assert forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-// 		assert buffer.Mem()
-// 		assert sNew.Mem()
-// 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
-// 		// assert false //verified
+			// get access to rawPkt
+			assert sNew.Mem()
+			sNew.getRawPktAccWithoutPreservePath(rawPkt)
+			assert verifyutils.BytesAcc(rawPkt)
 
-// 		// add here magic wand
+			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+			assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+			return 
+		}
+		// (tlino) original code, adapted code is below
+		// return processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader,
+		// 	"type", s.PathType, "header", s.NextHdr)
+		
+		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader(),
+		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
+		fold pr.Mem()
 
-// 		return d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
-// 	default:
-// 		// return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
+		// get access to rawPkt
+		assert sNew.Mem()
+		sNew.getRawPktAccWithoutPreservePath(rawPkt)
+		assert verifyutils.BytesAcc(rawPkt)
 
-// 		// add here magic wand
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		return 
+	case slayers.PathTypeOneHop:
+		// (tlino) use sNew instead of s and use getters
+		// if s.NextHdr == common.L4BFD {
+		if sNew.getNextHdr() == common.L4BFD {
+			unfold sNew.Mem()
+			// (tlino) use sNew instead of s
+			// ohp, ok := s.Path.(*onehop.Path)
+			ohp, ok := (sNew.Path).(*onehop.Path)
+			fold sNew.Mem()
+			if !ok {
+				// (tlino) original code, adapted code is below
+				// return processResult{}, malformedPath
+				pr, errRet = processResult{}, malformedPath()
+				fold pr.Mem()
+				assert pr.Mem()
 
-// 		return processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
-// 	}
-// }
+				// get access to rawPkt
+				assert sNew.Mem()
+				sNew.getRawPktAccWithoutPreservePath(rawPkt)
+				assert verifyutils.BytesAcc(rawPkt)
+
+				package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+				assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+				return
+			}
+			
+			// (tlino) original code, adapted code is below
+			// return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
+			unfold sNew.Mem()
+			pr, errRet = processResult{}, d.processInterBFD(ingressID, ohp, sNew.EmbeddedBaseLayer.Payload)
+			fold sNew.Mem()
+			fold pr.Mem()
+
+			// get access to rawPkt
+			assert sNew.Mem()
+			sNew.getRawPktAccWithoutPreservePath(rawPkt)
+			assert verifyutils.BytesAcc(rawPkt)
+
+			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+			assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+			return
+		}
+		// (tlino) original code, adapted code is below
+		// return d.processOHP(ingressID, rawPkt, s, buffer)
+
+		pr, errRet = d.processOHP(ingressID, rawPkt, sNew, buffer)
+		return
+	case slayers.PathTypeSCION:
+		// (tlino) original code, adapted code is below 
+		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
+
+		assert acc(DataPlaneMutexInvariant(d), _)
+		assert verifyutils.BytesAcc(origPacket)
+		assert buffer.Mem()
+		assert sNew.Mem()
+
+		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
+		return
+	default:
+		// (tlino) original code, adapted code is below 
+		// return processResult{}, serrors.WithCtx(unsupportedPathType, "type", s.PathType)
+
+		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
+		fold pr.Mem()
+		assert pr.Mem()
+
+		// get access to rawPkt
+		assert sNew.Mem()
+		sNew.getRawPktAccWithoutPreservePath(rawPkt)
+		assert verifyutils.BytesAcc(rawPkt)
+
+		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		return
+ 	}
+}
 
 // (tlino) Verified
 // (joao) `oh` is not used anywhere in the function
@@ -1339,11 +1402,12 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 requires acc(DataPlaneMutexInvariant(d), _)
 requires verifyutils.BytesAcc(origPacket)
 requires cap(rawPkt) == bufSize
-requires buffer.Mem() && isComparable(buffer)
+requires buffer.Mem()
 requires s != nil && s.Mem() && s.getRawPkt() == rawPkt
 ensures verifyutils.BytesAcc(origPacket)
 ensures cap(rawPkt) == bufSize
 ensures buffer.Mem()
+ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
 // (joao) s is now a *slayers.SCION
@@ -2476,7 +2540,7 @@ requires acc(&p.infoField) && acc(&p.segmentChange)
 requires acc(DataPlaneMutexInvariant(p.d), _)
 requires verifyutils.BytesAcc(p.origPacket)
 requires cap(p.rawPkt) == bufSize
-requires (p.buffer).Mem() && isComparable(p.buffer)
+requires (p.buffer).Mem()
 requires p.scionLayer != nil && (p.scionLayer).Mem() && (p.scionLayer).getRawPkt() == p.rawPkt
 requires r == p.rawPkt
 ensures acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
@@ -2485,6 +2549,7 @@ ensures acc(&p.infoField) && acc(&p.segmentChange)
 ensures verifyutils.BytesAcc(p.origPacket)
 ensures cap(p.rawPkt) == bufSize
 ensures (p.buffer).Mem()
+ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(r)
 decreases
 func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errProcess error) {

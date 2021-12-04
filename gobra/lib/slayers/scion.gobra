@@ -702,10 +702,12 @@ func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
 // data, so care should be taken to copy it first should later modification of data be required
 // before the SCION layer is discarded.
 requires acc(s) && df.Mem()
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-ensures  df.Mem()
-ensures  errRes == nil ==> s.Mem()
+requires verifyutils.BytesAcc(data)
+ensures df.Mem()
+ensures errRes == nil ==> s.Mem()
 ensures errRes == nil ==> s.getRawPkt() == data
+ensures errRes != nil ==> acc(s)
+ensures errRes != nil ==> verifyutils.BytesAcc(data)
 decreases
 func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes error) /* {
 	// Decode common header.
