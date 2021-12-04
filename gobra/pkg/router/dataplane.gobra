@@ -1059,7 +1059,9 @@ type processResult struct {
 	OutPkt   []byte
 }
 
-// (tlino) helper method to get read access to OutAddr and OutPkt
+// (tlino) helper method to get read access to OutAddr and OutPkt.
+// (tlino) OutAddr contains a subslice of OutPkt.
+// (tlino) However, giving both read access is ok.
 ghost
 requires pr.Mem()
 requires pr.OutAddr != nil
@@ -1333,7 +1335,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 // 	return noBFDSessionFound()
 }
 
-// (tlino) TODO: reverify
+// (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
 requires verifyutils.BytesAcc(origPacket)
 requires cap(rawPkt) == bufSize
@@ -2906,7 +2908,7 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 	return pr, errProcess
 }
 
-// (tlino) Verified
+// (tlino) Specified
 // (tlino) added helper function to simulate the result of a MAC computation
 ensures len(res) == path.MacLen
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])

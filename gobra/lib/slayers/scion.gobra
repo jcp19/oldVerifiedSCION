@@ -294,6 +294,8 @@ type SCION struct {
 	RawPkt []byte
 }
 
+// (tlino) s.RawSrcAddr, s.RawDstAddr, s.Path, and s.EmbeddedBaseLayer.Payload contain subslices of s.RawPkt.
+// (tlino) However, these subslices do not overlap. Thus, it is fine to use access permission to these fields
 pred (s *SCION) Mem() {
 	acc(s) &&
 	verifyutils.BytesAcc(s.RawSrcAddr) &&
@@ -850,7 +852,7 @@ func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
-	if err != nil {
+	ghost if err != nil {
 		fold acc(s.Mem(), 1/200)
 	}
 	inhale err == nil ==> s.ReadDstAddr(res)
