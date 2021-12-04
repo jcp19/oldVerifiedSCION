@@ -1268,14 +1268,10 @@ preserves src.Mem()
 requires verifyutils.BytesAcc(data)
 requires acc(DataPlaneMutexInvariant(d), _)
 ensures verifyutils.BytesAcc(data)
+decreases
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
-	// (tlino) add unfolding
-	// if len(d.bfdSessions) == 0 {
-	// 	return noBFDSessionConfigured
-	// }
-
-	hasNoBFDSessions := unfolding acc(DataPlaneMutexInvariant(d), _) in len(d.bfdSessions) == 0
-	if hasNoBFDSessions {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	if len(d.bfdSessions) == 0 {
 		// (tlino) golbals not supported
 		// return noBFDSessionConfigured
 		return noBFDSessionConfigured()
@@ -1298,26 +1294,26 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 	fold verifyutils.BytesAcc(data)
 	translateBFDMemPred(p)
 
-// 	ifID := uint16(0)
-// 	srcUDPAddr, ok := src.(*net.UDPAddr)
-// 	if !ok {
-// 		// (joao) No support for fmt
-// 		// return serrors.New("type assertion failure", "from", fmt.Sprintf("%v(%T)", src, src),
-// 		//	"expected", "*net.IPAddr")
-// 		return serrors.New("error") // (joao) TODO: remove after adding support for fmt
-// 	}
-// //
-// //	for k, v := range d.internalNextHops {
-// //		remoteUDPAddr, ok := v.(*net.UDPAddr)
-// //		if !ok {
-// //			return serrors.New("type assertion failure", "from",
-// //				fmt.Sprintf("%v(%T)", remoteUDPAddr, remoteUDPAddr), "expected", "*net.UDPAddr")
-// //		}
-// //		if bytes.Equal(remoteUDPAddr.IP, srcUDPAddr.IP) && remoteUDPAddr.Port == srcUDPAddr.Port {
-// //			ifID = k
-// //			continue
-// //		}
-// //	}
+	ifID := uint16(0)
+	srcUDPAddr, ok := src.(*net.UDPAddr)
+	if !ok {
+		// (joao) No support for fmt
+		// return serrors.New("type assertion failure", "from", fmt.Sprintf("%v(%T)", src, src),
+		//	"expected", "*net.IPAddr")
+		return serrors.New("error") // (joao) TODO: remove after adding support for fmt
+	}
+//
+//	for k, v := range d.internalNextHops {
+//		remoteUDPAddr, ok := v.(*net.UDPAddr)
+//		if !ok {
+//			return serrors.New("type assertion failure", "from",
+//				fmt.Sprintf("%v(%T)", remoteUDPAddr, remoteUDPAddr), "expected", "*net.UDPAddr")
+//		}
+//		if bytes.Equal(remoteUDPAddr.IP, srcUDPAddr.IP) && remoteUDPAddr.Port == srcUDPAddr.Port {
+//			ifID = k
+//			continue
+//		}
+//	}
 
 // 	// (tlino) added unfolding
 // 	// if v, ok := d.bfdSessions[ifID]; ok {
@@ -1347,6 +1343,7 @@ ensures verifyutils.BytesAcc(origPacket)
 ensures cap(rawPkt) == bufSize
 ensures buffer.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
