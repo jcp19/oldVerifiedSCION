@@ -917,7 +917,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 	}
 }
 
-// (tlino) not verified yet
+// (tlino) partially verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 requires acc(DataPlaneMutexInvariant(d), _)
@@ -969,10 +969,10 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 		
 		// (tlino) added parentheses to make it parse
 		// p.Buffers[0] = p.Buffers[0][:p.N]
-		// (p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
-		// // (tlino) use gobras copy function
-		// // copy(origPacket[:p.N], p.Buffers[0])
-		// verifyutils.OutlineMemorySafeCopy(origPacket[:p.N], (p.Buffers)[0])
+		(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
+		// (tlino) use gobras copy function
+		// copy(origPacket[:p.N], p.Buffers[0])
+		verifyutils.OutlineMemorySafeCopy(LocalOrigPacket, (p.Buffers)[0])
 
 		// (tlino) ignore the logging stuff for now
 		// input metric
@@ -980,48 +980,90 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
 		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 
-// 		// (tlino) added parentheses to make it parse
-// 		// result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
-// 		//	buffer)
+		fold verifyutils.BytesAcc((p.Buffers)[0])
+		fold verifyutils.BytesAcc(LocalOrigPacket)
+		localRawPkt := (p.Buffers)[0]
+		// (tlino) added parentheses to make it parse
+		// result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
+		//	buffer)
+		result, err := d.processPkt(ingressID, localRawPkt, p.Addr, spkt, LocalOrigPacket,
+			buffer)
 
-// 		result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
-// 			buffer)
+		// (tlino) continue isn't supported, move code after switch inside switch cases
+		switch {
+		case err == nil:
+			unfold result.Mem()
+			if result.OutConn == nil { // e.g. BFD case no message is forwarded
+				// (tlino) continue not supported
+				// continue
+			} else {
+				// (tlino) original code, adapted code is below
+				// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
+				// 	Buffers: [][]byte{result.OutPkt},
+				// 	Addr:    result.OutAddr,
+				// }}))
+				if err != nil {
+					// (tlino) log not supported yet
+					//log.Debug("Error writing packet", "err", err)
+					// error metric // (tlino) original scion comment
+					// (tlino) continue not supported
+					// continue
+				} else {
+					// (tlino) ignore the logging stuff for now
+					// ok metric
+					// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+					// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
+					// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+				}
+			}
+			fold result.Mem()
+			assert result.Mem() --* verifyutils.BytesAcc(localRawPkt)
+			apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
 
-// 		switch {
-// 		case err == nil:
-// 		case errors.As(err, &scmpErr):
-// 			if !scmpErr.TypeCode.InfoMsg() {
-// 				log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
-// 			}
-// 			// SCMP go back the way they came.
-// 			result.OutAddr = p.Addr
-// 			result.OutConn = rd
-// 		default:
-// 			log.Debug("Error processing packet", "err", err)
+			unfold verifyutils.BytesAcc(LocalOrigPacket)
+			unfold verifyutils.BytesAcc((p.Buffers)[0])
+			fold (&msgs[i]).Mem()
 
-// 			// (tlino) ignore the logging stuff for now
-// 			// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
-// 			continue
-// 		}
-// 		if result.OutConn == nil { // e.g. BFD case no message is forwarded
-// 			continue
-// 		}
-// 		_, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
-// 			Buffers: [][]byte{result.OutPkt},
-// 			Addr:    result.OutAddr,
-// 		}}))
-// 		if err != nil {
-// 			log.Debug("Error writing packet", "err", err)
-// 			// error metric
-// 			continue
-// 		}
+		// case errors.As(err, &scmpErr):
+			// if !scmpErr.TypeCode.InfoMsg() {
+			// 	log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
+			// }
+			// // SCMP go back the way they came.
+			// result.OutAddr = p.Addr
+			// result.OutConn = rd
 
-// 		// (tlino) ignore the logging stuff for now
-// 		// ok metric
-// 		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-// 		// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
-// 		// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-		fold (&msgs[i]).Mem()
+			// if result.OutConn == nil { // e.g. BFD case no message is forwarded
+			// 	continue
+			// }
+			// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
+			// 	Buffers: [][]byte{result.OutPkt},
+			// 	Addr:    result.OutAddr,
+			// }}))
+			// if err != nil {
+			// 	log.Debug("Error writing packet", "err", err)
+			// 	// error metric
+			// 	continue
+			// }
+
+			// // (tlino) ignore the logging stuff for now
+			// // ok metric
+			// // outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+			// // d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
+			// // d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+		default:
+			// log.Debug("Error processing packet", "err", err)
+
+			// (tlino) ignore the logging stuff for now
+			// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
+			assert result.Mem() --* verifyutils.BytesAcc(localRawPkt)
+			apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
+
+			unfold verifyutils.BytesAcc(LocalOrigPacket)
+			unfold verifyutils.BytesAcc((p.Buffers)[0])
+			fold (&msgs[i]).Mem()
+			// (tlino) continue not supported
+			// continue
+ 		}
   	}
 	fold msgs.Mem()
 }
