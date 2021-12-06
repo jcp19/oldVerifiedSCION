@@ -921,31 +921,49 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 requires acc(DataPlaneMutexInvariant(d), _)
-preserves msgs.Mem()
-preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
+requires msgs.Mem()
+requires forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
-preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-preserves acc(scmpErr)
-preserves buffer.Mem()
+requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+requires cap(origPacket) == bufSize
+requires acc(scmpErr)
+requires buffer.Mem()
 requires isZeroSCION(spkt)
+ensures msgs.Mem()
+ensures forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
+ensures forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+ensures cap(origPacket) == bufSize
+ensures acc(scmpErr)
+ensures buffer.Mem()
 ensures isZeroSCION(spkt)
 decreases
 func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
-	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) //{
-	// unfold msgs.Mem()
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) {
+	unfold msgs.Mem()
 
-	// // (tlino) range not supported by Gobra
-	// // for _, p := range msgs[:pkts] {
-	// invariant 0 <= i && i <= pkts
-	// invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
-	// invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
-	// decreases pkts - i
-	// for i := 0; i < pkts; i++ {
-	// 	unfold (&msgs[i]).Mem()
-	// 	p := msgs[i]
-	// 	assume p.N < cap(origPacket)
-	// 	assume p.N < len(origPacket)
-		// origPacket = origPacket[:(p.N)]
+	// (tlino) range not supported by Gobra
+	// for _, p := range msgs[:pkts] {
+	invariant 0 <= i && i <= pkts
+	invariant 0 <= pkts && pkts <= len(msgs)
+	invariant acc(DataPlaneMutexInvariant(d), _)
+	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
+	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
+	invariant cap(origPacket) == bufSize
+	invariant acc(scmpErr)
+	invariant buffer.Mem()
+	invariant isZeroSCION(spkt)
+	decreases pkts - i
+	for i := 0; i < pkts; i++ {
+		unfold (&msgs[i]).Mem()
+		p := msgs[i]
+		assume p.N < len(origPacket)
+		assume p.N >= 0
+		assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
+		// (tlino) use local originPacket subslice
+		// origPacket = origPacket[:p.N]
+		LocalOrigPacket := origPacket[:p.N]
+		assert forall j int :: 0 <= j && j < len(LocalOrigPacket) ==> acc(&LocalOrigPacket[j])
+		assert forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 
 		// TODO(karampok). Use meta for sanity checks. // (tlino) original scion comment
 		
@@ -955,7 +973,6 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 		// // (tlino) use gobras copy function
 		// // copy(origPacket[:p.N], p.Buffers[0])
 		// verifyutils.OutlineMemorySafeCopy(origPacket[:p.N], (p.Buffers)[0])
-		// fold (&msgs[i]).Mem()
 
 		// (tlino) ignore the logging stuff for now
 		// input metric
@@ -1004,9 +1021,10 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 // 		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 // 		// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 // 		// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-//  	}
-// 	fold msgs.Mem()
-// }
+		fold (&msgs[i]).Mem()
+  	}
+	fold msgs.Mem()
+}
 
 // (tlino) Verified
 // (tlino) added function to simplify verification
