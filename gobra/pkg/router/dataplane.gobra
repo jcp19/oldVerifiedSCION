@@ -160,7 +160,7 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
 	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem()) &&
 	(forall btc BatchConn :: btc in range(d.external) ==> btc.Mem()) &&
-	(d.internal).Mem()
+	(d.internal != nil ==> (d.internal).Mem())
 }
 
 // (tlino) start of getter functions to avoid unfolding DataPlaneMutexInvariant
@@ -929,34 +929,39 @@ preserves acc(scmpErr)
 preserves buffer.Mem()
 requires isZeroSCION(spkt)
 ensures isZeroSCION(spkt)
+decreases
 func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) //{
-// 	unfold msgs.Mem()
+	// unfold msgs.Mem()
 
-// 	//(tlino) range not supported by Gobra
-// 	// for _, p := range msgs[:pkts] {
-// 	invariant 0 <= i && i <= pkts
-// 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
-// 	for i := 0; i < pkts; i++ {
-// 		// added variable
-// 		p := msgs[i]
-// 		origPacket = origPacket[:p.N]
-// 		// TODO(karampok). Use meta for sanity checks.
+	// // (tlino) range not supported by Gobra
+	// // for _, p := range msgs[:pkts] {
+	// invariant 0 <= i && i <= pkts
+	// invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
+	// invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
+	// decreases pkts - i
+	// for i := 0; i < pkts; i++ {
+	// 	unfold (&msgs[i]).Mem()
+	// 	p := msgs[i]
+	// 	assume p.N < cap(origPacket)
+	// 	assume p.N < len(origPacket)
+		// origPacket = origPacket[:(p.N)]
 
-// 		// (tlino) added parentheses to make it parse
-// 		// p.Buffers[0] = p.Buffers[0][:p.N]
-// 		// copy(origPacket[:p.N], p.Buffers[0])
+		// TODO(karampok). Use meta for sanity checks. // (tlino) original scion comment
+		
+		// (tlino) added parentheses to make it parse
+		// p.Buffers[0] = p.Buffers[0][:p.N]
+		// (p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
+		// // (tlino) use gobras copy function
+		// // copy(origPacket[:p.N], p.Buffers[0])
+		// verifyutils.OutlineMemorySafeCopy(origPacket[:p.N], (p.Buffers)[0])
+		// fold (&msgs[i]).Mem()
 
-// 		unfold p.Mem()
-// 		(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
-// 		copy((origPacket)[:p.N], (p.Buffers)[0])
-// 		fold p.Mem()
-
-// 		// (tlino) ignore the logging stuff for now
-// 		// input metric
-// 		// inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
-// 		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
-// 		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
+		// (tlino) ignore the logging stuff for now
+		// input metric
+		// inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
+		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
+		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 
 // 		// (tlino) added parentheses to make it parse
 // 		// result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
@@ -999,7 +1004,8 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 // 		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 // 		// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 // 		// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-// 	}
+//  	}
+// 	fold msgs.Mem()
 // }
 
 // (tlino) Verified
