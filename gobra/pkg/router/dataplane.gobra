@@ -32,6 +32,7 @@ import (
 	"gobra/dependencies/gopacket/layers"
 	// "github.com/prometheus/client_golang/prometheus"
 	// "golang.org/x/net/ipv4"
+	"gobra/dependencies/x/net/ipv4"
 
 	// "github.com/scionproto/scion/go/lib/addr"
 	"gobra/lib/addr"
@@ -996,12 +997,23 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 			if result.OutConn == nil { // e.g. BFD case no message is forwarded
 				// (tlino) continue not supported
 				// continue
+				fold result.Mem()
 			} else {
 				// (tlino) original code, adapted code is below
 				// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
 				// 	Buffers: [][]byte{result.OutPkt},
 				// 	Addr:    result.OutAddr,
 				// }}))
+
+				fold result.Mem()
+				result.getAddrAndRawPktAcc()
+				assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10)) --* result.Mem()
+
+				messages := createMessages(result.OutPkt, result.OutAddr)
+				assert acc(messages.Mem(), 1/10)
+				// _, err = result.OutConn.WriteBatch()
+				apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10)) --* result.Mem()
+				assert result.Mem()
 				if err != nil {
 					// (tlino) log not supported yet
 					//log.Debug("Error writing packet", "err", err)
@@ -1016,7 +1028,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 					// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
 				}
 			}
-			fold result.Mem()
+			
 			assert result.Mem() --* verifyutils.BytesAcc(localRawPkt)
 			apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
 
@@ -1067,6 +1079,24 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
   	}
 	fold msgs.Mem()
 }
+
+// (tlino) added helper function
+requires acc(verifyutils.BytesAcc(payload), 1/10)
+requires acc(address.Mem(), 1/10)
+ensures acc(msgs.Mem(), 1/10)
+ensures acc(verifyutils.BytesAcc(payload), 1/10)
+ensures acc(address.Mem(), 1/10)
+decreases
+func createMessages(payload []byte, address net.Addr) (msgs underlayconn.Messages) //{
+// 	m := make(underlayconn.Messages, 1)
+// 	m[0].Buffers = make([][]byte, 1)
+// 	(m[0].Buffers)[0] = make([]byte, bufSize) 
+// 	m[0].Addr = &net.UDPAddr{}
+// 	fold (m[0].Addr).Mem()
+// 	fold (&m[0]).Mem()
+// 	fold m.Mem()
+
+// }
 
 // (tlino) Verified
 // (tlino) added function to simplify verification
@@ -1130,7 +1160,6 @@ type processResult struct {
 // (tlino) However, giving both read access is ok.
 ghost
 requires pr.Mem()
-requires pr.OutAddr != nil
 ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10)
 ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10)) --* pr.Mem()
 decreases
