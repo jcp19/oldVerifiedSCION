@@ -823,6 +823,16 @@ func (d *DataPlane) Run() error /* {
 */
 
 // (tlino) Verified
+// (tlino) added helper function
+pure
+requires acc(DataPlaneMutexInvariant(d), _)
+ensures res == unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
+decreases
+func (d *DataPlane) isRunning() (res bool) {
+	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
+}
+
+// (tlino) Verified
 // (joao) Closure extracted from the body of the Run function
 requires rd.Mem()
 requires acc(DataPlaneMutexInvariant(d), _)
@@ -839,9 +849,6 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 
 	// (tlino) change structure of loop
 	// for d.running {
-	
-	// (tlino) added variable 
-	isRunning := unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 
 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
 	invariant acc(DataPlaneMutexInvariant(d), _)
@@ -851,11 +858,8 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant isZeroSCION(spkt)
 	invariant buffer.Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
-	for isRunning {
+	for d.isRunning() {
 		pkts, err := rd.ReadBatch(msgs, metas)
-
-		// (tlino) added
-		isRunning = unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 
 		// (tlino) continue not supported by gobra
 		// adapted code is below
