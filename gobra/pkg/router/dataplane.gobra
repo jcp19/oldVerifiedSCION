@@ -114,6 +114,7 @@ type BatchConn interface {
 	preserves Mem()
 	preserves acc(msgs.Mem(), 1/1000)
 	ensures err == nil ==> 0 <= n && n <= len(msgs)
+	decreases
 	WriteBatch(msgs underlayconn.Messages) (n int, err error)
 
 	requires Mem()
@@ -1007,12 +1008,20 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 
 				fold result.Mem()
 				result.getAddrAndRawPktAcc()
-				assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10)) --* result.Mem()
+				assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && result.OutConn.Mem()) --* result.Mem()
 
-				messages := createMessages(result.OutPkt, result.OutAddr)
+				// (tlino) moved message creation to outlined function
+				// (tlino) use new variables to make gobra work
+				pld := result.OutPkt
+				address := result.OutAddr
+				messages := createMessages(pld, address)
 				assert acc(messages.Mem(), 1/10)
-				// _, err = result.OutConn.WriteBatch()
-				apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10)) --* result.Mem()
+				assert acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
+
+				_, err = result.OutConn.WriteBatch(messages)
+
+				apply acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
+				apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && result.OutConn.Mem()) --* result.Mem()
 				assert result.Mem()
 				if err != nil {
 					// (tlino) log not supported yet
@@ -1084,8 +1093,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 requires acc(verifyutils.BytesAcc(payload), 1/10)
 requires acc(address.Mem(), 1/10)
 ensures acc(msgs.Mem(), 1/10)
-ensures acc(verifyutils.BytesAcc(payload), 1/10)
-ensures acc(address.Mem(), 1/10)
+ensures acc(msgs.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(payload), 1/10) && acc(address.Mem(), 1/10))
 decreases
 func createMessages(payload []byte, address net.Addr) (msgs underlayconn.Messages) //{
 // 	m := make(underlayconn.Messages, 1)
@@ -1160,8 +1168,8 @@ type processResult struct {
 // (tlino) However, giving both read access is ok.
 ghost
 requires pr.Mem()
-ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10)
-ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10)) --* pr.Mem()
+ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && pr.OutConn.Mem()
+ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && pr.OutConn.Mem()) --* pr.Mem()
 decreases
 func (pr processResult) getAddrAndRawPktAcc()
 
