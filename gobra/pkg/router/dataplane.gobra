@@ -166,7 +166,8 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
 	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem()) &&
 	(forall btc BatchConn :: btc in range(d.external) ==> btc.Mem()) &&
-	(d.internal != nil ==> (d.internal).Mem())
+	(d.internal != nil ==> (d.internal).Mem()) &&
+	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
 // (tlino) start of getter functions to avoid unfolding DataPlaneMutexInvariant
@@ -174,7 +175,6 @@ requires acc(DataPlaneMutexInvariant(d), _)
 decreases
 pure func (d *DataPlane) GetLocalAI() addr.IA {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.localIA
-	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
 ghost
