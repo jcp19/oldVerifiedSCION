@@ -1089,6 +1089,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 	fold msgs.Mem()
 }
 
+// (tlino) TODO: verify
 // (tlino) added helper function
 requires acc(verifyutils.BytesAcc(payload), 1/10)
 requires acc(address.Mem(), 1/10)
@@ -1096,14 +1097,19 @@ ensures acc(msgs.Mem(), 1/10)
 ensures acc(msgs.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(payload), 1/10) && acc(address.Mem(), 1/10))
 decreases
 func createMessages(payload []byte, address net.Addr) (msgs underlayconn.Messages) //{
-// 	m := make(underlayconn.Messages, 1)
-// 	m[0].Buffers = make([][]byte, 1)
-// 	(m[0].Buffers)[0] = make([]byte, bufSize) 
-// 	m[0].Addr = &net.UDPAddr{}
-// 	fold (m[0].Addr).Mem()
-// 	fold (&m[0]).Mem()
-// 	fold m.Mem()
+// 	unfold acc(verifyutils.BytesAcc(payload), 1/10)
+// 	msgs := make(underlayconn.Messages, 1)
+// 	msgs[0].Buffers = make([][]byte, 1)
+// 	(msgs[0].Buffers)[0] = payload 
+// 	msgs[0].Addr = address
+// 	fold acc((&msgs[0]).Mem(), 1/10)
+// 	fold acc(msgs.Mem(), 1/10)
 
+// 	package acc(msgs.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(payload), 1/10) && acc(address.Mem(), 1/10)) {
+// 		unfold acc(msgs.Mem(), 1/10)
+// 		unfold acc((&msgs[0]).Mem(), 1/10)
+// 		fold acc(verifyutils.BytesAcc(payload), 1/10)
+// 	}
 // }
 
 // (tlino) Verified
