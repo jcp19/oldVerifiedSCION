@@ -40,6 +40,7 @@ import (
 	"gobra/lib/common"
 	// "github.com/scionproto/scion/go/lib/log"
 	// "github.com/scionproto/scion/go/lib/metrics"
+	"gobra/lib/metrics"
 	// "github.com/scionproto/scion/go/lib/scrypto"
 	// "github.com/scionproto/scion/go/lib/serrors"
 	"gobra/lib/serrors"
@@ -135,13 +136,13 @@ type DataPlane struct {
 	internal         BatchConn
 	internalIP       net.IP
 	internalNextHops map[uint16]net.Addr
-//	svc              *services
+	svc              *services
 //	macFactory       func() hash.Hash
 	bfdSessions      map[uint16]bfdSession
 	localIA          addr.IA
 	mtx              sync.Mutex
 	running          bool
-//	Metrics          *Metrics
+	Metrics          *Metrics
 }
 
 pred DataPlaneMutexInvariant(d *DataPlane) {
@@ -152,13 +153,16 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	acc(&d.internal) &&
 	acc(&d.internalIP) &&
 	acc(&d.internalNextHops) &&
+	acc(&d.svc) &&
 	acc(&d.bfdSessions) &&
 	acc(&d.localIA) &&
 	acc(&d.running) &&
+	acc(&d.Metrics) &&
 	(d.external != nil ==> acc(d.external)) &&
 	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
 	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
 	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
+	(d.svc != nil ==> (d.svc).Mem()) &&
 	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
 	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem()) &&
 	(forall btc BatchConn :: btc in range(d.external) ==> btc.Mem()) &&
@@ -170,6 +174,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 decreases
 pure func (d *DataPlane) GetLocalAI() addr.IA {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.localIA
+	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
 ghost
@@ -261,9 +266,9 @@ func (e scmpError) Error() string {
 
 // (joao) Verified
 // SetIA sets the local IA for the dataplane.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) SetIA(ia addr.IA) error {
 	d.mtx.Lock()
 	// (joao) no support for defer
@@ -303,9 +308,9 @@ func (d *DataPlane) SetIA(ia addr.IA) error {
 // (joao) Partially Verified
 // SetKey sets the key used for MAC verification. The key provided here should
 // already be derived as in scrypto.HFMacFactory.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) SetKey(key []byte) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
@@ -351,10 +356,10 @@ func (d *DataPlane) SetKey(key []byte) error {
 // send/receive traffic in the local AS. This can only be called once; future
 // calls will return an error. This can only be called on a not yet running
 // dataplane.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 requires conn.Mem()
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
@@ -396,10 +401,10 @@ func (d *DataPlane) AddInternalInterface(conn BatchConn, ip net.IP) error {
 // AddExternalInterface adds the inter AS connection for the given interface ID.
 // If a connection for the given ID is already set this method will return an
 // error. This can only be called on a not yet running dataplane.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 requires conn.Mem()
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
@@ -445,9 +450,9 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 // AddNeighborIA adds the neighboring IA for a given interface ID. If an IA for
 // the given ID is already set, this method will return an error. This can only
 // be called on a yet running dataplane.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
@@ -517,9 +522,9 @@ func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 
 // (joao) Partially Verified
 // AddExternalInterfaceBFD adds the inter AS connection BFD session.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	src, dst control.LinkEnd, cfg control.BFD) error {
 	d.mtx.Lock()
@@ -537,24 +542,25 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 		// return emptyValue
 		return emptyValue()
 	}
-	// var m bfd.Metrics
+	var m bfd.Metrics
 	// if d.Metrics != nil {
-	// 	labels := []string{
-	//		"interface", fmt.Sprint(ifID),
+	//	labels := []string{
+	//		"interface", /* fmt.Sprint(ifID), */ // (joao) fmt Not supported yet
 	//		"isd_as", d.localIA.String(),
 	//		"neighbor_isd_as", dst.IA.String(),
-	// 	}
-	//	m = bfd.Metrics{
-	//		Up: metrics.NewPromGauge(d.Metrics.InterfaceUp).
-	//			With(labels...),
-	//		StateChanges: metrics.NewPromCounter(d.Metrics.BFDInterfaceStateChanges).
-	//			With(labels...),
-	//		PacketsSent: metrics.NewPromCounter(d.Metrics.BFDPacketsSent).
-	//			With(labels...),
-	//		PacketsReceived: metrics.NewPromCounter(d.Metrics.BFDPacketsReceived).
-	//			With(labels...),
 	//	}
-	// }
+	//	// (joao) without these variables, Gobra cannot parse the following code
+	//	tmpMetrics1 := d.Metrics.InterfaceUp
+	//	tmpMetrics2 := d.Metrics.BFDInterfaceStateChanges
+	//	tmpMetrics3 := d.Metrics.BFDPacketsSent
+	//	tmpMetrics4 := d.Metrics.BFDPacketsReceived
+	//	m = bfd.Metrics{
+	//		Up: (metrics.NewPromGauge(/*d.Metrics.InterfaceUp*/ tmpMetrics1)).With(labels...),
+	//		StateChanges: (metrics.NewPromCounter(/*d.Metrics.BFDInterfaceStateChanges*/ tmpMetrics2)).With(labels...),
+	//		PacketsSent: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsSent*/ tmpMetrics3)).With(labels...),
+	//		PacketsReceived: (metrics.NewPromCounter(/*d.Metrics.BFDPacketsReceived*/tmpMetrics4)).With(labels...),
+	//	}
+	//}
 	s := &bfdSend{
 		conn:       conn,
 		// srcAddr:    src.Addr,
@@ -568,7 +574,7 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	// return d.addBFDController(ifID, s, cfg, m)
 	// changed code:
 	fold DataPlaneMutexInvariant(d)
-	res := d.addBFDController(ifID, s, cfg /*, m */)
+	res := d.addBFDController(ifID, s, cfg, m)
 	unfold DataPlaneMutexInvariant(d)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
@@ -580,7 +586,7 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
-	/* metrics bfd.Metrics */) error {
+	metrics bfd.Metrics) error {
 	unfold DataPlaneMutexInvariant(d)
 	if cfg.Disable {
 		fold DataPlaneMutexInvariant(d)
@@ -611,13 +617,14 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	return nil
 }
 
+// (joao) WIP
 // (joao) Partially Verified
 // AddSvc adds the address for the given service. This can be called multiple
 // times for the same service, with the address added to the list of addresses
 // that provide the service.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP() && acc(a.Mem(), _)
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
@@ -628,10 +635,10 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 		d.mtx.Unlock()
 		return emptyValue()
 	}
-	// if d.svc == nil {
-	// 	d.svc = newServices()
-	// }
-	// d.svc.AddSvc(svc, a)
+	if d.svc == nil {
+		d.svc = newServices()
+	}
+	d.svc.AddSvc(svc, a)
 	// if d.Metrics != nil {
 	// 	labels := serviceMetricLabels(d.localIA, svc)
 	// 	d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
@@ -642,27 +649,34 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	return nil
 }
 
+// (joao) WIP
 // (joao) Partially Verified
 // DelSvc deletes the address for the given service.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP() && acc(a.Mem(), _)
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 	d.mtx.Lock()
 	// defer d.mtx.Unlock()
 	if a == nil {
+		d.mtx.Unlock()
 		// return emptyValue
 		return emptyValue()
 	}
-	// if d.svc == nil {
-	// 	return nil
-	// }
-	// d.svc.DelSvc(svc, a)
+	unfold DataPlaneMutexInvariant!<d!>()
+	if d.svc == nil {
+		fold DataPlaneMutexInvariant!<d!>()
+		d.mtx.Unlock()
+		return nil
+	}
+	d.svc.DelSvc(svc, a)
 	// if d.Metrics != nil {
 	// 	labels := serviceMetricLabels(d.localIA, svc)
 	// 	d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
 	// 	d.Metrics.ServiceInstanceCount.With(labels).Add(-1)
 	// }
+	fold DataPlaneMutexInvariant!<d!>()
+	d.mtx.Unlock()
 	return nil
 }
 
@@ -670,9 +684,9 @@ func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 // AddNextHop sets the next hop address for the given interface ID. If the
 // interface ID already has an address associated this operation fails. This can
 // only be called on a not yet running dataplane.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	d.mtx.Lock()
 	// (joao) defer not supported
@@ -713,13 +727,13 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	return nil
 }
 
-// (joao) Partially Verified
+// (joao) WIP
 // AddNextHopBFD adds the BFD session for the next hop address.
 // If the remote ifID belongs to an existing address, the existing
 // BFD session will be re-used.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-ensures acc(&d.mtx, _) && d.mtx.LockP()
+ensures  d.mtx.LockP()
 func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg control.BFD,
 	sibling string) error {
 	d.mtx.Lock()
@@ -752,18 +766,19 @@ func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg contro
 			}
 		}
 	}
+	*/
 	var m bfd.Metrics
 	if d.Metrics != nil {
 		labels := []string{"isd_as", d.localIA.String(), "sibling", sibling}
+		tmpMetrics1 := d.Metrics.SiblingReachable
+		tmpMetrics2 := d.Metrics.SiblingBFDStateChanges
+		tmpMetrics3 := d.Metrics.SiblingBFDPacketsSent
+		tmpMetrics4 := d.Metrics.SiblingBFDPacketsReceived
 		m = bfd.Metrics{
-			Up: metrics.NewPromGauge(d.Metrics.SiblingReachable).
-				With(labels...),
-			StateChanges: metrics.NewPromCounter(d.Metrics.SiblingBFDStateChanges).
-				With(labels...),
-			PacketsSent: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsSent).
-				With(labels...),
-			PacketsReceived: metrics.NewPromCounter(d.Metrics.SiblingBFDPacketsReceived).
-				With(labels...),
+			Up: (metrics.NewPromGauge(/*d.Metrics.SiblingReachable*/ tmpMetrics1)).With(labels...),
+			StateChanges: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDStateChanges*/ tmpMetrics2)).With(labels...),
+			PacketsSent: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDPacketsSent*/ tmpMetrics3)).With(labels...),
+			PacketsReceived: (metrics.NewPromCounter(/*d.Metrics.SiblingBFDPacketsReceived*/ tmpMetrics4)).With(labels...),
 		}
 	}
 	s := &bfdSend{
@@ -773,15 +788,14 @@ func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg contro
 		srcIA:      d.localIA,
 		dstIA:      d.localIA,
 		ifID:       0,
-		macFactory: d.macFactory,
+		// macFactory: d.macFactory,
 	}
 	return d.addBFDController(ifID, s, cfg, m)
-	*/
 }
 
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
-requires acc(&d.mtx, _) && d.mtx.LockP()
+requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
 func (d *DataPlane) Run() error /* {
 	d.mtx.Lock()
@@ -1164,7 +1178,8 @@ func (d *DataPlane) initMetrics() /* {
 		d.Metrics.OutputPacketsTotal.With(labels).Add(0)
 		d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
 	}
-} */
+}
+*/
 
 type processResult struct {
 	EgressID uint16

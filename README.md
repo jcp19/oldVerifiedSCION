@@ -31,7 +31,7 @@ The repository contains two main directories:
 
 **Observations**
 - The package structure of `gobra/` directly mimics the one of `go/`
-- The code available in `gobra/` does not contain a complete verified version of the one available in `go/`. This is to be expected, this is an ongoing project.
+- The code available in `gobra/` does not contain a complete verified version of the one available in `go/`. Instead, it contains only the code required to verify the dataplane of the border router. This is to be expected, given that this is an ongoing project.
 
 ## License
 [![License](https://img.shields.io/github/license/scionproto/scion.svg?maxAge=2592000)](https://github.com/scionproto/scion/blob/master/LICENSE)
