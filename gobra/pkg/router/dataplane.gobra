@@ -170,11 +170,57 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
-// (tlino) start of getter functions to avoid unfolding DataPlaneMutexInvariant
+pred DataPlaneMutexInvariant1(d *DataPlane) {
+	// access to mtx field ommited
+	acc(&d.linkTypes) &&
+	acc(&d.neighborIAs) &&
+	acc(&d.internal) &&
+	acc(&d.internalIP) &&
+	acc(&d.internalNextHops) &&
+	acc(&d.svc) &&
+	acc(&d.localIA) &&
+	acc(&d.running) &&
+	acc(&d.Metrics) &&
+	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
+	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
+	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
+	(d.svc != nil ==> (d.svc).Mem()) &&
+	(d.internal != nil ==> (d.internal).Mem()) &&
+	(d.Metrics != nil ==> d.Metrics.Mem())
+}
+
+pred DataPlaneMutexInvariant2(d *DataPlane) {
+	acc(&d.bfdSessions) &&
+	acc(&d.external) &&
+	(d.external != nil ==> acc(d.external)) &&
+	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
+	(forall btc BatchConn :: btc in range(d.external) ==> btc.Mem()) &&
+	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem())
+}
+
+// (tlino) start of getter functions to avoid unfolding DataPlaneMutexInvariants
 requires acc(DataPlaneMutexInvariant(d), _)
 decreases
 pure func (d *DataPlane) GetLocalAI() addr.IA {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.localIA
+}
+
+requires acc(DataPlaneMutexInvariant2(d), _)
+ensures acc(DataPlaneMutexInvariant2(d), _)
+ensures ok ==> acc(btc.Mem(), _)
+decreases
+func (d *DataPlane) GetExternalBatchConn(intf uint16) (btc BatchConn, ok bool) {
+    unfold acc(DataPlaneMutexInvariant2(d), _)
+    btc, ok = (d.external)[intf]
+}
+
+requires acc(DataPlaneMutexInvariant2(d), _)
+ensures acc(DataPlaneMutexInvariant2(d), _)
+ensures ok ==> acc(bfd.Mem(), _)
+decreases
+func (d *DataPlane) GetBfdSession(intf uint16) (bfd bfdSession, ok bool) {
+    unfold acc(DataPlaneMutexInvariant2(d), _)
+    bfd, ok = (d.bfdSessions)[intf]
 }
 
 ghost
@@ -573,9 +619,9 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	// (joao) rewrote to unfold before returning. Original code:
 	// return d.addBFDController(ifID, s, cfg, m)
 	// changed code:
-	fold DataPlaneMutexInvariant(d)
+	fold DataPlaneMutexInvariant2(d)
 	res := d.addBFDController(ifID, s, cfg, m)
-	unfold DataPlaneMutexInvariant(d)
+	unfold DataPlaneMutexInvariant2(d)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return res
@@ -583,13 +629,13 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 
 // (joao) Partially Verified
 // TODO: specify `rand`
-requires DataPlaneMutexInvariant(d)
-ensures DataPlaneMutexInvariant(d)
+requires DataPlaneMutexInvariant2(d)
+ensures DataPlaneMutexInvariant2(d)
 func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	metrics bfd.Metrics) error {
-	unfold DataPlaneMutexInvariant(d)
+	unfold DataPlaneMutexInvariant2(d)
 	if cfg.Disable {
-		fold DataPlaneMutexInvariant(d)
+		fold DataPlaneMutexInvariant2(d)
 		// return errBFDDisabled
 		return errBFDDisabled()
 	}
@@ -613,7 +659,7 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	// 	ReceiveQueueSize:      10,
 	// 	Metrics:               metrics,
 	// }
-	fold DataPlaneMutexInvariant(d)
+	fold DataPlaneMutexInvariant2(d)
 	return nil
 }
 
@@ -1596,7 +1642,8 @@ pred (p *scionPacketProcessor) Mem() {
 	acc(&p.hopField) &&
 	acc(&p.infoField) &&
 	acc(&p.segmentChange) &&
-	acc(DataPlaneMutexInvariant(p.d), _) &&
+	acc(DataPlaneMutexInvariant1(p.d), _) &&
+	acc(DataPlaneMutexInvariant2(p.d), _) &&
 	verifyutils.BytesAcc(p.origPacket) &&
 	acc(p.infoField) &&
 	path.HopFieldInv(p.hopField) &&
@@ -2365,26 +2412,29 @@ decreases
 func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet error) {
 	egressID := p.egressInterface()
 	unfold p.Mem()
-	unfold acc(DataPlaneMutexInvariant(p.d), _)
-	// (tlino) add parantheses to make it parse
+	// (tlino) use getter function to avoid unfold
 	// if v, ok := p.d.bfdSessions[egressID]; ok {
-	if v, ok := (p.d.bfdSessions)[egressID]; ok {
+	if v, ok := p.d.GetBfdSession(egressID); ok {
 		assert acc(v.Mem(), _)
 		if !v.IsUp() {
 			scmpH := &slayers.SCMP{
 				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeExternalInterfaceDown, 0),
 			}
 			var scmpP gopacket.SerializableLayer = &slayers.SCMPExternalInterfaceDown{
-				IA:   p.d.localIA,
+				// (tlino) use getter function to avoid unfold
+				// IA:   p.d.localIA,
+				IA:   p.d.GetLocalAI(),
 				IfID: uint64(egressID),
 			}
-			// (tlino) add parantheses to make it parse
+			// (tlino) use getter function to avoid unfold
 			// if _, external := p.d.external[egressID]; !external {
-			if _, external := (p.d.external)[egressID]; !external {
+			if _, external := p.d.GetExternalBatchConn(egressID); !external {
 				scmpH.TypeCode =
 					slayers.CreateSCMPTypeCode(slayers.SCMPTypeInternalConnectivityDown, 0)
 				scmpP = &slayers.SCMPInternalConnectivityDown{
-					IA:      p.d.localIA,
+					// (tlino) use getter function to avoid unfold
+					// IA:      p.d.localIA,
+					IA:      p.d.GetLocalAI(),
 					Ingress: uint64(p.ingressID),
 					Egress:  uint64(egressID),
 				}
@@ -2434,6 +2484,7 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (pr processResult, err
 	return p.handleSCMPTraceRouteRequest(ingressID)
 }
 
+// (tlino) verification does not terminate in a reasonable time after merge with master
 // (tlino) Verified
 requires p.Mem()
 ensures p.Mem()
