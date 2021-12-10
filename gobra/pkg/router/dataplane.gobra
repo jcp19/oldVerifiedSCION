@@ -769,6 +769,7 @@ func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 // only be called on a not yet running dataplane.
 requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
+requires a.Mem()
 ensures  d.mtx.LockP()
 func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	d.mtx.Lock()
@@ -1274,7 +1275,7 @@ decreases
 func (pr processResult) getAddrAndRawPktAcc()
 
 pred (pr processResult) Mem() {
-	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
+	// (pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
 	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
 }
 
@@ -3406,8 +3407,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	s.getRawPktAccWithoutPreservePath(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt)
 	unfold acc(DataPlaneMutexInvariant1(d), _)
-	assert acc((d.internal).Mem(), _)
-	pr, errRet = processResult{OutConn: d.internal, OutAddr: a, OutPkt: rawPkt}, nil
+	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt}, nil
 	fold pr.Mem()
 	// (tlino) create the magic wand
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
