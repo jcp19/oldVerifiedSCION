@@ -106,13 +106,13 @@ type bfdSession interface {
 type BatchConn interface {
 	pred Mem()
 
-	preserves Mem()
+	preserves acc(Mem(), _)
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta) (n int, err error)
 
-	preserves Mem()
+	preserves acc(Mem(), _)
 	preserves acc(msgs.Mem(), 1/1000)
 	ensures err == nil ==> 0 <= n && n <= len(msgs)
 	decreases
@@ -209,8 +209,9 @@ pure func (d *DataPlane) GetLocalAI() addr.IA {
 
 requires acc(DataPlaneMutexInvariant1(d), _)
 ensures acc(DataPlaneMutexInvariant1(d), _)
+ensures res != nil ==> acc(res.Mem(), _)
 decreases
-func (d *DataPlane) getInternal() BatchConn {
+func (d *DataPlane) getInternal() (res BatchConn) {
 	unfold acc(DataPlaneMutexInvariant1(d), _)
 	return d.internal
 }
@@ -922,7 +923,7 @@ func (d *DataPlane) Run() error /* {
 
 // (tlino) Verified
 // (joao) Closure extracted from the body of the Run function
-requires rd.Mem()
+requires acc(rd.Mem(), _)
 requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
 func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) outlined code to separate function
@@ -941,7 +942,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
 	invariant acc(DataPlaneMutexInvariant1(d), _)
 	invariant acc(DataPlaneMutexInvariant2(d), _)
-	invariant rd.Mem()
+	invariant acc(rd.Mem(), _)
 	invariant msgs.Mem()
 	invariant acc(scmpErr)
 	invariant isZeroSCION(spkt)
@@ -1102,20 +1103,23 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 
 				fold result.Mem()
 				result.getAddrAndRawPktAcc()
-				assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && result.OutConn.Mem()) --* result.Mem()
+				assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
 
 				// (tlino) moved message creation to outlined function
 				// (tlino) use new variables to make gobra work
-				pld := result.OutPkt
-				address := result.OutAddr
-				messages := createMessages(pld, address)
-				assert acc(messages.Mem(), 1/10)
-				assert acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
+				// pld := result.OutPkt // TODO:fix this
+				// address := result.OutAddr
+				// messages := createMessages(pld, address)
+				// assert acc(messages.Mem(), 1/10)
+				// assert acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
 
-				_, err = result.OutConn.WriteBatch(messages)
+				// _, err = result.OutConn.WriteBatch(messages)
 
-				apply acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
-				apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && result.OutConn.Mem()) --* result.Mem()
+				// // TODO: remove assume
+				// apply acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
+				// assume acc(result.OutConn.Mem(), 1/1000)
+				// assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+				apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
 				assert result.Mem()
 				if err != nil {
 					// (tlino) log not supported yet
@@ -1269,13 +1273,13 @@ type processResult struct {
 // (tlino) However, giving both read access is ok.
 ghost
 requires pr.Mem()
-ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && pr.OutConn.Mem()
-ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && pr.OutConn.Mem()) --* pr.Mem()
+ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && acc(pr.OutConn.Mem(), 1/1000)
+ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && acc(pr.OutConn.Mem(), 1/1000)) --* pr.Mem()
 decreases
 func (pr processResult) getAddrAndRawPktAcc()
 
 pred (pr processResult) Mem() {
-	// (pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
+	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
 	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
 }
 
