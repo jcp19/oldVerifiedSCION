@@ -17,7 +17,7 @@ package router
 import (
 	// "bytes"
 	// "crypto/rand"
-	// "errors"
+	"errors"
 	// "fmt"
 	// "hash"
 	// "math/big"
@@ -31,6 +31,7 @@ import (
 	// "github.com/google/gopacket/layers"
 	"gobra/dependencies/gopacket/layers"
 	// "github.com/prometheus/client_golang/prometheus"
+	"gobra/dependencies/prometheus/client_golang/prometheus"
 	// "golang.org/x/net/ipv4"
 	"gobra/dependencies/x/net/ipv4"
 
@@ -205,6 +206,15 @@ requires acc(DataPlaneMutexInvariant1(d), _)
 decreases
 pure func (d *DataPlane) GetLocalAI() addr.IA {
 	return unfolding acc(DataPlaneMutexInvariant1(d), _) in d.localIA
+}
+
+requires acc(DataPlaneMutexInvariant1(d), _)
+ensures acc(DataPlaneMutexInvariant1(d), _)
+ensures res != nil ==> acc(res, _)
+decreases
+func  (d *DataPlane) GetNeighborIAs() (res map[uint16]addr.IA) {
+	unfold  acc(DataPlaneMutexInvariant1(d), _)
+	return d.neighborIAs
 }
 
 requires acc(DataPlaneMutexInvariant1(d), _)
@@ -968,7 +978,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			// error metric
 		} else if pkts > 0 {
 			// (tlino) outlined code to separate function
-			processBatch(ingressID, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt)
+			processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt)
 
 			// (tlino) outlined code to separate function
 			resetReadClosureBuffers(msgs, pkts)
@@ -1016,6 +1026,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) partially verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
+requires acc(rd.Mem(), _)
 requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
 requires msgs.Mem()
 requires forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
@@ -1033,7 +1044,7 @@ ensures acc(scmpErr)
 ensures buffer.Mem()
 ensures isZeroSCION(spkt)
 decreases
-func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
+func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) {
 	unfold msgs.Mem()
 
@@ -1041,6 +1052,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 	// for _, p := range msgs[:pkts] {
 	invariant 0 <= i && i <= pkts
 	invariant 0 <= pkts && pkts <= len(msgs)
+	invariant acc(rd.Mem(), _)
 	invariant acc(DataPlaneMutexInvariant1(d), _)
 	invariant acc(DataPlaneMutexInvariant2(d), _)
 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
@@ -1086,89 +1098,35 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 		result, err := d.processPkt(ingressID, localRawPkt, p.Addr, spkt, LocalOrigPacket,
 			buffer)
 
+		assert result.Mem() --* verifyutils.BytesAcc(localRawPkt)
 		// (tlino) continue isn't supported, move code after switch inside switch cases
 		switch {
 		case err == nil:
-			unfold result.Mem()
-			if result.OutConn == nil { // e.g. BFD case no message is forwarded
-				// (tlino) continue not supported
-				// continue
-				fold result.Mem()
-			} else {
-				// (tlino) original code, adapted code is below
-				// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
-				// 	Buffers: [][]byte{result.OutPkt},
-				// 	Addr:    result.OutAddr,
-				// }}))
-
-				fold result.Mem()
-				result.getAddrAndRawPktAcc()
-				assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
-
-				// (tlino) moved message creation to outlined function
-				// (tlino) use new variables to make gobra work
-				// pld := result.OutPkt // TODO:fix this
-				// address := result.OutAddr
-				// messages := createMessages(pld, address)
-				// assert acc(messages.Mem(), 1/10)
-				// assert acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
-
-				// _, err = result.OutConn.WriteBatch(messages)
-
-				// // TODO: remove assume
-				// apply acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
-				// assume acc(result.OutConn.Mem(), 1/1000)
-				// assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
-				apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
-				assert result.Mem()
-				if err != nil {
-					// (tlino) log not supported yet
-					//log.Debug("Error writing packet", "err", err)
-					// error metric // (tlino) original scion comment
-					// (tlino) continue not supported
-					// continue
-				} else {
-					// (tlino) ignore the logging stuff for now
-					// ok metric
-					// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-					// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
-					// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-				}
-			}
+			processBatchHelper(d, result, localRawPkt)
 			
-			assert result.Mem() --* verifyutils.BytesAcc(localRawPkt)
 			apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
 
 			unfold verifyutils.BytesAcc(LocalOrigPacket)
 			unfold verifyutils.BytesAcc((p.Buffers)[0])
 			fold (&msgs[i]).Mem()
 
-		// case errors.As(err, &scmpErr):
-			// if !scmpErr.TypeCode.InfoMsg() {
-			// 	log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
-			// }
-			// // SCMP go back the way they came.
+		case errors.As(err, scmpErr):
+			if !scmpErr.TypeCode.InfoMsg() {
+				// (tlino) log not yet supported
+				// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
+			}
+			// SCMP go back the way they came.
+			// (tlino) use setters to simplify verification
 			// result.OutAddr = p.Addr
 			// result.OutConn = rd
 
-			// if result.OutConn == nil { // e.g. BFD case no message is forwarded
-			// 	continue
-			// }
-			// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
-			// 	Buffers: [][]byte{result.OutPkt},
-			// 	Addr:    result.OutAddr,
-			// }}))
-			// if err != nil {
-			// 	log.Debug("Error writing packet", "err", err)
-			// 	// error metric
-			// 	continue
-			// }
+			processBatchHelper(d, result, localRawPkt)
 
-			// // (tlino) ignore the logging stuff for now
-			// // ok metric
-			// // outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-			// // d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
-			// // d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+			apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
+
+			unfold verifyutils.BytesAcc(LocalOrigPacket)
+			unfold verifyutils.BytesAcc((p.Buffers)[0])
+			fold (&msgs[i]).Mem()
 		default:
 			// log.Debug("Error processing packet", "err", err)
 
@@ -1187,14 +1145,71 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 	fold msgs.Mem()
 }
 
+// (tlino) partially verified
+// (tlino) added helper function to simplify verification
+requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
+requires result.Mem()
+requires result.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures result.Mem()
+ensures result.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
+func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
+	unfold result.Mem()
+	if result.OutConn == nil { // e.g. BFD case no message is forwarded
+		// (tlino) continue not supported
+		// continue
+		fold result.Mem()
+	} else {
+		// (tlino) original code, adapted code is below
+		// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
+		// 	Buffers: [][]byte{result.OutPkt},
+		// 	Addr:    result.OutAddr,
+		// }}))
+
+		fold result.Mem()
+		result.getAddrAndRawPktAcc()
+		assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+
+		// (tlino) moved message creation to outlined function
+		// (tlino) use new variables to make gobra work
+		pld := result.OutPkt
+		address := result.OutAddr
+		connection := result.OutConn
+		messages := createMessages(pld, address, connection)
+		assert acc(messages.Mem(), 1/10)
+		assert acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10) && acc(connection.Mem(), 1/1000))
+
+		_, err := result.OutConn.WriteBatch(messages)
+
+		apply acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10)  && acc(connection.Mem(), 1/1000))
+		assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+		apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+		assert result.Mem()
+		if err != nil {
+			// (tlino) log not supported yet
+			//log.Debug("Error writing packet", "err", err)
+			// error metric // (tlino) original scion comment
+			// (tlino) continue not supported
+			// continue
+		} else {
+			// (tlino) ignore the logging stuff for now
+			// ok metric
+			// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+			// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
+			// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+		}
+	}
+}
+
 // (tlino) TODO: verify
 // (tlino) added helper function
 requires acc(verifyutils.BytesAcc(payload), 1/10)
 requires acc(address.Mem(), 1/10)
+requires acc(connection.Mem(), 1/1000)
 ensures acc(msgs.Mem(), 1/10)
-ensures acc(msgs.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(payload), 1/10) && acc(address.Mem(), 1/10))
+ensures acc(msgs.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(payload), 1/10) && acc(address.Mem(), 1/10) && acc(connection.Mem(), 1/1000))
 decreases
-func createMessages(payload []byte, address net.Addr) (msgs underlayconn.Messages) //{
+func createMessages(payload []byte, address net.Addr, connection BatchConn) (msgs underlayconn.Messages) //{
 // 	unfold acc(verifyutils.BytesAcc(payload), 1/10)
 // 	msgs := make(underlayconn.Messages, 1)
 // 	msgs[0].Buffers = make([][]byte, 1)
@@ -1277,6 +1292,30 @@ ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10
 ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && acc(pr.OutConn.Mem(), 1/1000)) --* pr.Mem()
 decreases
 func (pr processResult) getAddrAndRawPktAcc()
+
+// (tlino) added getter and setter methods to simplify verification
+requires pr.Mem()
+ensures pr == old(pr)
+ensures pr.Mem()
+decreases
+func (pr processResult) setOutAddr(add net.Addr) {
+	// unfold pr.Mem()
+	// pr.OutAddr = add
+	// assert pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)
+	// assert pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt)
+	// fold pr.Mem()
+}
+
+requires pr.Mem()
+requires acc(b.Mem(), _)
+ensures pr.Mem()
+decreases
+func (pr processResult) setOutConn(b BatchConn) {
+	// unfold pr.Mem()
+	// pr.OutConn = b
+	// fold pr.Mem()
+}
+// (tlino) end of getters and setters
 
 pred (pr processResult) Mem() {
 	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
@@ -3741,22 +3780,24 @@ type pathIncrementer struct{}
 //	return p.IncPath()
 //}
 
-//func interfaceToMetricLabels(id uint16, localIA addr.IA,
-//	neighbors map[uint16]addr.IA) prometheus.Labels {
-//
-//	if id == 0 {
-//		return prometheus.Labels{
-//			"isd_as":          localIA.String(),
-//			"interface":       "internal",
-//			"neighbor_isd_as": localIA.String(),
-//		}
-//	}
-//	return prometheus.Labels{
-//		"isd_as":          localIA.String(),
-//		"interface":       strconv.FormatUint(uint64(id), 10),
-//		"neighbor_isd_as": neighbors[id].String(),
-//	}
-//}
+// requires id => 0
+func interfaceToMetricLabels(id uint16, localIA addr.IA,
+	neighbors map[uint16]addr.IA) prometheus.Labels //{
+
+// 	if id == 0 {
+// 		return prometheus.Labels{
+// 			"isd_as":          localIA.String(),
+// 			"interface":       "internal",
+// 			"neighbor_isd_as": localIA.String(),
+// 		}
+// 	}
+// 	assume uint(id) >= 0
+// 	return prometheus.Labels{
+// 		"isd_as":          localIA.String(),
+// 		"interface":       strconv.FormatUint(uint64(id), 10),
+// 		"neighbor_isd_as": neighbors[id].String(),
+// 	}
+// }
 
 //func serviceMetricLabels(localIA addr.IA, svc addr.HostSVC) prometheus.Labels {
 //	return prometheus.Labels{
