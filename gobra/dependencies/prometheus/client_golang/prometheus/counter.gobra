@@ -88,3 +88,12 @@ requires opts.ConstLabels != nil ==> acc(opts.ConstLabels)
 requires forall i int :: 0 <= i && i < len(labelNames) ==> acc(&labelNames[i], 1/1000)
 ensures  c.Mem()
 func NewCounterVec(opts CounterOpts, labelNames []string) (c *CounterVec)
+
+// With works as GetMetricWith, but panics where GetMetricWithLabels would have
+// returned an error. Not returning an error allows shortcuts like
+//     myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
+preserves v.Mem()
+preserves acc(labels, _)
+decreases
+ensures c.Mem()
+func (v *CounterVec) With(labels Labels) (c Counter)

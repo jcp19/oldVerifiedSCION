@@ -1194,6 +1194,7 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 		} else {
 			// (tlino) ignore the logging stuff for now
 			// ok metric
+			// (tlino) use getters to simplify verification
 			// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 			// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 			// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
@@ -1294,6 +1295,14 @@ decreases
 func (pr processResult) getAddrAndRawPktAcc()
 
 // (tlino) added getter and setter methods to simplify verification
+pure
+requires acc(pr.Mem(), _)
+ensures res == unfolding acc(pr.Mem(), _) in pr.EgressID
+decreases
+func (pr processResult) GetEgressID() (res uint16) {
+	return unfolding acc(pr.Mem(), _) in pr.EgressID
+}
+
 requires pr.Mem()
 ensures pr == old(pr)
 ensures pr.Mem()
@@ -3780,7 +3789,9 @@ type pathIncrementer struct{}
 //	return p.IncPath()
 //}
 
-// requires id => 0
+requires acc(neighbors, _)
+requires id >= 0
+decreases _
 func interfaceToMetricLabels(id uint16, localIA addr.IA,
 	neighbors map[uint16]addr.IA) prometheus.Labels //{
 
@@ -3791,7 +3802,6 @@ func interfaceToMetricLabels(id uint16, localIA addr.IA,
 // 			"neighbor_isd_as": localIA.String(),
 // 		}
 // 	}
-// 	assume uint(id) >= 0
 // 	return prometheus.Labels{
 // 		"isd_as":          localIA.String(),
 // 		"interface":       strconv.FormatUint(uint64(id), 10),
