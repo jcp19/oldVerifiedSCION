@@ -1299,7 +1299,7 @@ requires verifyutils.BytesAcc(rawPkt)
 requires isZeroSCION(s)
 preserves verifyutils.BytesAcc(origPacket)
 preserves cap(rawPkt) == bufSize
-preserves srcAddr.Mem()
+preserves acc(srcAddr.Mem(), 1/1000)
 preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
@@ -1516,9 +1516,8 @@ func translateBFDMemPred(b *layers.BFD) {
 }
 
 // (tlino) partially verified 
-// depends on issue #341
 requires acc(DataPlaneMutexInvariant(d), _)
-preserves src.Mem()
+preserves acc(src.Mem(), 1/1000)
 preserves verifyutils.BytesAcc(data)
 decreases
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
@@ -1664,13 +1663,6 @@ pred (p *scionPacketProcessor) Mem() {
  	p.rawPkt == p.scionLayer.getRawPkt()
 }
 
-requires p.Mem()
-decreases
-func (p *scionPacketProcessor) foo() {
-	unfold p.Mem()
-	fold p.Mem()
-}
-
 // (tlino) Verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 requires scmpH.Mem() && scmpP.Mem()
@@ -1787,6 +1779,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 
 	// (tlino) use Gobra's copy function
 	// copy(quote[:len(updated)], updated)
+	// (tlino) the updated byte representation of the header fields cannot be longer then the length of the quote
 	assume len(updated) <= len(quote)
 	assert forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
 	assert forall i int :: 0 <= i && i < len(updated) ==> acc(&updated[i], 1/100000)
@@ -2478,7 +2471,6 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (pr processResult, err
 	return p.handleSCMPTraceRouteRequest(ingressID)
 }
 
-// (tlino) verification does not terminate in a reasonable time after merge with master
 // (tlino) Verified
 preserves p.Mem()
 ensures pr.Mem()
@@ -2704,6 +2696,8 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 }
 
 // (tlino) Verified
+// (tlino) This method needs an alias to rawPkt as ghost argument, such that it can relate
+// (tlino) pr.Mem() --* verifyutils.BytesAcc(rawPktAlias) to pr.Mem() --* verifyutils.BytesAcc(p.rawPkt)
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 requires acc(&p.infoField) && acc(&p.segmentChange)
@@ -2712,17 +2706,16 @@ requires verifyutils.BytesAcc(p.origPacket)
 requires cap(p.rawPkt) == bufSize
 requires (p.buffer).Mem()
 requires p.scionLayer != nil && (p.scionLayer).Mem() && (p.scionLayer).getRawPkt() == p.rawPkt
-requires r == p.rawPkt
+requires rawPktAlias == p.rawPkt
 ensures acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 ensures acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 ensures acc(&p.infoField) && acc(&p.segmentChange)
 ensures verifyutils.BytesAcc(p.origPacket)
-ensures cap(p.rawPkt) == bufSize
 ensures (p.buffer).Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(r)
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 decreases
-func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errProcess error) {
+func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
 		// (tlino) create magic wand to later get back access to p.rawPkt
 		pr, errProcess := r, err
@@ -2742,7 +2735,7 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		return pr, errProcess
 	}
 
-	// (tlino) keep read access to fields, they arn't modified
+	// (tlino) keep read access to fields, they aren't modified
 	assert acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4) && acc(&p.origPacket, 1/4) && acc(&p.buffer, 1/4)
 
 	if r, err := p.validatePktLen(); err != nil {
@@ -3142,10 +3135,12 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 
 // (tlino) Specified
 // (tlino) added helper function to simulate the result of a MAC computation
+requires acc(DataPlaneMutexInvariant(d), _)
+preserves acc(p.Mem(), 1/1000)
 ensures len(res) == path.MacLen
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
-decreases
-func getDummyMac() (res []byte)
+decreases _
+func (d *DataPlane) getDummyMac(p *onehop.Path) (res []byte)
 
 // (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
@@ -3323,6 +3318,8 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 
 	// (tlino) use setter function to avoid unfolding p
 	// (tlino) macFactory isn't supported, usse dummy MAC instead
+	// (tlino) the dummyMac function has slithly different arguments then the
+	// (tlino) real one, but it also requieres read permission to p
 	// OHP entering our IA
 	// p.SecondHop = path.HopField{
 	// 	ConsIngress: ingressID,
@@ -3332,8 +3329,8 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	secondHop := path.HopField{
 		ConsIngress: ingressID,
 		ExpTime:     p.GetFirstHopExpTime(),
-		Mac:		 getDummyMac(),
 	}
+	secondHop.Mac = d.getDummyMac(p)
 	p.SetSecondHop(secondHop)
 
 	fold s.Mem()
@@ -3377,7 +3374,6 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 }
 
 // (tlino) partially Verified
-// (tlino) TODO d.svc not supported yet
 // (tlino) res contains a subslice of s.rawPkt
 // (tlino) This method doesn't establish res.Mem(), since the caller embedds res
 // (tlino) in a processResult together with the rawPkt. 
@@ -3561,11 +3557,13 @@ pred (s scmpPacker) Mem() {
 	verifyutils.BytesAcc(s.quote)
 }
 
+// (tlino) Contract only
+// (tlino) This method is very hard to verify, since it consists of poorly written go code.
+// (tlino) For example the method calls panic, that crashes the router.
 requires s.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures s.scionL.Mem()
 ensures b != nil ==> verifyutils.BytesAcc(b)
 decreases _
-// (tlino) use *scmpPacker instead of scmpPacker
 func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
 	incPath bool, cause error) (b []byte, e error) //{
 
