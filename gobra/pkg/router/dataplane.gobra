@@ -2696,6 +2696,21 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 }
 
 // (tlino) Verified
+// (tlino) added helper function to create magic wand 
+ghost
+requires pr.Mem()
+requires scionLayer.Mem()
+requires rawPkt != nil && rawPkt == scionLayer.getRawPkt()
+ensures pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
+func createMagicWand(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
+	scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
+	assert verifyutils.BytesAcc(rawPkt)
+	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+}
+
+// (tlino) Verified
 // (tlino) This method needs an alias to rawPkt as ghost argument, such that it can relate
 // (tlino) pr.Mem() --* verifyutils.BytesAcc(rawPktAlias) to pr.Mem() --* verifyutils.BytesAcc(p.rawPkt)
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
@@ -2718,20 +2733,13 @@ decreases
 func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
 		// (tlino) create magic wand to later get back access to p.rawPkt
+
 		pr, errProcess := r, err
-		assert pr.Mem()
+		
+		// (tlino) create magic wand
+		createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
-
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 
@@ -2743,21 +2751,12 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		// return r, err
 
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
+		
+		// (tlino) create magic wand
+		createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
-
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 
@@ -2766,22 +2765,13 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		// return processResult{}, err
 
 		unfold p.Mem()
-
 		pr, errProcess = processResult{}, err
 		fold pr.Mem()
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		// (tlino) create magic wand
+		createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	
@@ -2790,21 +2780,12 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		// return r, err
 
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		// (tlino) create magic wand
+		createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	
@@ -2813,21 +2794,12 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		// return r, err
 
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		// (tlino) create magic wand
+		createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	
@@ -2859,21 +2831,12 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			// return r, err
 
 			unfold p.Mem()
-
 			pr, errProcess = r, err
-			assert pr.Mem()
 
-			// get access to rawPkt, use new variables to make Gobra work
-			assert p.scionLayer.Mem()
-			sl := p.scionLayer
-			rp := p.rawPkt
-			sl.getRawPktAccWithoutPreservePath(rp)
-			assert verifyutils.BytesAcc(rp)
-			assert verifyutils.BytesAcc(p.rawPkt)
+			// (tlino) create magic wand
+			createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
 		}
 		// (tlino) original code, adapted code below
@@ -2919,19 +2882,11 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			// return r, err
 
 			pr, errProcess = r, err
-			assert pr.Mem()
 
-			// get access to rawPkt, use new variables to make Gobra work
-			assert p.scionLayer.Mem()
-			sl := p.scionLayer
-			rp := p.rawPkt
-			sl.getRawPktAccWithoutPreservePath(rp)
-			assert verifyutils.BytesAcc(rp)
-			assert verifyutils.BytesAcc(p.rawPkt)
+			// (tlino) create magic wand
+			createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
 		}
 	}
@@ -2939,22 +2894,16 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 	if r, err := p.validateEgressID(); err != nil {
 		// (tlino) original code, adapted code below
 		// return r, err
-		unfold p.Mem()
 
+		unfold p.Mem()
 		pr, errProcess = r, err
 		assert pr.Mem()
-
-		// get access to rawPkt, use new variables to make Gobra work
 		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		
+		// (tlino) create magic wand
+		createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	
@@ -2964,43 +2913,27 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 	if r, err := p.handleEgressRouterAlert(); err != nil {
 		// (tlino) original code, adapted code below
 		// return r, err
+
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		// (tlino) create magic wand
+		createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	if r, err := p.validateEgressUp(); err != nil {
 		// (tlino) original code, adapted code below
 		// return r, err
+
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		// (tlino) create magic wand
+		createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	egressID := p.egressInterface()
@@ -3011,23 +2944,15 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		if err := p.processEgress(); err != nil {
 			// (tlino) original code,  adapted code below
 			// return processResult{}, err
-			unfold p.Mem()
 
+			unfold p.Mem()
 			pr, errProcess = processResult{}, err
 			fold pr.Mem()
-			assert pr.Mem()
 
-			// get access to rawPkt, use new variables to make Gobra work
-			assert p.scionLayer.Mem()
-			sl := p.scionLayer
-			rp := p.rawPkt
-			sl.getRawPktAccWithoutPreservePath(rp)
-			assert verifyutils.BytesAcc(rp)
-			assert verifyutils.BytesAcc(p.rawPkt)
+			// (tlino) create magic wand
+			createMagicWand(pr, p.scionLayer, p.rawPkt)
 
-			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
 		}
 		// (tlino) original code, adapted code is below
@@ -3168,7 +3093,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		// (tlino) create the magic wand
 		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
 			s.getRawPktAccWithoutPreservePath(rawPkt)
-			assert verifyutils.BytesAcc(rawPkt)
 		}
 		return 
 	}
@@ -3196,7 +3120,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		// (tlino) create the magic wand
 		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
 			s.getRawPktAccWithoutPreservePath(rawPkt)
-			assert verifyutils.BytesAcc(rawPkt)
 		}
 		return 
 	}
