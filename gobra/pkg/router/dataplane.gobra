@@ -183,7 +183,9 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
-// (tlino) start of getter functions to avoid unfolding DataPlaneMutexInvariants
+
+/** start of added getter and setter methods for DataPlane **/
+// (tlino) added getters and setters to simplify verification
 requires acc(DataPlaneMutexInvariant(d), _)
 decreases
 pure func (d *DataPlane) GetLocalAI() addr.IA {
@@ -238,7 +240,9 @@ func (d *DataPlane) GetBfdSession(intf uint16) (bfd bfdSession, ok bool) {
 	unfold acc(BfdSessionsAcc(d.bfdSessions), _)
     bfd, ok = (d.bfdSessions)[intf]
 }
+/** end of added getter and setter methods for DataPlane **/
 
+// (tlino) added ghost method to create a *DataPlane object and its invariant
 ghost
 ensures DataPlaneMutexInvariant(res)
 decreases
@@ -935,6 +939,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant isZeroSCION(spkt)
 	invariant buffer.Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
+	invariant len(origPacket) == bufSize
 	for d.isRunning() {
 		pkts, err := rd.ReadBatch(msgs, metas)
 
@@ -985,12 +990,15 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 	for i := 0; i < len(msgs); i++ {
 		unfold (&msgs[i]).MemPartiallyInitialized()
 		(msgs[i].Buffers)[0] = make([]byte, bufSize)
+		// (tlino) added to establish the Mem predicate of msgs[i]
+		msgs[i].N = 0
 		fold (&msgs[i]).Mem()
 	}
 	fold msgs.Mem()
 
 	metas := make([]conn.ReadMeta, inputBatchCnt)
 	// (tlino) added loop to initialize metas
+	ghost
 	invariant 0 <= i && i <= len(metas)
 	invariant forall j int :: i <= j && j < len(metas) ==> acc(&metas[j]) && metas[j].Src == nil && metas[j].Local == nil
 	invariant forall j int :: 0 <= j && j < i ==> (&metas[j]).Mem()
@@ -1005,13 +1013,13 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) used to be part of the read closure
 requires acc(DataPlaneMutexInvariant(d), _)
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
+requires isZeroSCION(spkt)
 preserves msgs.Mem()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-preserves cap(origPacket) == bufSize
+preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
 preserves acc(scmpErr)
 preserves buffer.Mem()
-preserves isZeroSCION(spkt)
 decreases
 func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) {
@@ -1024,7 +1032,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 	invariant acc(DataPlaneMutexInvariant(d), _)
 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
-	invariant cap(origPacket) == bufSize
+	invariant cap(origPacket) == bufSize && len(origPacket) == bufSize
 	invariant acc(scmpErr)
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
@@ -1032,8 +1040,6 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 	for i := 0; i < pkts; i++ {
 		unfold (&msgs[i]).Mem()
 		p := msgs[i]
-		assume p.N < len(origPacket)
-		assume p.N >= 0
 		assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
 		// (tlino) use local originPacket subslice
 		// origPacket = origPacket[:p.N]
@@ -1082,7 +1088,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 
 				fold result.Mem()
 				result.getAddrAndRawPktAcc()
-				assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+				assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
 
 				// (tlino) moved message creation to outlined function
 				// (tlino) use new variables to make gobra work
@@ -1098,7 +1104,7 @@ func processBatch(ingressID uint16, d *DataPlane, msgs underlayconn.Messages, me
 				// apply acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10))
 				// assume acc(result.OutConn.Mem(), 1/1000)
 				// assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
-				apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+				apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
 				assert result.Mem()
 				if err != nil {
 					// (tlino) log not supported yet
@@ -1245,14 +1251,17 @@ type processResult struct {
 	OutPkt   []byte
 }
 
-// (tlino) helper method to get read access to OutAddr and OutPkt.
+// (tlino) helper method to get read access to OutAddr, OutPkt, and OutConn.
 // (tlino) OutAddr contains a subslice of OutPkt.
 // (tlino) However, giving both read access is ok.
+// (tlino) The OutConn object is an entry in DataPlane.external with wildcard permission.
+// (tlino) We cannot give a wildcare permission amount to OutConn whithin a magic wand, 
+// (tlino) thus we use a concrete permission amount
 ghost
 requires pr.Mem()
-ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && acc(pr.OutConn.Mem(), 1/1000)
-ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && acc(pr.OutConn.Mem(), 1/1000)) --* pr.Mem()
-decreases
+ensures acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && acc(pr.OutConn.Mem(), 1/1000)
+ensures (acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && acc(pr.OutConn.Mem(), 1/1000)) --* pr.Mem()
+decreases _
 func (pr processResult) getAddrAndRawPktAcc()
 
 pred (pr processResult) Mem() {
@@ -1287,7 +1296,7 @@ pure func isZeroSCION(s slayers.SCION) bool {
 // (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
 requires verifyutils.BytesAcc(rawPkt)
-preserves isZeroSCION(s)
+requires isZeroSCION(s)
 preserves verifyutils.BytesAcc(origPacket)
 preserves cap(rawPkt) == bufSize
 preserves srcAddr.Mem()
@@ -1807,10 +1816,9 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 // (tlino) outlined part of packSCMP
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
-requires verifyutils.BytesAcc(origPacket)
-requires scionLayer.Mem() && buffer.Mem() && scmpH.Mem() && scmpP.Mem()
-ensures scionLayer.Mem() && buffer.Mem()
-ensures verifyutils.BytesAcc(origPacket)
+requires scmpH.Mem() && scmpP.Mem()
+preserves scionLayer.Mem() && buffer.Mem() 
+preserves verifyutils.BytesAcc(origPacket)
 ensures scionLayer.getRawScionPath() == old(scionLayer.getRawScionPath())
 ensures scionLayer.getRawPkt() == old(scionLayer.getRawPkt())
 ensures pr.Mem()
@@ -2378,8 +2386,6 @@ func (p *scionPacketProcessor) doXover() (pr processResult, errRet error) {
 }
 
 // (tlino) Verified
-// (joao) being able to write sequences of pure statements inside
-// pure functions would be helpful here
 preserves acc(p.Mem(), 1/10)
 decreases
 func (p *scionPacketProcessor) egressInterface() (res uint16) {

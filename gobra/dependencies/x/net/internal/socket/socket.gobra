@@ -23,6 +23,7 @@ pred (m *Message) Mem() {
 	cap((m.Buffers)[0]) == verifyutils.BufSize &&
 	(forall k int :: 0 <= k && k < cap((m.Buffers)[0]) ==> acc(&(m.Buffers)[0][k])) &&
 	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
+	0 <= m.N && m.N <= verifyutils.BufSize &&
 	m.Addr.Mem()
 }
 
