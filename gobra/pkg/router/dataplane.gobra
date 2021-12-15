@@ -1220,7 +1220,6 @@ func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
 	fold msgs.Mem()
 }
 
-
 preserves DataPlaneMutexInvariant(d)
 func (d *DataPlane) initMetrics() /* {
 	labels := interfaceToMetricLabels(0, d.localIA, d.neighborIAs)
@@ -1293,6 +1292,19 @@ pure func isZeroSCION(s slayers.SCION) bool {
 }
 
 // (tlino) Verified
+// (tlino) added helper method to construct magic wand in processPkt
+ghost
+requires scionLayer.Mem()
+requires rawPkt == scionLayer.getRawPkt()
+preserves pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
+func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
+	scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
+	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+}
+
+// (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
 requires verifyutils.BytesAcc(rawPkt)
 requires isZeroSCION(s)
@@ -1321,11 +1333,8 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet =  processResult{}, err
 		fold pr.Mem()
-		assert pr.Mem()
-		assert verifyutils.BytesAcc(rawPkt)
 		
 		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 		return
 	}
 	
@@ -1336,15 +1345,9 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 		fold pr.Mem()
-		assert pr.Mem()
 
-		// get access to rawPkt
-		assert sNew.Mem()
-		sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		assert verifyutils.BytesAcc(rawPkt)
-
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		// construct magic wand
+		processPktHelper(pr, sNew, rawPkt)
 		return
 	}
 
@@ -1362,13 +1365,8 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			fold sNew.Mem()
 			fold pr.Mem()
 
-			// get access to rawPkt
-			assert sNew.Mem()
-			sNew.getRawPktAccWithoutPreservePath(rawPkt)
-			assert verifyutils.BytesAcc(rawPkt)
-
-			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-			assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+			// construct magic wand
+			processPktHelper(pr, sNew, rawPkt)
 			return 
 		}
 		// (tlino) original code, adapted code is below
@@ -1379,13 +1377,8 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 		fold pr.Mem()
 
-		// get access to rawPkt
-		assert sNew.Mem()
-		sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		assert verifyutils.BytesAcc(rawPkt)
-
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		// construct magic wand
+		processPktHelper(pr, sNew, rawPkt)
 		return 
 	case slayers.PathTypeOneHop:
 		// (tlino) use sNew instead of s and use getters
@@ -1401,15 +1394,9 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				// return processResult{}, malformedPath
 				pr, errRet = processResult{}, malformedPath()
 				fold pr.Mem()
-				assert pr.Mem()
 
-				// get access to rawPkt
-				assert sNew.Mem()
-				sNew.getRawPktAccWithoutPreservePath(rawPkt)
-				assert verifyutils.BytesAcc(rawPkt)
-
-				package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-				assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+				// construct magic wand
+				processPktHelper(pr, sNew, rawPkt)
 				return
 			}
 			
@@ -1420,13 +1407,8 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			fold sNew.Mem()
 			fold pr.Mem()
 
-			// get access to rawPkt
-			assert sNew.Mem()
-			sNew.getRawPktAccWithoutPreservePath(rawPkt)
-			assert verifyutils.BytesAcc(rawPkt)
-
-			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-			assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+			// construct magic wand
+			processPktHelper(pr, sNew, rawPkt)
 			return
 		}
 		// (tlino) original code, adapted code is below
@@ -1438,10 +1420,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// (tlino) original code, adapted code is below 
 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
 
-		assert verifyutils.BytesAcc(origPacket)
-		assert buffer.Mem()
-		assert sNew.Mem()
-
 		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
 		return
 	default:
@@ -1450,15 +1428,9 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
 		fold pr.Mem()
-		assert pr.Mem()
 
-		// get access to rawPkt
-		assert sNew.Mem()
-		sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		assert verifyutils.BytesAcc(rawPkt)
-
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		// construct magic wand
+		processPktHelper(pr, sNew, rawPkt)
 		return
  	}
 }
@@ -2153,8 +2125,6 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 			return serrors.WrapStr("update info field", err)
 		}
 		apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rawPkt == sl.getRawPkt())
-		assert p.path == p.scionLayer.getRawScionPath()
-		assert p.rawPkt == p.scionLayer.getRawPkt()
 		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
 			fold p.Mem()
 			return err
@@ -2703,7 +2673,7 @@ requires rawPkt != nil && rawPkt == scionLayer.getRawPkt()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
-func createMagicWand(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
+func processHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
 	scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt)
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
@@ -2736,7 +2706,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		pr, errProcess := r, err
 		
 		// (tlino) create magic wand
-		createMagicWand(pr, p.scionLayer, p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
@@ -2753,7 +2723,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		pr, errProcess = r, err
 		
 		// (tlino) create magic wand
-		createMagicWand(pr, p.scionLayer, p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
@@ -2768,7 +2738,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		fold pr.Mem()
 
 		// (tlino) create magic wand
-		createMagicWand(pr, p.scionLayer, p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
@@ -2782,7 +2752,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		pr, errProcess = r, err
 
 		// (tlino) create magic wand
-		createMagicWand(pr, p.scionLayer, p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
@@ -2796,7 +2766,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		pr, errProcess = r, err
 
 		// (tlino) create magic wand
-		createMagicWand(pr, p.scionLayer, p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
@@ -2833,7 +2803,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			pr, errProcess = r, err
 
 			// (tlino) create magic wand
-			createMagicWand(pr, p.scionLayer, p.rawPkt)
+			processHelper(pr, p.scionLayer, p.rawPkt)
 
 			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
@@ -2882,7 +2852,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			pr, errProcess = r, err
 
 			// (tlino) create magic wand
-			createMagicWand(pr, p.scionLayer, p.rawPkt)
+			processHelper(pr, p.scionLayer, p.rawPkt)
 
 			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
@@ -2899,7 +2869,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		assert p.scionLayer.Mem()
 		
 		// (tlino) create magic wand
-		createMagicWand(pr, p.scionLayer, p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
@@ -2916,7 +2886,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		pr, errProcess = r, err
 
 		// (tlino) create magic wand
-		createMagicWand(pr, p.scionLayer, p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
@@ -2929,7 +2899,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		pr, errProcess = r, err
 
 		// (tlino) create magic wand
-		createMagicWand(pr, p.scionLayer, p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
@@ -2948,7 +2918,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			fold pr.Mem()
 
 			// (tlino) create magic wand
-			createMagicWand(pr, p.scionLayer, p.rawPkt)
+			processHelper(pr, p.scionLayer, p.rawPkt)
 
 			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
@@ -3063,6 +3033,20 @@ decreases _
 func (d *DataPlane) getDummyMac(p *onehop.Path) (res []byte)
 
 // (tlino) Verified
+// (tlino) added helper function to create the magic wand
+ghost
+requires scionLayer.Mem()
+requires rawPkt == scionLayer.getRawPkt()
+preserves pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
+func processOHPHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
+	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+		scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
+	}
+}
+
+// (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
 requires s.Mem() && s.getRawPkt() == rawPkt
 preserves buffer.Mem()
@@ -3086,9 +3070,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fold pr.Mem()
 		fold s.Mem()
 		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 	// (tlino) the deserializer enforces that p != nil holds
@@ -3113,9 +3095,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fold pr.Mem()
 		fold s.Mem()
 		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 	
@@ -3134,9 +3114,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fold pr.Mem()
 		fold s.Mem()
 		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 
@@ -3161,9 +3139,8 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 			// return processResult{}, err
 			pr, errRet = processResult{}, err
 			fold pr.Mem()
-			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-				s.getRawPktAccWithoutPreservePath(rawPkt)
-			}
+			// (tlino) create the magic wand
+			processOHPHelper(pr, s, rawPkt)
 			return 
 		}
 
@@ -3206,9 +3183,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fold pr.Mem()
 		fold s.Mem()
 		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 
@@ -3258,9 +3233,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
 		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 	
@@ -3271,9 +3244,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
 		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		processOHPHelper(pr, s, rawPkt)
 		return
 	}
 	// (tlino) original code, adapted code is below
