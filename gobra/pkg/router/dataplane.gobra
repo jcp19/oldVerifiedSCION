@@ -184,8 +184,7 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 }
 
 
-/** start of added getter and setter methods for DataPlane **/
-// (tlino) added getters and setters to simplify verification
+// (tlino) start of added getters and setters for DataPlane to simplify verification
 requires acc(DataPlaneMutexInvariant(d), _)
 decreases
 pure func (d *DataPlane) GetLocalAI() addr.IA {
@@ -240,7 +239,7 @@ func (d *DataPlane) GetBfdSession(intf uint16) (bfd bfdSession, ok bool) {
 	unfold acc(BfdSessionsAcc(d.bfdSessions), _)
     bfd, ok = (d.bfdSessions)[intf]
 }
-/** end of added getter and setter methods for DataPlane **/
+// (tlino) end of added getter and setter methods for DataPlane
 
 // (tlino) added ghost method to create a *DataPlane object and its invariant
 ghost
@@ -2849,7 +2848,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		rp := p.rawPkt
 		sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
 
 		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt}, nil
 		fold pr.Mem()
@@ -2966,7 +2964,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		rp := p.rawPkt
 		sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
 		
 		assert acc(c.Mem(), _)
 
@@ -2998,7 +2995,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		rp := p.rawPkt
 		sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
 
 		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt}, nil
 		fold pr.Mem()
@@ -3048,7 +3044,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 	rp := p.rawPkt
 	sl.getRawPktAccWithoutPreservePath(rp)
 	assert verifyutils.BytesAcc(rp)
-	assert verifyutils.BytesAcc(p.rawPkt)
 
 	package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
 		unfold pr.Mem()
@@ -3362,10 +3357,8 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
 	
 	// (tlino) obtain access to rawPkt
-	assert rawPkt == s.getRawPkt()
 	s.getRawPktAcc(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
-	assert verifyutils.BytesAcc(rawPkt)
 	unfold verifyutils.BytesAcc(rawPkt)
 
 	rawContents := buffer.Bytes()
