@@ -2323,30 +2323,48 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // 	return processResult{}, nil
 // }
 
-// (tlino) partially verified
+// (tlino) partially Verified
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
 requires p.Mem()
 ensures pr.Mem()
 ensures p.Mem()
 decreases _
-func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, e error) //{
-// 	unfold p.Mem()
-// 	sl := p.scionLayer
-// 	a, err := p.d.resolveLocalDst(sl)
-// 	switch {
-// 	// case errors.Is(err, noSVCBackend):
-// 	// 	r, err := p.packSCMP(
-// 	// 		&slayers.SCMP{
-// 	// 			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeDestinationUnreachable,
-// 	// 				slayers.SCMPCodeNoRoute),
-// 	// 		},
-// 	// 		&slayers.SCMPDestinationUnreachable{}, err)
-// 	// 	return nil, r, err
-// 	default:
-// 		return a, processResult{}, nil
-// 	}
-// }
+func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error) {
+	unfold p.Mem()
+	sl := p.scionLayer
+	a, err := p.d.resolveLocalDst(sl)
+	switch {
+	// (tlino) globals not supported
+	// case errors.Is(err, noSVCBackend):
+	case errors.Is(err, noSVCBackend()):
+		// (tlino) original code, adapted code is below
+		// r, err := p.packSCMP(
+		// 	&slayers.SCMP{
+		// 		TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeDestinationUnreachable,
+		// 			slayers.SCMPCodeNoRoute),
+		// 	},
+		// 	&slayers.SCMPDestinationUnreachable{}, err)
+		// return nil, r, err
+		scmpH := &slayers.SCMP{
+			TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeDestinationUnreachable,
+				slayers.SCMPCodeNoRoute),
+		}
+		fold scmpH.Mem()
+		scmpP := &slayers.SCMPDestinationUnreachable{}
+		fold scmpP.Mem()
+		e := err
+		fold p.Mem()
+		address = nil
+		pr, errRet = p.packSCMP(scmpH, scmpP, e)
+	default:
+		// (tlino) original code, adpated code is below
+		// return a, processResult{}, nil
+		fold p.Mem()
+		address, pr, errRet = a, processResult{}, nil
+		fold pr.Mem()
+	}
+}
 
 // (tlino) Verified
 requires p.Mem()

@@ -112,8 +112,7 @@ func (i *SCMPExternalInterfaceDown) DecodeFromBytes(data []byte,
 // (tlino) Verified, but commented out to speed up verification
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-requires i.Mem() && b.Mem()
-ensures  i.Mem() && b.Mem()
+preserves i.Mem() && b.Mem()
 func (i *SCMPExternalInterfaceDown) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) (ret error) //{
 
@@ -146,6 +145,7 @@ func decodeSCMPExternalInterfaceDown(data []byte, pb gopacket.PacketBuilder) err
 }
 */
 
+// (tlino) added implementation proof
 (*SCMPExternalInterfaceDown) implements gopacket.SerializableLayer {
 	pure (i *SCMPExternalInterfaceDown) LayerType() gopacket.LayerType {
 		return i.LayerType()
@@ -240,8 +240,7 @@ func (i *SCMPInternalConnectivityDown) DecodeFromBytes(data []byte,
 // (tlino) Verified, but commented out to speed up verification
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-requires i.Mem() && b.Mem()
-ensures  i.Mem() && b.Mem()
+preserves i.Mem() && b.Mem()
 func (i *SCMPInternalConnectivityDown) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) error //{
 
@@ -275,6 +274,7 @@ func decodeSCMPInternalConnectivityDown(data []byte, pb gopacket.PacketBuilder) 
 }
 */
 
+// (tlino) added implementation proof
 (*SCMPInternalConnectivityDown) implements gopacket.SerializableLayer {
 	pure (i *SCMPInternalConnectivityDown) LayerType() gopacket.LayerType {
 		return i.LayerType()
@@ -408,8 +408,7 @@ func (i *SCMPParameterProblem) DecodeFromBytes(data []byte, df gopacket.DecodeFe
 // (tlino) Verified, but commented out to speed up verification
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-requires i.Mem() && b.Mem()
-ensures  (i.Mem() && b.Mem())
+preserves i.Mem() && b.Mem()
 func (i *SCMPParameterProblem) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) (err error) //{
 // 	buf, err := b.PrependBytes(2 + 2)
@@ -441,6 +440,7 @@ func decodeSCMPParameterProblem(data []byte, pb gopacket.PacketBuilder) error {
 }
 */
 
+// (tlino) added implementation proof
 (*SCMPParameterProblem) implements gopacket.SerializableLayer {
 	pure (s *SCMPParameterProblem) LayerType() gopacket.LayerType {
 		return s.LayerType()
@@ -495,6 +495,7 @@ ensures verifyutils.BytesAcc(r) --* (s.Mem() && r == s.GetRawPkt())
 decreases
 func (s *SCMPTraceroute) GetRawPktAcc(r []byte)
 
+// (tlino) added getters to make code easier to verify
 pure
 requires acc(s.Mem(), 1/1000)
 ensures res == unfolding acc(s.Mem(), 1/1000) in s.rawPkt
@@ -503,7 +504,6 @@ func (s *SCMPTraceroute) GetRawPkt() (res []byte) {
 	return unfolding acc(s.Mem(), 1/1000) in s.rawPkt
 }
 
-// (tlino) added getters to make code easier to verify
 pure
 requires acc(s.Mem(), 1/1000)
 ensures res == unfolding acc(s.Mem(), 1/1000) in s.Identifier
@@ -527,7 +527,6 @@ decreases
 func (s *SCMPTraceroute) GetInterface() (res uint64) {
 	return unfolding acc(s.Mem(), 1/1000) in s.Interface
 }
-
 // (tlino) end of getters
 
 // LayerType returns LayerTypeSCMPTraceroute.
@@ -584,8 +583,7 @@ func (i *SCMPTraceroute) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback
 // (tlino) Verified, but commented out to speed up verification
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-requires i.Mem() && b.Mem()
-ensures i.Mem() && b.Mem()
+preserves i.Mem() && b.Mem()
 func (i *SCMPTraceroute) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) error //{
 
@@ -623,6 +621,7 @@ func decodeSCMPTraceroute(data []byte, pb gopacket.PacketBuilder) error {
 }
 */
 
+// (tlino) added implementation proof
 (*SCMPTraceroute) implements gopacket.SerializableLayer{
 	pure (i *SCMPTraceroute) LayerType() gopacket.LayerType {
 		return i.LayerType()
@@ -647,8 +646,14 @@ type SCMPDestinationUnreachable struct {
 	EmbeddedBaseLayer layers.BaseLayer
 }
 
+pred (i *SCMPDestinationUnreachable) Mem() {
+	acc(i) &&
+	(forall j int:: 0 <= j && j < len(i.EmbeddedBaseLayer.Contents) ==> acc(&(i.EmbeddedBaseLayer.Contents)[j])) &&
+	(forall j int:: 0 <= j && j < len(i.EmbeddedBaseLayer.Payload) ==> acc(&(i.EmbeddedBaseLayer.Payload)[j]))
+}
+
 // LayerType returns LayerTypeSCMPTraceroute.
-func (*SCMPDestinationUnreachable) LayerType() gopacket.LayerType {
+pure func (*SCMPDestinationUnreachable) LayerType() gopacket.LayerType {
 	// return LayerTypeSCMPDestinationUnreachable
 	return LayerTypeSCMPDestinationUnreachable()
 }
@@ -675,9 +680,13 @@ func (i *SCMPDestinationUnreachable) DecodeFromBytes(data []byte,
 	}
 	return nil
 }
+*/
 
+// (tlino) Verified
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
+requires i.Mem() && b.Mem()
+ensures i.Mem() && b.Mem()
 func (i *SCMPDestinationUnreachable) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) error {
 
@@ -685,10 +694,16 @@ func (i *SCMPDestinationUnreachable) SerializeTo(b gopacket.SerializeBuffer,
 	if err != nil {
 		return err
 	}
-	copy(buf, make([]byte, 4))
+	// (tlino) use gobra's copy function
+	// copy(buf, make([]byte, 4))
+	unfold verifyutils.BytesAcc(buf)
+	verifyutils.OutlineMemorySafeCopy(buf, make([]byte, 4))
+	fold verifyutils.BytesAcc(buf)
+	apply verifyutils.BytesAcc(buf) --* b.Mem()
 	return nil
 }
 
+/*
 func decodeSCMPDestinationUnreachable(data []byte, pb gopacket.PacketBuilder) error {
 	s := &SCMPDestinationUnreachable{}
 	if err := s.DecodeFromBytes(data, pb); err != nil {
@@ -698,3 +713,14 @@ func decodeSCMPDestinationUnreachable(data []byte, pb gopacket.PacketBuilder) er
 	return pb.NextDecoder(s.NextLayerType())
 }
 */
+
+// (tlino) added implementation proof
+(*SCMPDestinationUnreachable) implements gopacket.SerializableLayer{
+	pure (i *SCMPDestinationUnreachable) LayerType() gopacket.LayerType {
+		return i.LayerType()
+	}
+
+	(i *SCMPDestinationUnreachable) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (err error) {
+		err = i.SerializeTo(b, opts)
+	}
+}
