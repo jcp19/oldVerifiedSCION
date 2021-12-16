@@ -12,6 +12,7 @@ pred (m *Message) MemPartiallyInitialized() {
 	acc(&(m.Buffers)[0]) &&
 	(forall k int :: 0 <= k && k < cap((m.Buffers)[0]) ==> acc(&(m.Buffers)[0][k])) &&
 	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
+	m.N == 0 &&
 	m.Addr.Mem()
 }
 

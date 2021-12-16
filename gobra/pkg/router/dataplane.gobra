@@ -989,8 +989,6 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 	for i := 0; i < len(msgs); i++ {
 		unfold (&msgs[i]).MemPartiallyInitialized()
 		(msgs[i].Buffers)[0] = make([]byte, bufSize)
-		// (tlino) added to establish the Mem predicate of msgs[i]
-		msgs[i].N = 0
 		fold (&msgs[i]).Mem()
 	}
 	fold msgs.Mem()
@@ -1253,7 +1251,7 @@ type processResult struct {
 // (tlino) OutAddr contains a subslice of OutPkt.
 // (tlino) However, giving both read access is ok.
 // (tlino) The OutConn object is an entry in DataPlane.external with wildcard permission.
-// (tlino) We cannot give a wildcare permission amount to OutConn whithin a magic wand, 
+// (tlino) We cannot give a wildcard permission amount to OutConn whithin a magic wand, 
 // (tlino) thus we use a concrete permission amount
 ghost
 requires pr.Mem()
