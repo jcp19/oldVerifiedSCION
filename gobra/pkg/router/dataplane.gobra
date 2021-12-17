@@ -146,6 +146,21 @@ type DataPlane struct {
 	Metrics          *Metrics
 }
 
+pred BatchConnsAcc(batchConns map[uint16]BatchConn) {
+	batchConns != nil ==> acc(batchConns) &&
+	forall btc BatchConn :: btc in range(batchConns) ==> btc.Mem()
+}
+
+pred AddrsAcc(addrs map[uint16]net.Addr) {
+	addrs != nil ==> acc(addrs) &&
+	forall add net.Addr :: add in range(addrs) ==> add.Mem()
+}
+
+pred BfdSessionsAcc(bfdSessions map[uint16]bfdSession) {
+	bfdSessions != nil ==> acc(bfdSessions) &&
+	forall bfd bfdSession :: bfd in range(bfdSessions) ==> bfd.Mem()
+}
+
 pred DataPlaneMutexInvariant(d *DataPlane) {
 	// access to mtx field ommited
 	acc(&d.external) &&
@@ -159,124 +174,84 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	acc(&d.localIA) &&
 	acc(&d.running) &&
 	acc(&d.Metrics) &&
-	(d.external != nil ==> acc(d.external)) &&
 	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
 	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
-	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
 	(d.svc != nil ==> (d.svc).Mem()) &&
-	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
-	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem()) &&
-	(forall btc BatchConn :: btc in range(d.external) ==> btc.Mem()) &&
-	(forall add net.Addr :: add in range(d.internalNextHops) ==> add.Mem()) &&
+	BfdSessionsAcc(d.bfdSessions) &&
+	BatchConnsAcc(d.external) &&
+	AddrsAcc(d.internalNextHops) &&
 	(d.internal != nil ==> (d.internal).Mem()) &&
 	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
-pred DataPlaneMutexInvariant1(d *DataPlane) {
-	// access to mtx field ommited
-	acc(&d.linkTypes) &&
-	acc(&d.neighborIAs) &&
-	acc(&d.internal) &&
-	acc(&d.internalIP) &&
-	acc(&d.internalNextHops) &&
-	acc(&d.svc) &&
-	acc(&d.localIA) &&
-	acc(&d.running) &&
-	acc(&d.Metrics) &&
-	(d.linkTypes != nil ==> acc(d.linkTypes)) &&
-	(d.neighborIAs != nil ==> acc(d.neighborIAs)) &&
-	(d.internalNextHops != nil ==> acc(d.internalNextHops)) &&
-	(forall add net.Addr :: add in range(d.internalNextHops) ==> add.Mem()) &&
-	(d.svc != nil ==> (d.svc).Mem()) &&
-	(d.internal != nil ==> (d.internal).Mem()) &&
-	(d.Metrics != nil ==> d.Metrics.Mem())
-}
 
-pred DataPlaneMutexInvariant2(d *DataPlane) {
-	acc(&d.bfdSessions) &&
-	acc(&d.external) &&
-	(d.external != nil ==> acc(d.external)) &&
-	(d.bfdSessions != nil ==> acc(d.bfdSessions)) &&
-	(forall btc BatchConn :: btc in range(d.external) ==> btc.Mem()) &&
-	(forall bfd bfdSession :: bfd in range(d.bfdSessions) ==> bfd.Mem())
-}
-
-// (tlino) start of getter functions to avoid unfolding DataPlaneMutexInvariants
-requires acc(DataPlaneMutexInvariant1(d), _)
+// (tlino) start of added getters and setters for DataPlane to simplify verification
+requires acc(DataPlaneMutexInvariant(d), _)
 decreases
 pure func (d *DataPlane) GetLocalAI() addr.IA {
-	return unfolding acc(DataPlaneMutexInvariant1(d), _) in d.localIA
+	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.localIA
 }
 
-requires acc(DataPlaneMutexInvariant1(d), _)
-ensures acc(DataPlaneMutexInvariant1(d), _)
-ensures res != nil ==> acc(res, _)
-decreases
-func  (d *DataPlane) GetNeighborIAs() (res map[uint16]addr.IA) {
-	unfold  acc(DataPlaneMutexInvariant1(d), _)
-	return d.neighborIAs
-}
-
-requires acc(DataPlaneMutexInvariant1(d), _)
-ensures acc(DataPlaneMutexInvariant1(d), _)
+preserves acc(DataPlaneMutexInvariant(d), _)
 ensures res != nil ==> acc(res.Mem(), _)
 decreases
 func (d *DataPlane) getInternal() (res BatchConn) {
-	unfold acc(DataPlaneMutexInvariant1(d), _)
+	unfold acc(DataPlaneMutexInvariant(d), _)
 	return d.internal
 }
 
-pure
-requires acc(DataPlaneMutexInvariant1(d), _)
-ensures res == unfolding acc(DataPlaneMutexInvariant1(d), _) in d.running
+requires acc(DataPlaneMutexInvariant(d), _)
+ensures res == unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 decreases
-func (d *DataPlane) isRunning() (res bool) {
-	return unfolding acc(DataPlaneMutexInvariant1(d), _) in d.running
+pure func (d *DataPlane) isRunning() (res bool) {
+	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 }
 
-requires acc(DataPlaneMutexInvariant1(d), _)
-ensures acc(DataPlaneMutexInvariant1(d), _)
+requires acc(DataPlaneMutexInvariant(d), _)
+ensures res == unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
 decreases
-func (d *DataPlane) GetLinkType(intf uint16) (l topology.LinkType) {
-	unfold acc(DataPlaneMutexInvariant1(d), _)
-	l = (d.linkTypes)[intf]
+pure func (d *DataPlane) GetLinkType(intf uint16) (res topology.LinkType) {
+	return unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
 }
 
-
-requires acc(DataPlaneMutexInvariant1(d), _)
-ensures acc(DataPlaneMutexInvariant1(d), _)
+preserves acc(DataPlaneMutexInvariant(d), _)
 ensures ok ==> acc(add.Mem(), _)
 decreases
 func (d *DataPlane) GetInternalNextHop(intf uint16) (add net.Addr, ok bool) {
-	unfold acc(DataPlaneMutexInvariant1(d), _)
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	unfold acc(AddrsAcc(d.internalNextHops), _)
 	add, ok = (d.internalNextHops)[intf]
-
 }
 
-requires acc(DataPlaneMutexInvariant2(d), _)
-ensures acc(DataPlaneMutexInvariant2(d), _)
+preserves acc(DataPlaneMutexInvariant(d), _)
 ensures ok ==> acc(btc.Mem(), _)
 decreases
 func (d *DataPlane) GetExternalBatchConn(intf uint16) (btc BatchConn, ok bool) {
-    unfold acc(DataPlaneMutexInvariant2(d), _)
+    unfold acc(DataPlaneMutexInvariant(d), _)
+	unfold acc(BatchConnsAcc(d.external), _)
     btc, ok = (d.external)[intf]
 }
 
-requires acc(DataPlaneMutexInvariant2(d), _)
-ensures acc(DataPlaneMutexInvariant2(d), _)
+preserves acc(DataPlaneMutexInvariant(d), _)
 ensures ok ==> acc(bfd.Mem(), _)
 decreases
 func (d *DataPlane) GetBfdSession(intf uint16) (bfd bfdSession, ok bool) {
-    unfold acc(DataPlaneMutexInvariant2(d), _)
+    unfold acc(DataPlaneMutexInvariant(d), _)
+	unfold acc(BfdSessionsAcc(d.bfdSessions), _)
     bfd, ok = (d.bfdSessions)[intf]
 }
+// (tlino) end of added getter and setter methods for DataPlane
 
+// (tlino) added ghost method to create a *DataPlane object and its invariant
 ghost
 ensures DataPlaneMutexInvariant(res)
 decreases
 func soundDataPlaneMutexInvariant() (res *DataPlane) {
 	d@ := DataPlane{}
 	res = &d
+	fold BfdSessionsAcc(d.bfdSessions)
+	fold BatchConnsAcc(d.external)
+	fold AddrsAcc(d.internalNextHops) 
 	fold DataPlaneMutexInvariant(res)
 }
 
@@ -523,8 +498,10 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 	// (joao) original code:
 	// if _, exists := d.external[ifID]; exists {
 	// 		return serrors.WithCtx(alreadySet, "ifID", ifID)
+	unfold BatchConnsAcc(d.external)
 	if _, exists := (d.external)[ifID]; exists {
 		// (joao) no support for defer
+		fold BatchConnsAcc(d.external)
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
 		return serrors.WithCtx(alreadySet(), "ifID", ifID)
@@ -535,6 +512,7 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 	// (joao) add parentheses surrounding `d.external` to make it parse
  	(d.external)[ifID] = conn
 	// (joao) no support for defer
+	fold BatchConnsAcc(d.external)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
@@ -667,9 +645,9 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 	// (joao) rewrote to unfold before returning. Original code:
 	// return d.addBFDController(ifID, s, cfg, m)
 	// changed code:
-	fold DataPlaneMutexInvariant2(d)
+	fold DataPlaneMutexInvariant(d)
 	res := d.addBFDController(ifID, s, cfg, m)
-	unfold DataPlaneMutexInvariant2(d)
+	unfold DataPlaneMutexInvariant(d)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return res
@@ -677,16 +655,16 @@ func (d *DataPlane) AddExternalInterfaceBFD(ifID uint16, conn BatchConn,
 
 // (joao) Partially Verified
 // TODO: specify `rand`
-requires DataPlaneMutexInvariant2(d)
-ensures DataPlaneMutexInvariant2(d)
+preserves DataPlaneMutexInvariant(d)
 func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	metrics bfd.Metrics) error {
-	unfold DataPlaneMutexInvariant2(d)
+	unfold DataPlaneMutexInvariant(d)
 	if cfg.Disable {
-		fold DataPlaneMutexInvariant2(d)
+		fold DataPlaneMutexInvariant(d)
 		// return errBFDDisabled
 		return errBFDDisabled()
 	}
+	unfold BfdSessionsAcc(d.bfdSessions)
 	if d.bfdSessions == nil {
 		d.bfdSessions = make(map[uint16]bfdSession)
 	}
@@ -707,7 +685,8 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	// 	ReceiveQueueSize:      10,
 	// 	Metrics:               metrics,
 	// }
-	fold DataPlaneMutexInvariant2(d)
+	fold BfdSessionsAcc(d.bfdSessions)
+	fold DataPlaneMutexInvariant(d)
 	return nil
 }
 
@@ -805,8 +784,10 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	// if _, exists := d.internalNextHops[ifID]; exists {
 	//	 return serrors.WithCtx(alreadySet, "ifID", ifID)
 	// }
+	unfold AddrsAcc(d.internalNextHops)
 	if _, exists := (d.internalNextHops)[ifID]; exists {
 		// (joao) Unlock explictly added, no support for defer
+		fold AddrsAcc(d.internalNextHops)
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
 		return serrors.WithCtx(alreadySet(), "ifID", ifID)
@@ -817,6 +798,7 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 	// d.internalNextHops[ifID] = a
 	(d.internalNextHops)[ifID] = a
 	// (joao) Unlock explictly added, no support for defer
+	fold AddrsAcc(d.internalNextHops)
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
@@ -934,7 +916,7 @@ func (d *DataPlane) Run() error /* {
 // (tlino) Verified
 // (joao) Closure extracted from the body of the Run function
 requires acc(rd.Mem(), _)
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
+requires acc(DataPlaneMutexInvariant(d), _)
 func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) outlined code to separate function
 	msgs, metas := initReadClosureBuffer()
@@ -950,14 +932,14 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// for d.running {
 
 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
-	invariant acc(DataPlaneMutexInvariant1(d), _)
-	invariant acc(DataPlaneMutexInvariant2(d), _)
+	invariant acc(DataPlaneMutexInvariant(d), _)
 	invariant acc(rd.Mem(), _)
 	invariant msgs.Mem()
 	invariant acc(scmpErr)
 	invariant isZeroSCION(spkt)
 	invariant buffer.Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
+	invariant len(origPacket) == bufSize
 	for d.isRunning() {
 		pkts, err := rd.ReadBatch(msgs, metas)
 
@@ -1014,6 +996,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 
 	metas := make([]conn.ReadMeta, inputBatchCnt)
 	// (tlino) added loop to initialize metas
+	ghost
 	invariant 0 <= i && i <= len(metas)
 	invariant forall j int :: i <= j && j < len(metas) ==> acc(&metas[j]) && metas[j].Src == nil && metas[j].Local == nil
 	invariant forall j int :: 0 <= j && j < i ==> (&metas[j]).Mem()
@@ -1026,23 +1009,16 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) partially verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
+requires acc(DataPlaneMutexInvariant(d), _)
 requires acc(rd.Mem(), _)
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
-requires msgs.Mem()
-requires forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
-requires forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-requires cap(origPacket) == bufSize
-requires acc(scmpErr)
-requires buffer.Mem()
 requires isZeroSCION(spkt)
-ensures msgs.Mem()
-ensures forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
-ensures forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
-ensures cap(origPacket) == bufSize
-ensures acc(scmpErr)
-ensures buffer.Mem()
-ensures isZeroSCION(spkt)
+preserves msgs.Mem()
+preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
+preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
+preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
+preserves acc(scmpErr)
+preserves buffer.Mem()
 decreases
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) {
@@ -1052,12 +1028,11 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	// for _, p := range msgs[:pkts] {
 	invariant 0 <= i && i <= pkts
 	invariant 0 <= pkts && pkts <= len(msgs)
+	invariant acc(DataPlaneMutexInvariant(d), _)
 	invariant acc(rd.Mem(), _)
-	invariant acc(DataPlaneMutexInvariant1(d), _)
-	invariant acc(DataPlaneMutexInvariant2(d), _)
 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
-	invariant cap(origPacket) == bufSize
+	invariant cap(origPacket) == bufSize && len(origPacket) == bufSize
 	invariant acc(scmpErr)
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
@@ -1147,11 +1122,9 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 
 // (tlino) partially verified
 // (tlino) added helper function to simplify verification
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
-requires result.Mem()
-requires result.Mem() --* verifyutils.BytesAcc(rawPkt)
-ensures result.Mem()
-ensures result.Mem() --* verifyutils.BytesAcc(rawPkt)
+requires acc(DataPlaneMutexInvariant(d), _)
+preserves result.Mem()
+preserves result.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
 func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 	unfold result.Mem()
@@ -1168,7 +1141,7 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 
 		fold result.Mem()
 		result.getAddrAndRawPktAcc()
-		assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+		assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
 
 		// (tlino) moved message creation to outlined function
 		// (tlino) use new variables to make gobra work
@@ -1176,14 +1149,14 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 		address := result.OutAddr
 		connection := result.OutConn
 		messages := createMessages(pld, address, connection)
-		assert acc(messages.Mem(), 1/10)
-		assert acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10) && acc(connection.Mem(), 1/1000))
+		assert acc(messages.Mem(), 1/1000)
+		assert acc(messages.Mem(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 
 		_, err := result.OutConn.WriteBatch(messages)
 
-		apply acc(messages.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(pld), 1/10) && acc(address.Mem(), 1/10)  && acc(connection.Mem(), 1/1000))
-		assert (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
-		apply (acc(result.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(result.OutPkt), 1/10) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+		apply acc(messages.Mem(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
+		assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+		apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
 		assert result.Mem()
 		if err != nil {
 			// (tlino) log not supported yet
@@ -1204,11 +1177,11 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 
 // (tlino) TODO: verify
 // (tlino) added helper function
-requires acc(verifyutils.BytesAcc(payload), 1/10)
-requires acc(address.Mem(), 1/10)
+requires acc(verifyutils.BytesAcc(payload), 1/1000)
+requires acc(address.Mem(), 1/1000)
 requires acc(connection.Mem(), 1/1000)
-ensures acc(msgs.Mem(), 1/10)
-ensures acc(msgs.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(payload), 1/10) && acc(address.Mem(), 1/10) && acc(connection.Mem(), 1/1000))
+ensures acc(msgs.Mem(), 1/1000)
+ensures acc(msgs.Mem(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 decreases
 func createMessages(payload []byte, address net.Addr, connection BatchConn) (msgs underlayconn.Messages) //{
 // 	unfold acc(verifyutils.BytesAcc(payload), 1/10)
@@ -1229,9 +1202,8 @@ func createMessages(payload []byte, address net.Addr, connection BatchConn) (msg
 // (tlino) Verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
-requires msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs)
-ensures msgs.Mem()
+preserves msgs.Mem()
 decreases
 func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
 	unfold msgs.Mem()
@@ -1253,9 +1225,7 @@ func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
 	fold msgs.Mem()
 }
 
-
-requires DataPlaneMutexInvariant(d)
-ensures  DataPlaneMutexInvariant(d)
+preserves DataPlaneMutexInvariant(d)
 func (d *DataPlane) initMetrics() /* {
 	labels := interfaceToMetricLabels(0, d.localIA, d.neighborIAs)
 	d.Metrics.InputBytesTotal.With(labels).Add(0)
@@ -1283,16 +1253,6 @@ type processResult struct {
 	OutAddr  net.Addr
 	OutPkt   []byte
 }
-
-// (tlino) helper method to get read access to OutAddr and OutPkt.
-// (tlino) OutAddr contains a subslice of OutPkt.
-// (tlino) However, giving both read access is ok.
-ghost
-requires pr.Mem()
-ensures acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && acc(pr.OutConn.Mem(), 1/1000)
-ensures (acc(pr.OutAddr.Mem(), 1/10) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/10) && acc(pr.OutConn.Mem(), 1/1000)) --* pr.Mem()
-decreases
-func (pr processResult) getAddrAndRawPktAcc()
 
 // (tlino) added getter and setter methods to simplify verification
 pure
@@ -1326,6 +1286,19 @@ func (pr processResult) setOutConn(b BatchConn) {
 }
 // (tlino) end of getters and setters
 
+// (tlino) helper method to get read access to OutAddr, OutPkt, and OutConn.
+// (tlino) OutAddr contains a subslice of OutPkt.
+// (tlino) However, giving both read access is ok.
+// (tlino) The OutConn object is an entry in DataPlane.external with wildcard permission.
+// (tlino) We cannot give a wildcard permission amount to OutConn whithin a magic wand, 
+// (tlino) thus we use a concrete permission amount
+ghost
+requires pr.Mem()
+ensures acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && acc(pr.OutConn.Mem(), 1/1000)
+ensures (acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && acc(pr.OutConn.Mem(), 1/1000)) --* pr.Mem()
+decreases _
+func (pr processResult) getAddrAndRawPktAcc()
+
 pred (pr processResult) Mem() {
 	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
 	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
@@ -1356,18 +1329,26 @@ pure func isZeroSCION(s slayers.SCION) bool {
 }
 
 // (tlino) Verified
-requires acc(DataPlaneMutexInvariant1(d), _) &&  acc(DataPlaneMutexInvariant2(d), _)
-requires isZeroSCION(s)
+// (tlino) added helper method to construct magic wand in processPkt
+ghost
+requires scionLayer.Mem()
+requires rawPkt == scionLayer.getRawPkt()
+preserves pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
+func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
+	scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
+	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+}
+
+// (tlino) Verified
+requires acc(DataPlaneMutexInvariant(d), _)
 requires verifyutils.BytesAcc(rawPkt)
-requires verifyutils.BytesAcc(origPacket)
-requires cap(rawPkt) == bufSize
-requires srcAddr.Mem()
-requires buffer.Mem()
-ensures isZeroSCION(s)
-ensures verifyutils.BytesAcc(origPacket)
-ensures cap(rawPkt) == bufSize
-ensures srcAddr.Mem()
-ensures buffer.Mem()
+requires isZeroSCION(s)
+preserves verifyutils.BytesAcc(origPacket)
+preserves cap(rawPkt) == bufSize
+preserves acc(srcAddr.Mem(), 1/1000)
+preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
@@ -1389,11 +1370,8 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet =  processResult{}, err
 		fold pr.Mem()
-		assert pr.Mem()
-		assert verifyutils.BytesAcc(rawPkt)
 		
 		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 		return
 	}
 	
@@ -1404,15 +1382,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 		fold pr.Mem()
-		assert pr.Mem()
-
-		// get access to rawPkt
-		assert sNew.Mem()
-		sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		assert verifyutils.BytesAcc(rawPkt)
-
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		ghost processPktHelper(pr, sNew, rawPkt)
 		return
 	}
 
@@ -1429,14 +1399,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			pr, errRet = processResult{}, d.processIntraBFD(srcAddr, sNew.EmbeddedBaseLayer.Payload)
 			fold sNew.Mem()
 			fold pr.Mem()
-
-			// get access to rawPkt
-			assert sNew.Mem()
-			sNew.getRawPktAccWithoutPreservePath(rawPkt)
-			assert verifyutils.BytesAcc(rawPkt)
-
-			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-			assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+			ghost processPktHelper(pr, sNew, rawPkt)
 			return 
 		}
 		// (tlino) original code, adapted code is below
@@ -1446,14 +1409,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader(),
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 		fold pr.Mem()
-
-		// get access to rawPkt
-		assert sNew.Mem()
-		sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		assert verifyutils.BytesAcc(rawPkt)
-
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		ghost processPktHelper(pr, sNew, rawPkt)
 		return 
 	case slayers.PathTypeOneHop:
 		// (tlino) use sNew instead of s and use getters
@@ -1469,15 +1425,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				// return processResult{}, malformedPath
 				pr, errRet = processResult{}, malformedPath()
 				fold pr.Mem()
-				assert pr.Mem()
-
-				// get access to rawPkt
-				assert sNew.Mem()
-				sNew.getRawPktAccWithoutPreservePath(rawPkt)
-				assert verifyutils.BytesAcc(rawPkt)
-
-				package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-				assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+				ghost processPktHelper(pr, sNew, rawPkt)
 				return
 			}
 			
@@ -1487,14 +1435,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			pr, errRet = processResult{}, d.processInterBFD(ingressID, ohp, sNew.EmbeddedBaseLayer.Payload)
 			fold sNew.Mem()
 			fold pr.Mem()
-
-			// get access to rawPkt
-			assert sNew.Mem()
-			sNew.getRawPktAccWithoutPreservePath(rawPkt)
-			assert verifyutils.BytesAcc(rawPkt)
-
-			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-			assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+			ghost processPktHelper(pr, sNew, rawPkt)
 			return
 		}
 		// (tlino) original code, adapted code is below
@@ -1506,10 +1447,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// (tlino) original code, adapted code is below 
 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
 
-		assert verifyutils.BytesAcc(origPacket)
-		assert buffer.Mem()
-		assert sNew.Mem()
-
 		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
 		return
 	default:
@@ -1518,27 +1455,19 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
 		fold pr.Mem()
-		assert pr.Mem()
-
-		// get access to rawPkt
-		assert sNew.Mem()
-		sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		assert verifyutils.BytesAcc(rawPkt)
-
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+		ghost processPktHelper(pr, sNew, rawPkt)
 		return
  	}
 }
 
 // (tlino) Verified
 // (joao) `oh` is not used anywhere in the function
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
-requires verifyutils.BytesAcc(data)
-ensures verifyutils.BytesAcc(data)
+requires acc(DataPlaneMutexInvariant(d), _)
+preserves verifyutils.BytesAcc(data)
 decreases
 func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
-	unfold acc(DataPlaneMutexInvariant2(d), _)
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	unfold acc(BfdSessionsAcc(d.bfdSessions), _)
 	if len(d.bfdSessions) == 0 {
 		// (joao) no globals
 		// return noBFDSessionConfigured
@@ -1560,7 +1489,7 @@ func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []by
 	}
 	fold verifyutils.BytesAcc(data)
 
-	translateBFDMemPred(p)
+	ghost translateBFDMemPred(p)
 
 	// (joao) add parentheses surrounding `d.bfdSessions`
 	if v, ok := (d.bfdSessions)[ingressID]; ok {
@@ -1583,14 +1512,13 @@ func translateBFDMemPred(b *layers.BFD) {
 }
 
 // (tlino) partially verified 
-// depends on issue #341
-preserves src.Mem()
-requires verifyutils.BytesAcc(data)
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
-ensures verifyutils.BytesAcc(data)
+requires acc(DataPlaneMutexInvariant(d), _)
+preserves acc(src.Mem(), 1/1000)
+preserves verifyutils.BytesAcc(data)
 decreases
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
-	unfold acc(DataPlaneMutexInvariant2(d), _)
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	unfold acc(BfdSessionsAcc(d.bfdSessions), _)
 	if len(d.bfdSessions) == 0 {
 		// (tlino) golbals not supported
 		// return noBFDSessionConfigured
@@ -1612,7 +1540,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 		return err
 	}
 	fold verifyutils.BytesAcc(data)
-	translateBFDMemPred(p)
+	ghost translateBFDMemPred(p)
 
 	ifID := uint16(0)
 	srcUDPAddr, ok := src.(*net.UDPAddr)
@@ -1654,14 +1582,11 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 }
 
 // (tlino) Verified
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
-requires verifyutils.BytesAcc(origPacket)
-requires cap(rawPkt) == bufSize
-requires buffer.Mem()
+requires acc(DataPlaneMutexInvariant(d), _)
 requires s != nil && s.Mem() && s.getRawPkt() == rawPkt
-ensures verifyutils.BytesAcc(origPacket)
-ensures cap(rawPkt) == bufSize
-ensures buffer.Mem()
+preserves verifyutils.BytesAcc(origPacket)
+preserves cap(rawPkt) == bufSize
+preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
@@ -1723,8 +1648,7 @@ pred (p *scionPacketProcessor) Mem() {
 	acc(&p.hopField) &&
 	acc(&p.infoField) &&
 	acc(&p.segmentChange) &&
-	acc(DataPlaneMutexInvariant1(p.d), _) &&
-	acc(DataPlaneMutexInvariant2(p.d), _) &&
+	acc(DataPlaneMutexInvariant(p.d), _) &&
 	verifyutils.BytesAcc(p.origPacket) &&
 	acc(p.infoField) &&
 	path.HopFieldInv(p.hopField) &&
@@ -1735,17 +1659,10 @@ pred (p *scionPacketProcessor) Mem() {
  	p.rawPkt == p.scionLayer.getRawPkt()
 }
 
-requires p.Mem()
-decreases
-func (p *scionPacketProcessor) foo() {
-	unfold p.Mem()
-	fold p.Mem()
-}
-
 // (tlino) Verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
-requires p.Mem() && scmpH.Mem() && scmpP.Mem()
-ensures p.Mem()
+requires scmpH.Mem() && scmpP.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
@@ -1858,6 +1775,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 
 	// (tlino) use Gobra's copy function
 	// copy(quote[:len(updated)], updated)
+	// (tlino) the updated byte representation of the header fields cannot be longer then the length of the quote
 	assume len(updated) <= len(quote)
 	assert forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
 	assert forall i int :: 0 <= i && i < len(updated) ==> acc(&updated[i], 1/100000)
@@ -1885,12 +1803,11 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 
 // (tlino) partially verified
 // (tlino) outlined part of packSCMP
-requires acc(DataPlaneMutexInvariant1(d), _) &&  acc(DataPlaneMutexInvariant1(d), _)
+requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
-requires verifyutils.BytesAcc(origPacket)
-requires scionLayer.Mem() && buffer.Mem() && scmpH.Mem() && scmpP.Mem()
-ensures scionLayer.Mem() && buffer.Mem()
-ensures verifyutils.BytesAcc(origPacket)
+requires scmpH.Mem() && scmpP.Mem()
+preserves scionLayer.Mem() && buffer.Mem() 
+preserves verifyutils.BytesAcc(origPacket)
 ensures scionLayer.getRawScionPath() == old(scionLayer.getRawScionPath())
 ensures scionLayer.getRawPkt() == old(scionLayer.getRawPkt())
 ensures pr.Mem()
@@ -1952,7 +1869,7 @@ requires acc(&p.d, _) && acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p
 requires acc(&p.buffer, 1/4) && acc(&p.path) && acc(&p.hopField) && acc(&p.infoField) && acc(&p.segmentChange)
 requires p.scionLayer != nil && (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
 requires (cap(p.rawPkt) == bufSize) && p.rawPkt == p.scionLayer.getRawPkt()
-requires acc(DataPlaneMutexInvariant1(p.d), _) && acc(DataPlaneMutexInvariant2(p.d), _)
+requires acc(DataPlaneMutexInvariant(p.d), _)
 ensures errRet != nil ==> acc(&p.d, _) && acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4) && acc(&p.origPacket, 1/4)
 ensures errRet != nil ==> acc(&p.buffer, 1/4) && acc(&p.path) && acc(&p.hopField) && acc(&p.infoField) && acc(&p.segmentChange)
 ensures errRet != nil ==> (p.scionLayer).Mem() && (p.buffer).Mem() && verifyutils.BytesAcc(p.origPacket)
@@ -2026,8 +1943,7 @@ func (p *scionPacketProcessor) parsePath() (pr processResult, errRet error) {
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, errRet error) {
@@ -2077,8 +1993,7 @@ func (p *scionPacketProcessor) validateHopExpiry() (pr processResult, errRet err
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) validateIngressID() (pr processResult, errRet error) {
@@ -2117,8 +2032,7 @@ func (p *scionPacketProcessor) validateIngressID() (pr processResult, errRet err
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) validateEgressID() (pr processResult, errRet error) {
@@ -2207,8 +2121,7 @@ func (p *scionPacketProcessor) validateEgressID() (pr processResult, errRet erro
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 decreases
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 	// against construction dir the ingress router updates the SegID, ifID == 0
@@ -2237,8 +2150,6 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 			return serrors.WrapStr("update info field", err)
 		}
 		apply pp.Mem() --* (sl.Mem() && pp == sl.getRawScionPath() && rawPkt == sl.getRawPkt())
-		assert p.path == p.scionLayer.getRawScionPath()
-		assert p.rawPkt == p.scionLayer.getRawPkt()
 		if err := updateSCIONLayer(p.rawPkt, p.scionLayer, p.buffer); err != nil {
 			fold p.Mem()
 			return err
@@ -2249,8 +2160,7 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 }
  
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 decreases
 func (p *scionPacketProcessor) currentInfoPointer() uint16 {
 	// (tlino) needs to use getPathAcc to obtain access to p.path
@@ -2275,8 +2185,7 @@ func (p *scionPacketProcessor) currentInfoPointer() uint16 {
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 decreases
 func (p *scionPacketProcessor) currentHopPointer() uint16 {
 	// (tlino) needs to use getPathAcc to obtain access to p.path
@@ -2304,8 +2213,7 @@ func (p *scionPacketProcessor) currentHopPointer() uint16 {
 
 // (tlino) not verified yet
 // (joao) currently not supported
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases _
 func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) //{
@@ -2323,12 +2231,11 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // 	return processResult{}, nil
 // }
 
-// (tlino) partially Verified
+// (tlino) partially verified
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
-requires p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
-ensures p.Mem()
 decreases _
 func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error) {
 	unfold p.Mem()
@@ -2367,8 +2274,7 @@ func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processRes
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 decreases
 func (p *scionPacketProcessor) processEgress() error {
 	// we are the egress router and if we go in construction direction we
@@ -2420,7 +2326,7 @@ ensures errRet == nil ==> p.Mem()
 ensures errRet != nil ==> acc(&p.d, _) && acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4)
 ensures errRet != nil ==> acc(&p.origPacket, 1/4) && acc(&p.buffer, 1/4) && acc(&p.path) && acc(&p.hopField)
 ensures errRet != nil ==> acc(&p.infoField) && acc(&p.segmentChange)
-ensures errRet != nil ==> acc(DataPlaneMutexInvariant1(p.d), _) && acc(DataPlaneMutexInvariant2(p.d), _)  && verifyutils.BytesAcc(p.origPacket)
+ensures errRet != nil ==> acc(DataPlaneMutexInvariant(p.d), _) && verifyutils.BytesAcc(p.origPacket)
 ensures errRet != nil ==> p.buffer.Mem() && p.scionLayer.Mem() && cap(p.rawPkt) == bufSize
 ensures errRet != nil ==> p.path != nil && p.scionLayer != nil && p.path == p.scionLayer.getRawScionPath()
 ensures errRet != nil ==> p.rawPkt == p.scionLayer.getRawPkt()
@@ -2485,10 +2391,7 @@ func (p *scionPacketProcessor) doXover() (pr processResult, errRet error) {
 }
 
 // (tlino) Verified
-// (joao) being able to write sequences of pure statements inside
-// pure functions would be helpful here
-requires acc(p.Mem(), 1/10)
-ensures acc(p.Mem(), 1/10)
+preserves acc(p.Mem(), 1/10)
 decreases
 func (p *scionPacketProcessor) egressInterface() (res uint16) {
 	unfold acc(p.Mem(), 1/10)
@@ -2503,8 +2406,7 @@ func (p *scionPacketProcessor) egressInterface() (res uint16) {
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet error) {
@@ -2551,8 +2453,7 @@ func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet erro
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) handleIngressRouterAlert() (pr processResult, errRet error) {
@@ -2582,10 +2483,8 @@ func (p *scionPacketProcessor) handleIngressRouterAlert() (pr processResult, err
 	return p.handleSCMPTraceRouteRequest(ingressID)
 }
 
-// (tlino) verification does not terminate in a reasonable time after merge with master
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) handleEgressRouterAlert() (pr processResult, errRet error) {
@@ -2620,8 +2519,7 @@ func (p *scionPacketProcessor) handleEgressRouterAlert() (pr processResult, errR
 
 // (tlino) Verified
 // (tlino) p.scionLayer.Payload is subsliced in scmpH and scmpP
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
@@ -2745,8 +2643,7 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest(
 
 // (tlino) Verified
 // (tlino) added method to simplify verification
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) handleSCMPTraceRouteRequest2(interfaceID uint16, scmpPIdent uint16, 
@@ -2772,8 +2669,7 @@ func (p *scionPacketProcessor) handleSCMPTraceRouteRequest2(interfaceID uint16, 
 }
 
 // (tlino) Verified
-requires p.Mem()
-ensures p.Mem()
+preserves p.Mem()
 ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error) {
@@ -2812,45 +2708,51 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 }
 
 // (tlino) Verified
+// (tlino) added helper function to create magic wand 
+ghost
+requires pr.Mem()
+requires scionLayer.Mem()
+requires rawPkt != nil && rawPkt == scionLayer.getRawPkt()
+ensures pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
+func processHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
+	scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
+	assert verifyutils.BytesAcc(rawPkt)
+	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
+}
+
+// (tlino) Verified
+// (tlino) This method needs an alias to rawPkt as ghost argument, such that it can relate
+// (tlino) pr.Mem() --* verifyutils.BytesAcc(rawPktAlias) to pr.Mem() --* verifyutils.BytesAcc(p.rawPkt)
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 requires acc(&p.infoField) && acc(&p.segmentChange)
-requires acc(DataPlaneMutexInvariant1(p.d), _) && acc(DataPlaneMutexInvariant2(p.d), _)
+requires acc(DataPlaneMutexInvariant(p.d), _)
 requires verifyutils.BytesAcc(p.origPacket)
 requires cap(p.rawPkt) == bufSize
 requires (p.buffer).Mem()
 requires p.scionLayer != nil && (p.scionLayer).Mem() && (p.scionLayer).getRawPkt() == p.rawPkt
-requires r == p.rawPkt
+requires rawPktAlias == p.rawPkt
 ensures acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 ensures acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 ensures acc(&p.infoField) && acc(&p.segmentChange)
 ensures verifyutils.BytesAcc(p.origPacket)
-ensures cap(p.rawPkt) == bufSize
 ensures (p.buffer).Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(r)
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 decreases
-func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errProcess error) {
+func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
-		// (tlino) create magic wand to later get back access to p.rawPkt
 		pr, errProcess := r, err
-		assert pr.Mem()
+		
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
-
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 
-	// (tlino) keep read access to fields, they arn't modified
+	// (tlino) keep read access to fields, they aren't modified
 	assert acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4) && acc(&p.origPacket, 1/4) && acc(&p.buffer, 1/4)
 
 	if r, err := p.validatePktLen(); err != nil {
@@ -2858,21 +2760,11 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		// return r, err
 
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
+		
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
-
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 
@@ -2881,22 +2773,12 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		// return processResult{}, err
 
 		unfold p.Mem()
-
 		pr, errProcess = processResult{}, err
 		fold pr.Mem()
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	
@@ -2905,21 +2787,11 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		// return r, err
 
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	
@@ -2928,21 +2800,11 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		// return r, err
 
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	
@@ -2974,21 +2836,11 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 			// return r, err
 
 			unfold p.Mem()
-
 			pr, errProcess = r, err
-			assert pr.Mem()
 
-			// get access to rawPkt, use new variables to make Gobra work
-			assert p.scionLayer.Mem()
-			sl := p.scionLayer
-			rp := p.rawPkt
-			sl.getRawPktAccWithoutPreservePath(rp)
-			assert verifyutils.BytesAcc(rp)
-			assert verifyutils.BytesAcc(p.rawPkt)
+			processHelper(pr, p.scionLayer, p.rawPkt)
 
-			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
 		}
 		// (tlino) original code, adapted code below
@@ -3001,7 +2853,6 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		rp := p.rawPkt
 		sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
 
 		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt}, nil
 		fold pr.Mem()
@@ -3034,19 +2885,10 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 			// return r, err
 
 			pr, errProcess = r, err
-			assert pr.Mem()
 
-			// get access to rawPkt, use new variables to make Gobra work
-			assert p.scionLayer.Mem()
-			sl := p.scionLayer
-			rp := p.rawPkt
-			sl.getRawPktAccWithoutPreservePath(rp)
-			assert verifyutils.BytesAcc(rp)
-			assert verifyutils.BytesAcc(p.rawPkt)
+			processHelper(pr, p.scionLayer, p.rawPkt)
 
-			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
 		}
 	}
@@ -3054,22 +2896,15 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 	if r, err := p.validateEgressID(); err != nil {
 		// (tlino) original code, adapted code below
 		// return r, err
-		unfold p.Mem()
 
+		unfold p.Mem()
 		pr, errProcess = r, err
 		assert pr.Mem()
-
-		// get access to rawPkt, use new variables to make Gobra work
 		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	
@@ -3079,43 +2914,25 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 	if r, err := p.handleEgressRouterAlert(); err != nil {
 		// (tlino) original code, adapted code below
 		// return r, err
+
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	if r, err := p.validateEgressUp(); err != nil {
 		// (tlino) original code, adapted code below
 		// return r, err
+
 		unfold p.Mem()
-
 		pr, errProcess = r, err
-		assert pr.Mem()
 
-		// get access to rawPkt, use new variables to make Gobra work
-		assert p.scionLayer.Mem()
-		sl := p.scionLayer
-		rp := p.rawPkt
-		sl.getRawPktAccWithoutPreservePath(rp)
-		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
+		processHelper(pr, p.scionLayer, p.rawPkt)
 
-		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 		return pr, errProcess
 	}
 	egressID := p.egressInterface()
@@ -3126,23 +2943,14 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		if err := p.processEgress(); err != nil {
 			// (tlino) original code,  adapted code below
 			// return processResult{}, err
-			unfold p.Mem()
 
+			unfold p.Mem()
 			pr, errProcess = processResult{}, err
 			fold pr.Mem()
-			assert pr.Mem()
 
-			// get access to rawPkt, use new variables to make Gobra work
-			assert p.scionLayer.Mem()
-			sl := p.scionLayer
-			rp := p.rawPkt
-			sl.getRawPktAccWithoutPreservePath(rp)
-			assert verifyutils.BytesAcc(rp)
-			assert verifyutils.BytesAcc(p.rawPkt)
+			processHelper(pr, p.scionLayer, p.rawPkt)
 
-			package pr.Mem() --* (verifyutils.BytesAcc(rp)) {}
-
-			assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 			return pr, errProcess
 		}
 		// (tlino) original code, adapted code is below
@@ -3156,7 +2964,6 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		rp := p.rawPkt
 		sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
 		
 		assert acc(c.Mem(), _)
 
@@ -3188,7 +2995,6 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 		rp := p.rawPkt
 		sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
-		assert verifyutils.BytesAcc(p.rawPkt)
 
 		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt}, nil
 		fold pr.Mem()
@@ -3238,7 +3044,6 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 	rp := p.rawPkt
 	sl.getRawPktAccWithoutPreservePath(rp)
 	assert verifyutils.BytesAcc(rp)
-	assert verifyutils.BytesAcc(p.rawPkt)
 
 	package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
 		unfold pr.Mem()
@@ -3250,16 +3055,31 @@ func (p *scionPacketProcessor) process(ghost r []byte) (pr processResult, errPro
 
 // (tlino) Specified
 // (tlino) added helper function to simulate the result of a MAC computation
+requires acc(DataPlaneMutexInvariant(d), _)
+preserves acc(p.Mem(), 1/1000)
 ensures len(res) == path.MacLen
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
-decreases
-func getDummyMac() (res []byte)
+decreases _
+func (d *DataPlane) getDummyMac(p *onehop.Path) (res []byte)
 
 // (tlino) Verified
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
+// (tlino) added helper function to create the magic wand
+ghost
+requires scionLayer.Mem()
+requires rawPkt == scionLayer.getRawPkt()
+preserves pr.Mem()
+ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+decreases
+func processOHPHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
+	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
+		scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
+	}
+}
+
+// (tlino) Verified
+requires acc(DataPlaneMutexInvariant(d), _)
 requires s.Mem() && s.getRawPkt() == rawPkt
-requires buffer.Mem()
-ensures buffer.Mem()
+preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
@@ -3279,11 +3099,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		pr, errRet = processResult{}, malformedPath()
 		fold pr.Mem()
 		fold s.Mem()
-		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-			assert verifyutils.BytesAcc(rawPkt)
-		}
+		ghost processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 	// (tlino) the deserializer enforces that p != nil holds
@@ -3307,11 +3123,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 			malformedPath(), "srcIA", s.SrcIA, "dstIA", s.DstIA)
 		fold pr.Mem()
 		fold s.Mem()
-		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-			assert verifyutils.BytesAcc(rawPkt)
-		}
+		ghost processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 	
@@ -3329,10 +3141,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 		fold pr.Mem()
 		fold s.Mem()
-		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		ghost processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 
@@ -3352,19 +3161,18 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		p.InfoUpdateSegID()
 
 		fold s.Mem()
+		assert p == s.getOHPPath()
 		if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
 			// (tlino) original code, adapted code is below
 			// return processResult{}, err
 			pr, errRet = processResult{}, err
 			fold pr.Mem()
-			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-				s.getRawPktAccWithoutPreservePath(rawPkt)
-			}
+			ghost processOHPHelper(pr, s, rawPkt)
 			return 
 		}
 
 		// (tlino) added code to get back relation between p and s.Path
-		assume p != nil && p == s.getOHPPath()
+		assert p != nil && p == s.getOHPPath()
 		unfold s.Mem()
 		assert p.Mem()
 
@@ -3401,10 +3209,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 		fold pr.Mem()
 		fold s.Mem()
-		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		ghost processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 
@@ -3416,11 +3221,10 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 // (tlino) Verified
 // (tlino) added method to simplify verification
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
+requires acc(DataPlaneMutexInvariant(d), _)
 requires s.Mem() && s.getRawPkt() == rawPkt
 requires p != nil && p == s.getOHPPath() 
-requires buffer.Mem()
-ensures buffer.Mem()
+preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
@@ -3433,6 +3237,8 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 
 	// (tlino) use setter function to avoid unfolding p
 	// (tlino) macFactory isn't supported, usse dummy MAC instead
+	// (tlino) the dummyMac function has slithly different arguments then the
+	// (tlino) real one, but it also requieres read permission to p
 	// OHP entering our IA
 	// p.SecondHop = path.HopField{
 	// 	ConsIngress: ingressID,
@@ -3442,8 +3248,8 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	secondHop := path.HopField{
 		ConsIngress: ingressID,
 		ExpTime:     p.GetFirstHopExpTime(),
-		Mac:		 getDummyMac(),
 	}
+	secondHop.Mac = d.getDummyMac(p)
 	p.SetSecondHop(secondHop)
 
 	fold s.Mem()
@@ -3452,10 +3258,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		// return processResult{}, err
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
-		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		ghost processOHPHelper(pr, s, rawPkt)
 		return 
 	}
 	
@@ -3465,10 +3268,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		// return processResult{}, err
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
-		// (tlino) create the magic wand
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-			s.getRawPktAccWithoutPreservePath(rawPkt)
-		}
+		ghost processOHPHelper(pr, s, rawPkt)
 		return
 	}
 	// (tlino) original code, adapted code is below
@@ -3476,10 +3276,9 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	// (tlino) get access to rawPkt
 	s.getRawPktAccWithoutPreservePath(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt)
-	unfold acc(DataPlaneMutexInvariant1(d), _)
+	unfold acc(DataPlaneMutexInvariant(d), _)
 	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt}, nil
 	fold pr.Mem()
-	// (tlino) create the magic wand
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
 		unfold pr.Mem()
 	}
@@ -3487,13 +3286,11 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 }
 
 // (tlino) partially Verified
-// (tlino) TODO d.svc not supported yet
 // (tlino) res contains a subslice of s.rawPkt
 // (tlino) This method doesn't establish res.Mem(), since the caller embedds res
 // (tlino) in a processResult together with the rawPkt. 
-requires acc(s.Mem(), 1/100)
-requires acc(DataPlaneMutexInvariant1(d), _) && acc(DataPlaneMutexInvariant2(d), _)
-ensures acc(s.Mem(), 1/100)
+requires acc(DataPlaneMutexInvariant(d), _)
+preserves acc(s.Mem(), 1/100)
 decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error)
@@ -3522,8 +3319,7 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet erro
 
 // (tlino) Verified
 // (tlino) This method may not establish ret.Mem()
-requires acc(dst.Mem(), 1/200)
-ensures acc(dst.Mem(), 1/200)
+preserves acc(dst.Mem(), 1/200)
 decreases
 func addEndhostPort(dst net.Addr) (ret net.Addr) {
 	if ip, ok := dst.(*net.IPAddr); ok {
@@ -3537,11 +3333,9 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) {
 }
 
 // (tlino) Verified
-requires s.Mem() && buffer.Mem()
-requires rawPkt == s.getRawPkt()
-ensures s.Mem() && buffer.Mem()
-ensures rawPkt == s.getRawPkt()
-ensures s.getRawPkt() == old(s.getRawPkt()) && s.getRawScionPath() == old(s.getRawScionPath())
+preserves s.Mem() && buffer.Mem()
+preserves rawPkt == s.getRawPkt()
+ensures s.getRawPkt() == old(s.getRawPkt()) && s.getRawScionPath() == old(s.getRawScionPath()) && s.getOHPPath() == old(s.getOHPPath())
 decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
@@ -3557,10 +3351,8 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	// https://fsnets.slack.com/archives/C8ADBBG0J/p1592805884250700
 	
 	// (tlino) obtain access to rawPkt
-	assert rawPkt == s.getRawPkt()
 	s.getRawPktAcc(rawPkt)
-	assert verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
-	assert verifyutils.BytesAcc(rawPkt)
+	assert verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()) && s.getOHPPath() == old(s.getOHPPath()))
 	unfold verifyutils.BytesAcc(rawPkt)
 
 	rawContents := buffer.Bytes()
@@ -3579,7 +3371,7 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	verifyutils.OutlineMemorySafeCopy(rawPkt[:len(rawContents)], rawContents)
 
 	fold verifyutils.BytesAcc(rawPkt)
-	apply verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
+	apply verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()) && s.getOHPPath() == old(s.getOHPPath()))
 
 	fold verifyutils.BytesAcc(rawContents)
 	apply verifyutils.BytesAcc(rawContents) --* buffer.Mem()
@@ -3679,7 +3471,6 @@ requires s.Mem() && scmpH.Mem() && scmpP.Mem()
 ensures s.scionL.Mem()
 ensures b != nil ==> verifyutils.BytesAcc(b)
 decreases _
-// (tlino) use *scmpPacker instead of scmpPacker
 func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
 	incPath bool, cause error) (b []byte, e error) //{
 
