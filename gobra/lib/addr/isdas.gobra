@@ -250,6 +250,7 @@ type IA struct {
 
 requires b.Len() >= 8
 preserves forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], 1/1000)
+decreases
 func IAFromRaw(b common.RawBytes) (ret IA) {
 	ia := &IA{}
 	ia.Parse(b)
@@ -316,6 +317,7 @@ func (ia *IA) UnmarshalText(text []byte) error {
 
 requires b.Len() >= 8
 preserves acc(ia) && forall i int :: 0 <= i && i < b.Len() ==> acc(&b[i], 1/1000)
+decreases
 func (ia *IA) Parse(b common.RawBytes) {
 	//*ia = IAInt(binary.BigEndian.Uint64(b)).IA()
 	*ia = (IAInt(binary.BigEndian.Uint64(b))).IA()
@@ -335,10 +337,12 @@ func (ia IA) IAInt() IAInt // {
 //	return IAInt(ia.I)<<ASBits | IAInt(ia.A&MaxAS)
 // }
 
+decreases
 func (ia IA) IsZero() bool {
 	return ia.I == 0 && ia.A == 0
 }
 
+decreases
 func (ia IA) Equal(other IA) bool {
 	return ia.I == other.I && ia.A == other.A
 }
@@ -379,6 +383,7 @@ func (ia *IA) Set(s string) error {
 // IAInt is an integer representation of an ISD-AS.
 type IAInt uint64
 
+decreases
 func (iaI IAInt) IA() IA {
 	return IA{I: ISD(iaI >> ASBits), A: AS(iaI) & MaxAS}
 }
