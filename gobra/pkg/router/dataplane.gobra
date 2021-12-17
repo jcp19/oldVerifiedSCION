@@ -206,11 +206,11 @@ pure func (d *DataPlane) isRunning() (res bool) {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 }
 
-preserves acc(DataPlaneMutexInvariant(d), _)
+requires acc(DataPlaneMutexInvariant(d), _)
+ensures res == unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
 decreases
-func (d *DataPlane) GetLinkType(intf uint16) (l topology.LinkType) {
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	l = (d.linkTypes)[intf]
+pure func (d *DataPlane) GetLinkType(intf uint16) (res topology.LinkType) {
+	return unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
@@ -1343,8 +1343,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 		fold pr.Mem()
-
-		// construct magic wand
 		processPktHelper(pr, sNew, rawPkt)
 		return
 	}
@@ -1362,8 +1360,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			pr, errRet = processResult{}, d.processIntraBFD(srcAddr, sNew.EmbeddedBaseLayer.Payload)
 			fold sNew.Mem()
 			fold pr.Mem()
-
-			// construct magic wand
 			processPktHelper(pr, sNew, rawPkt)
 			return 
 		}
@@ -1374,8 +1370,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader(),
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 		fold pr.Mem()
-
-		// construct magic wand
 		processPktHelper(pr, sNew, rawPkt)
 		return 
 	case slayers.PathTypeOneHop:
@@ -1392,8 +1386,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				// return processResult{}, malformedPath
 				pr, errRet = processResult{}, malformedPath()
 				fold pr.Mem()
-
-				// construct magic wand
 				processPktHelper(pr, sNew, rawPkt)
 				return
 			}
@@ -1404,8 +1396,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			pr, errRet = processResult{}, d.processInterBFD(ingressID, ohp, sNew.EmbeddedBaseLayer.Payload)
 			fold sNew.Mem()
 			fold pr.Mem()
-
-			// construct magic wand
 			processPktHelper(pr, sNew, rawPkt)
 			return
 		}
@@ -1426,8 +1416,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
 		fold pr.Mem()
-
-		// construct magic wand
 		processPktHelper(pr, sNew, rawPkt)
 		return
  	}
@@ -2699,11 +2687,8 @@ ensures pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 decreases
 func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
-		// (tlino) create magic wand to later get back access to p.rawPkt
-
 		pr, errProcess := r, err
 		
-		// (tlino) create magic wand
 		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2720,7 +2705,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		unfold p.Mem()
 		pr, errProcess = r, err
 		
-		// (tlino) create magic wand
 		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2735,7 +2719,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		pr, errProcess = processResult{}, err
 		fold pr.Mem()
 
-		// (tlino) create magic wand
 		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2749,7 +2732,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		unfold p.Mem()
 		pr, errProcess = r, err
 
-		// (tlino) create magic wand
 		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2763,7 +2745,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		unfold p.Mem()
 		pr, errProcess = r, err
 
-		// (tlino) create magic wand
 		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2800,7 +2781,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			unfold p.Mem()
 			pr, errProcess = r, err
 
-			// (tlino) create magic wand
 			processHelper(pr, p.scionLayer, p.rawPkt)
 
 			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2849,7 +2829,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 			pr, errProcess = r, err
 
-			// (tlino) create magic wand
 			processHelper(pr, p.scionLayer, p.rawPkt)
 
 			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2866,7 +2845,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		assert pr.Mem()
 		assert p.scionLayer.Mem()
 		
-		// (tlino) create magic wand
 		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2883,7 +2861,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		unfold p.Mem()
 		pr, errProcess = r, err
 
-		// (tlino) create magic wand
 		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2896,7 +2873,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		unfold p.Mem()
 		pr, errProcess = r, err
 
-		// (tlino) create magic wand
 		processHelper(pr, p.scionLayer, p.rawPkt)
 
 		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -2915,7 +2891,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			pr, errProcess = processResult{}, err
 			fold pr.Mem()
 
-			// (tlino) create magic wand
 			processHelper(pr, p.scionLayer, p.rawPkt)
 
 			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
@@ -3067,7 +3042,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		pr, errRet = processResult{}, malformedPath()
 		fold pr.Mem()
 		fold s.Mem()
-		// (tlino) create the magic wand
 		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
@@ -3092,7 +3066,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 			malformedPath(), "srcIA", s.SrcIA, "dstIA", s.DstIA)
 		fold pr.Mem()
 		fold s.Mem()
-		// (tlino) create the magic wand
 		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
@@ -3111,7 +3084,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 		fold pr.Mem()
 		fold s.Mem()
-		// (tlino) create the magic wand
 		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
@@ -3132,18 +3104,18 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		p.InfoUpdateSegID()
 
 		fold s.Mem()
+		assert p == s.getOHPPath()
 		if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
 			// (tlino) original code, adapted code is below
 			// return processResult{}, err
 			pr, errRet = processResult{}, err
 			fold pr.Mem()
-			// (tlino) create the magic wand
 			processOHPHelper(pr, s, rawPkt)
 			return 
 		}
 
 		// (tlino) added code to get back relation between p and s.Path
-		assume p != nil && p == s.getOHPPath()
+		assert p != nil && p == s.getOHPPath()
 		unfold s.Mem()
 		assert p.Mem()
 
@@ -3180,7 +3152,6 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 		fold pr.Mem()
 		fold s.Mem()
-		// (tlino) create the magic wand
 		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
@@ -3230,7 +3201,6 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		// return processResult{}, err
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
-		// (tlino) create the magic wand
 		processOHPHelper(pr, s, rawPkt)
 		return 
 	}
@@ -3241,7 +3211,6 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		// return processResult{}, err
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
-		// (tlino) create the magic wand
 		processOHPHelper(pr, s, rawPkt)
 		return
 	}
@@ -3253,7 +3222,6 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt}, nil
 	fold pr.Mem()
-	// (tlino) create the magic wand
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
 		unfold pr.Mem()
 	}
@@ -3310,7 +3278,7 @@ func addEndhostPort(dst net.Addr) (ret net.Addr) {
 // (tlino) Verified
 preserves s.Mem() && buffer.Mem()
 preserves rawPkt == s.getRawPkt()
-ensures s.getRawPkt() == old(s.getRawPkt()) && s.getRawScionPath() == old(s.getRawScionPath())
+ensures s.getRawPkt() == old(s.getRawPkt()) && s.getRawScionPath() == old(s.getRawScionPath()) && s.getOHPPath() == old(s.getOHPPath())
 decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func updateSCIONLayer(rawPkt []byte, s slayers.SCION, buffer gopacket.SerializeBuffer) error {
@@ -3327,7 +3295,7 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	
 	// (tlino) obtain access to rawPkt
 	s.getRawPktAcc(rawPkt)
-	assert verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
+	assert verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()) && s.getOHPPath() == old(s.getOHPPath()))
 	unfold verifyutils.BytesAcc(rawPkt)
 
 	rawContents := buffer.Bytes()
@@ -3346,7 +3314,7 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	verifyutils.OutlineMemorySafeCopy(rawPkt[:len(rawContents)], rawContents)
 
 	fold verifyutils.BytesAcc(rawPkt)
-	apply verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
+	apply verifyutils.BytesAcc(rawPkt) --* (s.Mem() && rawPkt == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()) && s.getOHPPath() == old(s.getOHPPath()))
 
 	fold verifyutils.BytesAcc(rawContents)
 	apply verifyutils.BytesAcc(rawContents) --* buffer.Mem()
