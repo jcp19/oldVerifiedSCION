@@ -114,7 +114,7 @@ type BatchConn interface {
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta) (n int, err error)
 
 	preserves acc(Mem(), _)
-	preserves acc(msgs.Mem(), 1/1000)
+	preserves acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 <= n && n <= len(msgs)
 	decreases
 	WriteBatch(msgs underlayconn.Messages) (n int, err error)
@@ -1040,8 +1040,6 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	for i := 0; i < pkts; i++ {
 		unfold (&msgs[i]).Mem()
 		p := msgs[i]
-		assume p.N < len(origPacket)
-		assume p.N >= 0
 		assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
 		// (tlino) use local originPacket subslice
 		// origPacket = origPacket[:p.N]
@@ -1067,8 +1065,8 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 		fold verifyutils.BytesAcc((p.Buffers)[0])
 		fold verifyutils.BytesAcc(LocalOrigPacket)
 		localRawPkt := (p.Buffers)[0]
-		// (tlino) added parentheses to make it parse
-		// result, err := d.processPkt(ingressID, (p.Buffers)[0], p.Addr, spkt, origPacket,
+		// (tlino) use local variables
+		// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
 		//	buffer)
 		result, err := d.processPkt(ingressID, localRawPkt, p.Addr, spkt, LocalOrigPacket,
 			buffer)
@@ -1077,14 +1075,8 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 		// (tlino) continue isn't supported, move code after switch inside switch cases
 		switch {
 		case err == nil:
+			// (tlino) outline stuff after switch to processBatchHelper
 			processBatchHelper(d, result, localRawPkt)
-			
-			apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
-
-			unfold verifyutils.BytesAcc(LocalOrigPacket)
-			unfold verifyutils.BytesAcc((p.Buffers)[0])
-			fold (&msgs[i]).Mem()
-
 		case errors.As(err, scmpErr):
 			if !scmpErr.TypeCode.InfoMsg() {
 				// (tlino) log not yet supported
@@ -1094,28 +1086,26 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 			// (tlino) use setters to simplify verification
 			// result.OutAddr = p.Addr
 			// result.OutConn = rd
-
+			result.setOutAddr(p.Addr)
+			result.setOutConn(rd)
+		
+			// (tlino) outline stuff after switch to processBatchHelper
 			processBatchHelper(d, result, localRawPkt)
-
-			apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
-
-			unfold verifyutils.BytesAcc(LocalOrigPacket)
-			unfold verifyutils.BytesAcc((p.Buffers)[0])
-			fold (&msgs[i]).Mem()
 		default:
 			// log.Debug("Error processing packet", "err", err)
 
 			// (tlino) ignore the logging stuff for now
 			// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
-			assert result.Mem() --* verifyutils.BytesAcc(localRawPkt)
-			apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
 
-			unfold verifyutils.BytesAcc(LocalOrigPacket)
-			unfold verifyutils.BytesAcc((p.Buffers)[0])
-			fold (&msgs[i]).Mem()
 			// (tlino) continue not supported
 			// continue
  		}
+		apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
+
+		unfold verifyutils.BytesAcc(LocalOrigPacket)
+		unfold verifyutils.BytesAcc((p.Buffers)[0])
+		fold (&msgs[i]).Mem()
+
   	}
 	fold msgs.Mem()
 }
@@ -1149,18 +1139,17 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 		address := result.OutAddr
 		connection := result.OutConn
 		messages := createMessages(pld, address, connection)
-		assert acc(messages.Mem(), 1/1000)
-		assert acc(messages.Mem(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
+		assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 
 		_, err := result.OutConn.WriteBatch(messages)
 
-		apply acc(messages.Mem(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
+		apply acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 		assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
 		apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
 		assert result.Mem()
 		if err != nil {
 			// (tlino) log not supported yet
-			//log.Debug("Error writing packet", "err", err)
+			// log.Debug("Error writing packet", "err", err)
 			// error metric // (tlino) original scion comment
 			// (tlino) continue not supported
 			// continue
@@ -1175,29 +1164,30 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 	}
 }
 
-// (tlino) TODO: verify
+// (tlino) Verified
 // (tlino) added helper function
 requires acc(verifyutils.BytesAcc(payload), 1/1000)
 requires acc(address.Mem(), 1/1000)
 requires acc(connection.Mem(), 1/1000)
-ensures acc(msgs.Mem(), 1/1000)
-ensures acc(msgs.Mem(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
+ensures acc(msgs.MemSend(), 1/1000)
+ensures acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 decreases
-func createMessages(payload []byte, address net.Addr, connection BatchConn) (msgs underlayconn.Messages) //{
-// 	unfold acc(verifyutils.BytesAcc(payload), 1/10)
-// 	msgs := make(underlayconn.Messages, 1)
-// 	msgs[0].Buffers = make([][]byte, 1)
-// 	(msgs[0].Buffers)[0] = payload 
-// 	msgs[0].Addr = address
-// 	fold acc((&msgs[0]).Mem(), 1/10)
-// 	fold acc(msgs.Mem(), 1/10)
+func createMessages(payload []byte, address net.Addr, connection BatchConn) (msgs underlayconn.Messages) {
+	unfold acc(verifyutils.BytesAcc(payload), 1/1000)
+	msgs := make(underlayconn.Messages, 1)
+	msgs[0].Buffers = make([][]byte, 1)
+	(msgs[0].Buffers)[0] = payload 
+	msgs[0].Addr = address
+	assert forall i int :: 0 <= i && i < len((msgs[0].Buffers)[0]) ==> acc(&((msgs[0].Buffers)[0])[i], 1/1000)
+	fold acc((&msgs[0]).MemSend(), 1/1000)
+	fold acc(msgs.MemSend(), 1/1000)
 
-// 	package acc(msgs.Mem(), 1/10) --* (acc(verifyutils.BytesAcc(payload), 1/10) && acc(address.Mem(), 1/10)) {
-// 		unfold acc(msgs.Mem(), 1/10)
-// 		unfold acc((&msgs[0]).Mem(), 1/10)
-// 		fold acc(verifyutils.BytesAcc(payload), 1/10)
-// 	}
-// }
+	package acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000)) {
+		unfold acc(msgs.MemSend(), 1/1000)
+		unfold acc((&msgs[0]).MemSend(), 1/1000)
+		fold acc(verifyutils.BytesAcc(payload), 1/1000)
+	}
+}
 
 // (tlino) Verified
 // (tlino) added function to simplify verification
@@ -1263,26 +1253,28 @@ func (pr processResult) GetEgressID() (res uint16) {
 	return unfolding acc(pr.Mem(), _) in pr.EgressID
 }
 
+// (tlino) TODO: cannot verify body with this contracts, 
+// (tlino) however function verifies if we use "requires pr.Mem()" instead of "preserves pr.Mem()"
+preserves pr.Mem()
 requires pr.Mem()
-ensures pr == old(pr)
-ensures pr.Mem()
 decreases
 func (pr processResult) setOutAddr(add net.Addr) {
 	// unfold pr.Mem()
 	// pr.OutAddr = add
-	// assert pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)
-	// assert pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt)
 	// fold pr.Mem()
+	// assert pr.Mem()
 }
 
-requires pr.Mem()
+// (tlino) TODO: cannot verify body with this contracts, 
+// (tlino) however function verifies if we use "requires pr.Mem()" instead of "preserves pr.Mem()"
+preserves pr.Mem()
 requires acc(b.Mem(), _)
-ensures pr.Mem()
 decreases
 func (pr processResult) setOutConn(b BatchConn) {
 	// unfold pr.Mem()
 	// pr.OutConn = b
 	// fold pr.Mem()
+	// assert pr.Mem()
 }
 // (tlino) end of getters and setters
 
@@ -3602,21 +3594,21 @@ requires acc(neighbors, _)
 requires id >= 0
 decreases _
 func interfaceToMetricLabels(id uint16, localIA addr.IA,
-	neighbors map[uint16]addr.IA) prometheus.Labels //{
+	neighbors map[uint16]addr.IA) prometheus.Labels {
 
-// 	if id == 0 {
-// 		return prometheus.Labels{
-// 			"isd_as":          localIA.String(),
-// 			"interface":       "internal",
-// 			"neighbor_isd_as": localIA.String(),
-// 		}
-// 	}
-// 	return prometheus.Labels{
-// 		"isd_as":          localIA.String(),
-// 		"interface":       strconv.FormatUint(uint64(id), 10),
-// 		"neighbor_isd_as": neighbors[id].String(),
-// 	}
-// }
+	if id == 0 {
+		return prometheus.Labels{
+			"isd_as":          localIA.String(),
+			"interface":       "internal",
+			"neighbor_isd_as": localIA.String(),
+		}
+	}
+	return prometheus.Labels{
+		"isd_as":          localIA.String(),
+		"interface":       strconv.FormatUint(uint64(id), 10),
+		"neighbor_isd_as": neighbors[id].String(),
+	}
+}
 
 //func serviceMetricLabels(localIA addr.IA, svc addr.HostSVC) prometheus.Labels {
 //	return prometheus.Labels{

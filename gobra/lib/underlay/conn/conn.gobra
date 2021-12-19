@@ -56,12 +56,19 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 // between ipv4.Message, ipv6.Message and socket.Message.
 type Messages []ipv4.Message
 
+// (tlino) this predicate is used to initialize the message buffer
 pred (m Messages) MemPartiallyInitialized() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemPartiallyInitialized()
 }
 
+// (tlino) this predicate is used for the message buffer
 pred (m Messages) Mem() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
+}
+
+// (tlino) this predicate is used to send a processed packet
+pred (m Messages) MemSend() {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemSend()
 }
 
 // Conn describes the API for an underlay socket with additional metadata on

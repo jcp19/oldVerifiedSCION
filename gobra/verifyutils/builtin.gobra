@@ -16,6 +16,10 @@ pred BytesAcc(b []byte) {
 	forall i int :: { b[i] } 0 <= i && i < len(b) ==> acc(&b[i])
 }
 
+pred BytesAccCap(b []byte) {
+	forall i int :: { b[i] } 0 <= i && i < cap(b) ==> acc(&b[i])
+}
+
 requires acc(BytesAcc(b), _)
 requires 0 <= i && i < len(b)
 ensures v == unfolding acc(BytesAcc(b), _) in b[i]
