@@ -352,6 +352,7 @@ func (ia IA) IsWildcard() bool {
 	return ia.I == 0 || ia.A == 0
 }
 
+decreases _
 func (ia IA) String() string // {
 //	return fmt.Sprintf("%d-%s", ia.I, ia.A)
 //}

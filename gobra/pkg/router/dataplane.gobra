@@ -215,6 +215,14 @@ pure func (d *DataPlane) GetLinkType(intf uint16) (res topology.LinkType) {
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
+ensures res != nil ==> acc(res, _)
+decreases
+func (d *DataPlane) GetNeighborIAs() (res map[uint16]addr.IA) {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	res =  d.neighborIAs
+}
+
+preserves acc(DataPlaneMutexInvariant(d), _)
 ensures ok ==> acc(add.Mem(), _)
 decreases
 func (d *DataPlane) GetInternalNextHop(intf uint16) (add net.Addr, ok bool) {
@@ -917,6 +925,7 @@ func (d *DataPlane) Run() error /* {
 // (joao) Closure extracted from the body of the Run function
 requires acc(rd.Mem(), _)
 requires acc(DataPlaneMutexInvariant(d), _)
+requires ingressID >= 0
 func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) outlined code to separate function
 	msgs, metas := initReadClosureBuffer()
@@ -1010,6 +1019,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 requires acc(DataPlaneMutexInvariant(d), _)
+requires ingressID >= 0
 requires acc(rd.Mem(), _)
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 requires isZeroSCION(spkt)
@@ -1058,7 +1068,10 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 
 		// (tlino) ignore the logging stuff for now
 		// input metric
-		// inputLabels := interfaceToMetricLabels(ingressID, d.localIA, d.neighborIAs)
+		// (tlino) use getters to avoid unfolding
+		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+		inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
+		assert acc(inputLabels)
 		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
 		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 
@@ -1256,7 +1269,6 @@ func (pr processResult) GetEgressID() (res uint16) {
 // (tlino) TODO: cannot verify body with this contracts, 
 // (tlino) however function verifies if we use "requires pr.Mem()" instead of "preserves pr.Mem()"
 preserves pr.Mem()
-requires pr.Mem()
 decreases
 func (pr processResult) setOutAddr(add net.Addr) {
 	// unfold pr.Mem()
@@ -3590,11 +3602,12 @@ type pathIncrementer struct{}
 //	return p.IncPath()
 //}
 
-requires acc(neighbors, _)
+requires neighbors != nil ==> acc(neighbors, _)
 requires id >= 0
-decreases _
+ensures acc(res)
+decreases
 func interfaceToMetricLabels(id uint16, localIA addr.IA,
-	neighbors map[uint16]addr.IA) prometheus.Labels {
+	neighbors map[uint16]addr.IA) (res prometheus.Labels) {
 
 	if id == 0 {
 		return prometheus.Labels{
