@@ -181,9 +181,8 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	BatchConnsAcc(d.external) &&
 	AddrsAcc(d.internalNextHops) &&
 	(d.internal != nil ==> (d.internal).Mem()) &&
-	(d.Metrics != nil ==> d.Metrics.Mem())
+	(d.Metrics != nil ==> (d.Metrics).Mem())
 }
-
 
 // (tlino) start of added getters and setters for DataPlane to simplify verification
 requires acc(DataPlaneMutexInvariant(d), _)
@@ -247,6 +246,14 @@ func (d *DataPlane) GetBfdSession(intf uint16) (bfd bfdSession, ok bool) {
     unfold acc(DataPlaneMutexInvariant(d), _)
 	unfold acc(BfdSessionsAcc(d.bfdSessions), _)
     bfd, ok = (d.bfdSessions)[intf]
+}
+
+preserves acc(DataPlaneMutexInvariant(d), _)
+ensures res != nil ==> acc(res.Mem(), _)
+decreases
+func (d *DataPlane) GetMetrics() (res *Metrics) {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	return d.Metrics
 }
 // (tlino) end of added getter and setter methods for DataPlane
 
@@ -1066,14 +1073,18 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 		// copy(origPacket[:p.N], p.Buffers[0])
 		verifyutils.OutlineMemorySafeCopy(LocalOrigPacket, (p.Buffers)[0])
 
-		// (tlino) ignore the logging stuff for now
 		// input metric
 		// (tlino) use getters to avoid unfolding
 		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 		inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
-		assert acc(inputLabels)
+		// (tlino) use getter to avoid unfolding d.Metrics.Mem()
 		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
 		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
+		metrics := d.GetMetrics()
+		assume metrics != nil
+		// assert acc(metrics.Mem(), _)
+		((metrics.GetInputPacketsTotal()).With(inputLabels)).Inc()
+		((metrics.GetInputBytesTotal()).With(inputLabels)).Add(float64(p.N))
 
 		fold verifyutils.BytesAcc((p.Buffers)[0])
 		fold verifyutils.BytesAcc(LocalOrigPacket)
@@ -1107,8 +1118,9 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 		default:
 			// log.Debug("Error processing packet", "err", err)
 
-			// (tlino) ignore the logging stuff for now
+			// (tlino) use getter to avoid unfolding d.Metrics.Mem()
 			// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
+			((metrics.GetDroppedPacketsTotal()).With(inputLabels)).Inc()
 
 			// (tlino) continue not supported
 			// continue
@@ -1118,12 +1130,11 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 		unfold verifyutils.BytesAcc(LocalOrigPacket)
 		unfold verifyutils.BytesAcc((p.Buffers)[0])
 		fold (&msgs[i]).Mem()
-
   	}
 	fold msgs.Mem()
 }
 
-// (tlino) partially verified
+// (tlino) Verified
 // (tlino) added helper function to simplify verification
 requires acc(DataPlaneMutexInvariant(d), _)
 preserves result.Mem()
@@ -1135,46 +1146,49 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 		// (tlino) continue not supported
 		// continue
 		fold result.Mem()
-	} else {
-		// (tlino) original code, adapted code is below
-		// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
-		// 	Buffers: [][]byte{result.OutPkt},
-		// 	Addr:    result.OutAddr,
-		// }}))
-
-		fold result.Mem()
-		result.getAddrAndRawPktAcc()
-		assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
-
-		// (tlino) moved message creation to outlined function
-		// (tlino) use new variables to make gobra work
-		pld := result.OutPkt
-		address := result.OutAddr
-		connection := result.OutConn
-		messages := createMessages(pld, address, connection)
-		assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
-
-		_, err := result.OutConn.WriteBatch(messages)
-
-		apply acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
-		assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
-		apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
-		assert result.Mem()
-		if err != nil {
-			// (tlino) log not supported yet
-			// log.Debug("Error writing packet", "err", err)
-			// error metric // (tlino) original scion comment
-			// (tlino) continue not supported
-			// continue
-		} else {
-			// (tlino) ignore the logging stuff for now
-			// ok metric
-			// (tlino) use getters to simplify verification
-			// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-			// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
-			// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-		}
+		return
 	}
+	// (tlino) original code, adapted code is below
+	// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
+	// 	Buffers: [][]byte{result.OutPkt},
+	// 	Addr:    result.OutAddr,
+	// }}))
+
+	fold result.Mem()
+	result.getAddrAndRawPktAcc()
+	assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+
+	// (tlino) moved message creation to outlined function
+	// (tlino) use new variables to make gobra work
+	pld := result.OutPkt
+	address := result.OutAddr
+	connection := result.OutConn
+	messages := createMessages(pld, address, connection)
+	assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
+
+	_, err := result.OutConn.WriteBatch(messages)
+
+	apply acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
+	assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+	apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
+	assert result.Mem()
+	if err != nil {
+		// (tlino) log not supported yet
+		// log.Debug("Error writing packet", "err", err)
+		// error metric // (tlino) original scion comment
+		// (tlino) continue not supported
+		// continue
+		return
+	}
+	// ok metric
+	// (tlino) use getters to simplify verification
+	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
+	metrics := d.GetMetrics()
+	assume metrics != nil
+	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
+	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+	((metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
+	((metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
 }
 
 // (tlino) Verified
@@ -1261,9 +1275,18 @@ type processResult struct {
 pure
 requires acc(pr.Mem(), _)
 ensures res == unfolding acc(pr.Mem(), _) in pr.EgressID
+ensures res >= 0
 decreases
 func (pr processResult) GetEgressID() (res uint16) {
 	return unfolding acc(pr.Mem(), _) in pr.EgressID
+}
+
+pure
+requires acc(pr.Mem(), _)
+ensures res == unfolding acc(pr.Mem(), _) in len(pr.OutPkt)
+decreases
+func (pr processResult) GetOutPktLen() (res int) {
+	return unfolding acc(pr.Mem(), _) in len(pr.OutPkt)
 }
 
 // (tlino) TODO: cannot verify body with this contracts, 
@@ -1304,6 +1327,7 @@ decreases _
 func (pr processResult) getAddrAndRawPktAcc()
 
 pred (pr processResult) Mem() {
+	(pr.EgressID >= 0) &&
 	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
 	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
 }
@@ -1347,6 +1371,7 @@ func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 
 // (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
+requires ingressID >= 0
 requires verifyutils.BytesAcc(rawPkt)
 requires isZeroSCION(s)
 preserves verifyutils.BytesAcc(origPacket)
@@ -2396,6 +2421,7 @@ func (p *scionPacketProcessor) doXover() (pr processResult, errRet error) {
 
 // (tlino) Verified
 preserves acc(p.Mem(), 1/10)
+ensures res >= 0
 decreases
 func (p *scionPacketProcessor) egressInterface() (res uint16) {
 	unfold acc(p.Mem(), 1/10)
@@ -3082,6 +3108,7 @@ func processOHPHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 
 // (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
+requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
 preserves buffer.Mem()
 ensures pr.Mem()
@@ -3226,6 +3253,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 // (tlino) Verified
 // (tlino) added method to simplify verification
 requires acc(DataPlaneMutexInvariant(d), _)
+requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
 requires p != nil && p == s.getOHPPath() 
 preserves buffer.Mem()
@@ -3602,6 +3630,7 @@ type pathIncrementer struct{}
 //	return p.IncPath()
 //}
 
+// (tlino) Verified
 requires neighbors != nil ==> acc(neighbors, _)
 requires id >= 0
 ensures acc(res)

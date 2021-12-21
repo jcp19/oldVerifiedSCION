@@ -59,6 +59,48 @@ pred (m *Metrics) Mem() {
 	m.SiblingBFDStateChanges.Mem()
 }
 
+// (tlino) added getters to simplify verification
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetInputBytesTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.InputBytesTotal
+}
+
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetOutputBytesTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.OutputBytesTotal
+}
+
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetInputPacketsTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.InputPacketsTotal
+}
+
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetOutputPacketsTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.OutputPacketsTotal
+}
+
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetDroppedPacketsTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.DroppedPacketsTotal
+}
+// (tlino) end of added getters to simplify verification
+
 // NewMetrics initializes the metrics for the Border Router, and registers them
 // with the default registry.
 ensures res.Mem() 
