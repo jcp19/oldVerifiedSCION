@@ -38,6 +38,7 @@ const (
 	HostTypeSVC HostAddrType = 3
 )
 
+decreases
 func (t HostAddrType) String() string {
 	switch t {
 	case HostTypeNone:
@@ -74,12 +75,15 @@ const (
 // (joao) Current alternative to ghost variables
 // ErrBadHostAddrType indicates an invalid host address type.
 ensures err != nil
+decreases
 func ErrBadHostAddrType() (err error) { return serrors.New("unsupported host address type") }
 // ErrMalformedHostAddrType indicates a malformed host address type.
 ensures err != nil
+decreases
 func ErrMalformedHostAddrType() (err error) { return serrors.New("malformed host address type") }
 // ErrUnsupportedSVCAddress indicates an unsupported SVC address.
 ensures err != nil
+decreases
 func ErrUnsupportedSVCAddress() (err error) { return serrors.New("unsupported SVC address") }
 // End current alternative to ghost variables
 
@@ -135,29 +139,34 @@ pred (h HostNone) Mem() {
 
 pure
 requires acc(h.Mem(), _)
+decreases
 func (h HostNone) Size() int {
 	return HostLenNone
 }
 
 pure
 requires acc(h.Mem(), _)
+decreases
 func (h HostNone) Type() HostAddrType {
 	return HostTypeNone
 }
 
 preserves acc(h.Mem(), 1/1000)
 ensures len(res) == 0
+decreases
 func (h HostNone) Pack() (res common.RawBytes) {
 	return common.RawBytes{}
 }
 
 preserves acc(h.Mem(), 1/1000)
 ensures res == nil
+decreases
 func (h HostNone) IP() (res net.IP) {
 	return nil
 }
 
 ensures res.Mem()
+decreases
 func (h HostNone) Copy() (res HostAddr) {
 	// (joao) introduced tmp
 	tmp := HostNone{}
@@ -165,11 +174,13 @@ func (h HostNone) Copy() (res HostAddr) {
 	return tmp
 }
 
+decreases
 func (h HostNone) Equal(o HostAddr) bool {
 	_, ok := o.(HostNone)
 	return ok
 }
 
+decreases
 func (h HostNone) String() string {
 	return "<None>"
 }
@@ -185,18 +196,21 @@ pred (h HostIPv4) Mem() {
 
 pure
 requires acc(h.Mem(), _)
+decreases
 func (h HostIPv4) Size() int {
 	return HostLenIPv4
 }
 
 pure
 requires acc(h.Mem(), _)
+decreases
 func (h HostIPv4) Type() HostAddrType {
 	return HostTypeIPv4
 }
 
 requires acc(h.Mem(), 1/1000)
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i], 1/1000)
+decreases
 func (h HostIPv4) Pack() (res common.RawBytes) {
 	return common.RawBytes(h.IP())
 }
@@ -204,6 +218,7 @@ func (h HostIPv4) Pack() (res common.RawBytes) {
 requires acc(h.Mem(), 1/1000)
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i], 1/1000) && &res[i] == &h[i]
 ensures len(res) == HostLenIPv4
+decreases
 func (h HostIPv4) IP() (res net.IP) {
 	// XXX(kormat): ensure the reply is the 4-byte representation.
 	unfold acc(h.Mem(), 1/1000)
@@ -218,6 +233,7 @@ func (h HostIPv4) IP() (res net.IP) {
 
 preserves acc(h.Mem(), 1/1000)
 ensures res.Mem()
+decreases
 func (h HostIPv4) Copy() (res HostAddr) {
 	unfold acc(h.Mem(), 1/10000)
 	// (joao) added assignment to `tmp`
@@ -231,6 +247,7 @@ func (h HostIPv4) Copy() (res HostAddr) {
 
 preserves acc(h.Mem(), 1/1000)
 preserves acc(o.Mem(), 1/1000)
+decreases
 func (h HostIPv4) Equal(o HostAddr) bool {
 	ha, ok := o.(HostIPv4)
 	// (joao) outlined this to eqHelperIPv4
@@ -240,6 +257,7 @@ func (h HostIPv4) Equal(o HostAddr) bool {
 
 preserves ok ==> acc(h.Mem(), 1/1000)
 preserves ok ==> acc(o.Mem(), 1/1000)
+decreases
 func (h HostIPv4) eqHelperIPv4(ok bool, o HostIPv4) bool {
 	// (joao) if statement mimics short circuit with `ok` as a first conjunct
 	if ok {
@@ -254,6 +272,7 @@ func (h HostIPv4) eqHelperIPv4(ok bool, o HostIPv4) bool {
 }
 
 preserves acc(h.Mem(), 1/1000)
+decreases
 func (h HostIPv4) String() string {
 	// (joao) add assignment to `tmp`
 	// return h.IP().String()
@@ -276,12 +295,14 @@ pred (h HostIPv6) Mem() {
 
 pure
 requires acc(h.Mem(), _)
+decreases
 func (h HostIPv6) Size() int {
 	return HostLenIPv6
 }
 
 pure
 requires acc(h.Mem(), _)
+decreases
 func (h HostIPv6) Type() HostAddrType {
 	return HostTypeIPv6
 }
@@ -289,6 +310,7 @@ func (h HostIPv6) Type() HostAddrType {
 requires acc(h.Mem(), 1/1000)
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i], 1/1000)
 ensures len(res) == HostLenIPv6
+decreases
 func (h HostIPv6) Pack() (res common.RawBytes) {
 	unfold acc(h.Mem(), 1/1000)
 	return (common.RawBytes(h))[:HostLenIPv6]
@@ -297,6 +319,7 @@ func (h HostIPv6) Pack() (res common.RawBytes) {
 requires acc(h.Mem(), 1/1000)
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i], 1/1000) && &res[i] == &h[i]
 ensures len(res) == HostLenIPv6
+decreases
 func (h HostIPv6) IP() (res net.IP) {
 	unfold acc(h.Mem(), 1/1000)
 	return net.IP(h)
@@ -304,6 +327,7 @@ func (h HostIPv6) IP() (res net.IP) {
 
 preserves acc(h.Mem(), 1/1000)
 ensures res.Mem()
+decreases
 func (h HostIPv6) Copy() (res HostAddr) {
 	// (joao) introduce `tmp`
 	unfold acc(h.Mem(), 1/1000)
@@ -314,6 +338,7 @@ func (h HostIPv6) Copy() (res HostAddr) {
  }
 
 preserves acc(h.Mem(), 1/1000) && acc(o.Mem(), 1/1000)
+decreases
 func (h HostIPv6) Equal(o HostAddr) bool {
 	ha, ok := o.(HostIPv6)
 	// (joao) outlined to easily mimic the short circuiting && with `ok`
@@ -323,6 +348,7 @@ func (h HostIPv6) Equal(o HostAddr) bool {
 
 preserves ok ==> acc(h.Mem(), 1/1000)
 preserves ok ==> acc(o.Mem(), 1/1000)
+decreases
 func (h HostIPv6) eqHelperIPv6(ok bool, o HostIPv6) bool {
 	// (joao) if statement mimics short circuit with `ok` as a first conjunct
 	if ok {
@@ -337,6 +363,7 @@ func (h HostIPv6) eqHelperIPv6(ok bool, o HostIPv6) bool {
 }
 
 preserves acc(h.Mem(), 1/1000)
+decreases
 func (h HostIPv6) String() string {
 	// (joao) added assignment to `tmp`
 	// return h.IP().String()
@@ -371,6 +398,7 @@ pred (h HostSVC) Mem() {
 // SVC addresses, use BS_A, PS_A, CS_A, and SB_A; shorthand versions without
 // the _A suffix (e.g., PS) also return anycast SVC addresses. For multicast,
 // use BS_M, PS_M, CS_M, and SB_M.
+decreases
 func HostSVCFromString(str string) HostSVC {
 	var m HostSVC
 	switch {
@@ -397,16 +425,19 @@ func HostSVCFromString(str string) HostSVC {
 }
 
 pure
+decreases
 func (h HostSVC) Size() int {
 	return HostLenSVC
 }
 
 pure
+decreases
 func (h HostSVC) Type() HostAddrType {
 	return HostTypeSVC
 }
 
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
+decreases
 func (h HostSVC) Pack() (res common.RawBytes) {
 	out := make(common.RawBytes, HostLenSVC)
 	binary.BigEndian.PutUint16(out, uint16(h))
@@ -416,6 +447,7 @@ func (h HostSVC) Pack() (res common.RawBytes) {
 requires HostLenSVC + pad >= 2 
 ensures len(s) == HostLenSVC + pad
 ensures forall i int :: 0 <= i && i < len(s) ==> acc(&s[i])
+decreases
 func (h HostSVC) PackWithPad(pad int) (s []byte) {
 	out := make([]byte, HostLenSVC+pad)
 	binary.BigEndian.PutUint16(out, uint16(h))
@@ -423,28 +455,34 @@ func (h HostSVC) PackWithPad(pad int) (s []byte) {
 }
 
 ensures res == nil
+decreases
 func (h HostSVC) IP() (res net.IP) {
 	return nil
 }
 
+decreases
 func (h HostSVC) IsMulticast() bool {
 	return (h & SVCMcast) != 0
 }
 
+decreases
 func (h HostSVC) Base() HostSVC {
  	return h & ^HostSVC(SVCMcast)
 }
 
+decreases
 func (h HostSVC) Multicast() HostSVC {
 	return h | HostSVC(SVCMcast)
 }
 
 ensures res.Mem()
+decreases
 func (h HostSVC) Copy() (res HostAddr) {
 	fold h.Mem()
 	return h
 }
 
+decreases
 func (h HostSVC) Equal(o HostAddr) bool {
 	ha, ok := o.(HostSVC)
 	return ok && h == ha
@@ -452,6 +490,7 @@ func (h HostSVC) Equal(o HostAddr) bool {
 
 // (joao) Trusted function
 // (joao) no support for rune literals
+decreases _
 func (h HostSVC) String() string // {
 //	name := h.BaseString()
 //	cast := 'A'
@@ -463,6 +502,7 @@ func (h HostSVC) String() string // {
 
 // BaseString returns the upper case name of the service. For hosts or unrecognized services, it
 // returns UNKNOWN.
+decreases
 func (h HostSVC) BaseString() string {
 	switch h.Base() {
 	case SvcDS:
@@ -480,12 +520,14 @@ func (h HostSVC) BaseString() string {
 	}
 }
 
+decreases
 func (h HostSVC) Network() string {
 	return ""
 }
 
 requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures  err == nil ==> h.Mem()
+decreases
 func HostFromRaw(b common.RawBytes, htype HostAddrType) (h HostAddr, err error) {
 	switch htype {
 	case HostTypeNone:
@@ -538,6 +580,7 @@ requires forall i int :: 0 <= i && i < len(ip) ==> acc(&ip[i])
 // (joao) HostFromIP does not perform any kind of checks on the size of
 //        `ip` and thus, we cannot establish the following post-condition
 // ensures  res.Mem() 
+decreases
 func HostFromIP(ip net.IP) (res HostAddr) {
 	if ip4 := ip.To4(); ip4 != nil {
 		return HostIPv4(ip4)
@@ -545,6 +588,7 @@ func HostFromIP(ip net.IP) (res HostAddr) {
 	return HostIPv6(ip)
 }
 
+decreases
 func HostFromIPStr(s string) HostAddr {
 	ip := net.ParseIP(s)
 	if ip == nil {
@@ -553,6 +597,7 @@ func HostFromIPStr(s string) HostAddr {
 	return HostFromIP(ip)
 }
 
+decreases
 func HostLen(htype HostAddrType) (uint8, error) {
 	var length uint8
 	switch htype {
@@ -571,6 +616,7 @@ func HostLen(htype HostAddrType) (uint8, error) {
 	return length, nil
 }
 
+decreases
 func HostTypeCheck(t HostAddrType) bool {
 	switch t {
 	case HostTypeIPv6, HostTypeIPv4, HostTypeSVC:

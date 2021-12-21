@@ -77,6 +77,7 @@ func ISDFromFileFmt(s string, prefix bool) (ISD, error) {
 	return ISDFromString(s)
 }
 
+decreases
 func (isd ISD) String() string {
 	// (joao) Gobra is not able to prove this automatically yet
 	assume uint64(isd) >= 0
@@ -164,6 +165,7 @@ func asParse(s string, sep string) (resAS AS, resErr error) {
 	return as, nil
 }
 
+decreases _
 func (as AS) String() string // {
 // (joao) no support for char literals
 //	return as.fmt(':')
@@ -171,6 +173,7 @@ func (as AS) String() string // {
 
 // FileFmt formats an AS for use in a file name, using '_' instead of ':' as
 // the separator for SCION-only AS numbers.
+decreases _
 func (as AS) FileFmt() string //{
 //	return as.fmt('_')
 //}
@@ -211,6 +214,7 @@ func (as AS) fmt(sep byte) string {
 	return string(b)
 }
 
+decreases
 func (as AS) inRange() bool {
 	return as <= MaxAS
 }
@@ -295,6 +299,7 @@ func IAFromFileFmt(s string, prefixes bool) (IA, error) {
 	return IA{I: isd, A: as}, nil
 }
 
+decreases
 func (ia IA) MarshalText() ([]byte, error) {
 	return []byte(ia.String()), nil
 }
@@ -360,6 +365,7 @@ func (ia IA) String() string // {
 // FileFmt returns a file-system friendly representation of ia. If prefixes is
 // true, the format will be in the form of ISD%d-AS%d. If it is false, the
 // format is just %d-%d.
+decreases _
 func (ia IA) FileFmt(prefixes bool) string {
 	fmts := "%d-%s"
 	if prefixes {
@@ -389,6 +395,7 @@ func (iaI IAInt) IA() IA {
 	return IA{I: ISD(iaI >> ASBits), A: AS(iaI) & MaxAS}
 }
 
+decreases
 func (iaI IAInt) String() string {
 	// (joao) parse error without parentheses
 	// return iaI.IA().String()
@@ -397,6 +404,7 @@ func (iaI IAInt) String() string {
 
 // ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
 ensures e == nil
+decreases
 func (ia IAInt) MarshalText() (res []byte, e error) {
 	// (joao) requires parentheses surrounding IAInt(ia) to make it parse
 	// return []byte(IAInt(ia).String()), nil

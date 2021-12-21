@@ -3335,14 +3335,15 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet erro
 	}
 	assert acc(dst.Mem(), 1/200)
 	// if v, ok := dst.(addr.HostSVC); ok {
-	// 	// For map lookup use the Base address, i.e. strip the multi cast
-	// 	// information, because we only register base addresses in the map.
-	// 	// (tlino) svc not supported yet
-	// 	// a, ok := d.svc.Any(v.Base())
-	// 	// if !ok {
-	// 	// 	return nil, noSVCBackend
-	// 	// }
-	// 	// return a, nil
+	// 	// For map lookup use the Base address, i.e. strip the multi cast // (tlino) original scion comment
+	// 	// information, because we only register base addresses in the map. // (tlino) original scion comment
+	// 	a, ok := d.svc.Any(v.Base())
+	// 	if !ok {
+	// 		// (tlino) globals are not supported
+	// 		// return nil, noSVCBackend
+	// 		return nil, noSVCBackend()
+	// 	}
+	// 	return a, nil
 	// }
 	res = addEndhostPort(dst)
 	s.AddReadDstAddr(dst)
