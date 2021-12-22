@@ -1840,58 +1840,52 @@ preserves verifyutils.BytesAcc(origPacket)
 ensures scionLayer.getRawScionPath() == old(scionLayer.getRawScionPath())
 ensures scionLayer.getRawPkt() == old(scionLayer.getRawPkt())
 ensures pr.Mem()
-decreases _
+decreases
 func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, scionLayer *slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (pr processResult, err error) //{
-// 	unfold acc(DataPlaneMutexInvariant(d), _)
+	buffer gopacket.SerializeBuffer, scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (pr processResult, err error) {
 	
-// 	// (tlino) added parantheses to make it parse
-// 	// _, external := p.d.external[p.ingressID]
-// 	_, external := (d.external)[ingressID]
+	// (tlino) use getter to simplify verification 
+	// _, external := p.d.external[p.ingressID]
+	_, external := d.GetExternalBatchConn(ingressID)
 
-// 	// (tlino) replace scmpPacker with *scmpPacker
-// 	// (tlino) replace &p.scionLayer, with p.scionLayer
-// 	// (tlino) replace scmp.prepareSCMP with (&scmp).prepareSCMP
-// 	// rawSCMP, err := scmpPacker{
-// 	// 	internalIP: p.d.internalIP,
-// 	// 	localIA:    p.d.localIA,
-// 	// 	origPacket: p.origPacket,
-// 	// 	ingressID:  p.ingressID,
-// 	// 	scionL:     &p.scionLayer,
-// 	// 	buffer:     p.buffer,
-// 	// 	quote:      quote,
-// 	// }.prepareSCMP(
-// 	// 	scmpH,
-// 	// 	scmpP,
-// 	// 	external,
-// 	// 	cause,
-// 	// )
+	// (tlino) original code, adapted code is below
+	// rawSCMP, err := scmpPacker{
+	// 	internalIP: p.d.internalIP,
+	// 	localIA:    p.d.localIA,
+	// 	origPacket: p.origPacket,
+	// 	ingressID:  p.ingressID,
+	// 	scionL:     &p.scionLayer,
+	// 	buffer:     p.buffer,
+	// 	quote:      quote,
+	// }.prepareSCMP(
+	// 	scmpH,
+	// 	scmpP,
+	// 	external,
+	// 	cause,
+	// )
 
-// 	fold verifyutils.BytesAcc(origPacket)
-// 	fold verifyutils.BytesAcc(quote)
-// 	assert verifyutils.BytesAcc(origPacket)
-// 	assert verifyutils.BytesAcc(quote)
+	fold verifyutils.BytesAcc(quote)
+	unfold acc(DataPlaneMutexInvariant(d), _)
 
-// 	scmp := &scmpPacker{
-// 		internalIP: d.internalIP,
-// 		localIA:    d.localIA,
-// 		origPacket: origPacket,
-// 		ingressID:  ingressID,
-// 		scionL:     scionLayer,
-// 		buffer:     buffer,
-// 		quote:      quote,
-// 	}
-// 	// fold scmp.Mem()
+	scmp := scmpPacker{
+		internalIP: d.internalIP,
+		localIA:    d.localIA,
+		origPacket: origPacket,
+		ingressID:  ingressID,
+		scionL:     scionLayer,
+		buffer:     buffer,
+		quote:      quote,
+	}
 
-// 	// rawSCMP, err := scmp.prepareSCMP(
-// 	// 	scmpH,
-// 	// 	scmpP,
-// 	// 	external,
-// 	// 	cause,
-// 	// )
-	
-// 	// return processResult{OutPkt: rawSCMP}, err
-// }
+	rawSCMP, err := scmp.prepareSCMP(
+		scmpH,
+		scmpP,
+		external,
+		cause,
+	)
+	pr, err = processResult{OutPkt: rawSCMP}, err
+	fold pr.Mem()
+}
 
 // (tlino) Verified
 requires acc(&p.d, _) && acc(&p.ingressID, 1/4) && acc(&p.rawPkt, 1/4) && acc(&p.scionLayer, 1/4) && acc(&p.origPacket, 1/4)
@@ -3493,15 +3487,12 @@ type scmpPacker struct {
 	quote  []byte
 }
 
-pred (s scmpPacker) Mem() {
-	verifyutils.BytesAcc(s.origPacket) &&
-	s.scionL != nil && s.scionL.Mem() &&
-	s.buffer != nil && s.buffer.Mem() &&
-	verifyutils.BytesAcc(s.quote)
-}
-
-requires s.Mem() && scmpH.Mem() && scmpP.Mem()
-ensures s.scionL.Mem()
+requires scmpH.Mem() && scmpP.Mem()
+preserves s.scionL.Mem() && s.buffer.Mem()
+preserves verifyutils.BytesAcc(s.origPacket)
+ensures s.scionL == old(s.scionL)
+ensures s.scionL.getRawScionPath() == old(s.scionL.getRawScionPath())
+ensures s.scionL.getRawPkt() == old(s.scionL.getRawPkt())
 ensures b != nil ==> verifyutils.BytesAcc(b)
 decreases _
 func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
