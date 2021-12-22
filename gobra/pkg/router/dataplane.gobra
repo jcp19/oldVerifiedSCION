@@ -1025,6 +1025,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) partially verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
+// (tlino) We cannot prove termination of this method, since d.processPkt does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires ingressID >= 0
 requires acc(rd.Mem(), _)
@@ -1036,7 +1037,6 @@ preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
 preserves acc(scmpErr)
 preserves buffer.Mem()
-decreases
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) {
 	unfold msgs.Mem()
@@ -1053,7 +1053,6 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant acc(scmpErr)
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
-	decreases pkts - i
 	for i := 0; i < pkts; i++ {
 		unfold (&msgs[i]).Mem()
 		p := msgs[i]
@@ -1370,6 +1369,7 @@ func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 }
 
 // (tlino) Verified
+// (tlino) We cannot prove termination of this method, since d.processSCION() and d.processOHP() do not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires ingressID >= 0
 requires verifyutils.BytesAcc(rawPkt)
@@ -1380,7 +1380,6 @@ preserves acc(srcAddr.Mem(), 1/1000)
 preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
-decreases
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, errRet error) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
@@ -1611,6 +1610,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 }
 
 // (tlino) Verified
+// (tlino) We cannot prove termination of this method, since p.process() does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires s != nil && s.Mem() && s.getRawPkt() == rawPkt
 preserves verifyutils.BytesAcc(origPacket)
@@ -1618,7 +1618,6 @@ preserves cap(rawPkt) == bufSize
 preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
-decreases
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
@@ -2257,9 +2256,9 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // (tlino) partially verified
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
+// (tlino) we cannot prove termination of this method since p.d.resolveLocalDst() does not terminate
 preserves p.Mem()
 ensures pr.Mem()
-decreases _
 func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error) {
 	unfold p.Mem()
 	sl := p.scionLayer
@@ -2749,6 +2748,7 @@ func processHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
 // (tlino) Verified
 // (tlino) This method needs an alias to rawPkt as ghost argument, such that it can relate
 // (tlino) pr.Mem() --* verifyutils.BytesAcc(rawPktAlias) to pr.Mem() --* verifyutils.BytesAcc(p.rawPkt)
+// (tlino) We cannot prove termination of this method, since p.resolveInbound() doesn't terminate
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 requires acc(&p.infoField) && acc(&p.segmentChange)
@@ -2765,7 +2765,6 @@ ensures verifyutils.BytesAcc(p.origPacket)
 ensures (p.buffer).Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
-decreases
 func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
 		pr, errProcess := r, err
@@ -3101,13 +3100,13 @@ func processOHPHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 }
 
 // (tlino) Verified
+// (tlino) we cannot prove termination of this method, since processOHP2 does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
 preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
-decreases
 // (tlino) s is now a *slayers.SCION
 // func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
@@ -3246,6 +3245,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 // (tlino) Verified
 // (tlino) added method to simplify verification
+// (tlino) we cannot prove termination of this method, since d.resolveLocalDst() does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
@@ -3253,7 +3253,6 @@ requires p != nil && p == s.getOHPPath()
 preserves buffer.Mem()
 ensures pr.Mem()
 ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
-decreases
 func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCION,
 	buffer gopacket.SerializeBuffer, p *onehop.Path) (pr processResult, errRet error) {
 
@@ -3311,13 +3310,13 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	return
 }
 
-// (tlino) partially Verified
+// (tlino) Verified
 // (tlino) res contains a subslice of s.rawPkt
 // (tlino) This method doesn't establish res.Mem(), since the caller embedds res
-// (tlino) in a processResult together with the rawPkt. 
+// (tlino) in a processResult together with the rawPkt.
+// (tlino) we cannot prove termination of this method, since  d.svc.Any() does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 preserves acc(s.Mem(), 1/100)
-decreases
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error)
 func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet error) {
@@ -3328,17 +3327,20 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet erro
 		return nil, invalidDstAddr()
 	}
 	assert acc(dst.Mem(), 1/200)
-	// if v, ok := dst.(addr.HostSVC); ok {
-	// 	// For map lookup use the Base address, i.e. strip the multi cast // (tlino) original scion comment
-	// 	// information, because we only register base addresses in the map. // (tlino) original scion comment
-	// 	a, ok := d.svc.Any(v.Base())
-	// 	if !ok {
-	// 		// (tlino) globals are not supported
-	// 		// return nil, noSVCBackend
-	// 		return nil, noSVCBackend()
-	// 	}
-	// 	return a, nil
-	// }
+	if v, ok := dst.(addr.HostSVC); ok {
+		// For map lookup use the Base address, i.e. strip the multi cast // (tlino) original scion comment
+		// information, because we only register base addresses in the map. // (tlino) original scion comment
+		unfold acc(DataPlaneMutexInvariant(d), _)
+		assume d.svc != nil
+		s.AddReadDstAddr(dst)
+		a, ok := d.svc.Any(v.Base())
+		if !ok {
+			// (tlino) globals are not supported
+			// return nil, noSVCBackend
+			return nil, noSVCBackend()
+		}
+		return a, nil
+	}
 	res = addEndhostPort(dst)
 	s.AddReadDstAddr(dst)
 	return res, nil
