@@ -1535,7 +1535,8 @@ func translateBFDMemPred(b *layers.BFD) {
 	fold (*layers.BFD).MemWithOutSlices!<_!>(b)
 }
 
-// (tlino) partially verified 
+// (tlino) partially verified
+// (tlino) TODO: add support for bytes package
 requires acc(DataPlaneMutexInvariant(d), _)
 preserves acc(src.Mem(), 1/1000)
 preserves verifyutils.BytesAcc(data)
@@ -1574,35 +1575,53 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 		//	"expected", "*net.IPAddr")
 		return serrors.New("error") // (joao) TODO: remove after adding support for fmt
 	}
-//
-//	for k, v := range d.internalNextHops {
-//		remoteUDPAddr, ok := v.(*net.UDPAddr)
-//		if !ok {
-//			return serrors.New("type assertion failure", "from",
-//				fmt.Sprintf("%v(%T)", remoteUDPAddr, remoteUDPAddr), "expected", "*net.UDPAddr")
-//		}
-//		if bytes.Equal(remoteUDPAddr.IP, srcUDPAddr.IP) && remoteUDPAddr.Port == srcUDPAddr.Port {
-//			ifID = k
-//			continue
-//		}
-//	}
 
-// 	// (tlino) added unfolding
-// 	// if v, ok := d.bfdSessions[ifID]; ok {
-// 	// 	v.Messages() <- p
-// 	// 	return nil
-// 	// }
+	// (tlino) range not supported yet.
+	// (tlino) Thus, we iterate over all possible keys (keyspace: 0,1,2,...,2^16 -1)
+	// (tlino) adapted code is below
+	// for k, v := range (d.internalNextHops) {
+		// remoteUDPAddr, ok := v.(*net.UDPAddr)
+		// if !ok {
+		// 	return serrors.New("type assertion failure", "from",
+		// 		fmt.Sprintf("%v(%T)", remoteUDPAddr, remoteUDPAddr), "expected", "*net.UDPAddr")
+		// }
+		// if bytes.Equal(remoteUDPAddr.IP, srcUDPAddr.IP) && remoteUDPAddr.Port == srcUDPAddr.Port {
+		// 	ifID = k
+		// 	continue
+		// }
+	// }
+	mapKeyUpperBound := 65536
 
-// 	unfold acc(DataPlaneMutexInvariant(d), _)
-// 	if v, ok := (d.bfdSessions)[ifID]; ok {
-// 		// v.Messages() <- p
-// 		fold acc(DataPlaneMutexInvariant(d), _)
-// 		return nil
-// 	}
-// 	fold acc(DataPlaneMutexInvariant(d), _)
-// 	// (tlino) golbals not supported
-// 	// return noBFDSessionFound
-// 	return noBFDSessionFound()
+	invariant 0 <= k && k <= mapKeyUpperBound
+	invariant acc(DataPlaneMutexInvariant(d), _)
+	decreases mapKeyUpperBound - k
+	for k := 0; k < mapKeyUpperBound; k++ {
+		key := uint16(k)
+		v, found := d.GetInternalNextHop(key)
+		if found {
+			remoteUDPAddr, ok := v.(*net.UDPAddr)
+			if !ok {
+				// (tlino) No support for fmt
+				// return serrors.New("type assertion failure", "from",
+				// 	fmt.Sprintf("%v(%T)", remoteUDPAddr, remoteUDPAddr), "expected", "*net.UDPAddr")
+				return serrors.New("error")
+			}
+			// if bytes.Equal(remoteUDPAddr.IP, srcUDPAddr.IP) && remoteUDPAddr.Port == srcUDPAddr.Port {
+			// 	ifID = k
+			// }
+		}
+	}
+
+ 	// (tlino) added parantheses to make it parse
+ 	// if v, ok := d.bfdSessions[ifID]; ok {
+	if v, ok := (d.bfdSessions)[ifID]; ok {
+		v.Messages() <- p
+		return nil
+	}
+
+	// (tlino) globals not supported
+	// return noBFDSessionFound
+	return noBFDSessionFound()
 }
 
 // (tlino) Verified
