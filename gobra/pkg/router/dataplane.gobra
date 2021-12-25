@@ -89,7 +89,8 @@ const (
 type bfdSession interface {
 	pred Mem()
 
-	requires Mem()
+	requires acc(Mem(), _)
+	decreases
 	Run() (err error)
 
 	requires acc(Mem(), _)
@@ -877,48 +878,93 @@ func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg contro
 	return d.addBFDController(ifID, s, cfg, m)
 }
 
+// (tlino) partially Verified
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
 requires d.mtx.LockP()
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
-func (d *DataPlane) Run() error /* {
+func (d *DataPlane) Run() error {
 	d.mtx.Lock()
 	unfold DataPlaneMutexInvariant!<d!>()
 	d.running = true
+	fold DataPlaneMutexInvariant(d)
 
-	d.initMetrics()
+	// d.initMetrics()
+
+	assume unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 
 	// (joao) At this point, there used to be a closure definition, saved in a variable called "read"
 
-	for k, v := range d.bfdSessions {
-		go func(ifID uint16, c bfdSession) {
-			defer log.HandlePanic()
-			if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
-				log.Error("BFD session failed to start", "ifID", ifID, "err", err)
-			}
-		}(k, v)
+	// (tlino) range, closures, and the log package are not supported yet, adapted code is below
+	// for k, v := range d.bfdSessions {
+	// 	go func(ifID uint16, c bfdSession) {
+	// 		defer log.HandlePanic()
+	// 		if err := c.Run(); err != nil && err != bfd.AlreadyRunning {
+	// 			log.Error("BFD session failed to start", "ifID", ifID, "err", err)
+	// 		}
+	// 	}(k, v)
+	// }
+
+	mapKeyUpperBound := 65536
+
+	invariant 0 <= k && k <= mapKeyUpperBound
+	invariant acc(DataPlaneMutexInvariant(d), _)
+	decreases mapKeyUpperBound - k
+	for k := 0; k < mapKeyUpperBound; k++ {
+		key := uint16(k)
+		bfdSess, found := d.GetBfdSession(key)
+		if found {
+			go bfdLauncher(bfdSess)
+		}
 	}
-	for ifID, v := range d.external {
-		go func(i uint16, c BatchConn) {
-			defer log.HandlePanic()
-			read(i, c)
-		}(ifID, v)
+	// (tlino) range, closures, and the log package are not supported yet, adapted code is below
+	// for ifID, v := range d.external {
+	// 	go func(i uint16, c BatchConn) {
+	// 		defer log.HandlePanic()
+	// 		read(i, c)
+	// 	}(ifID, v)
+	// }
+	invariant 0 <= k && k <= mapKeyUpperBound
+	invariant acc(DataPlaneMutexInvariant(d), _)
+	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+	decreases mapKeyUpperBound - k
+	for k := 0; k < mapKeyUpperBound; k++ {
+		key := uint16(k)
+		batchConn, found := d.GetExternalBatchConn(key)
+		if found {
+			go RunReadClosure(key, batchConn, d)
+		}
 	}
-	go func(c BatchConn) {
-		defer log.HandlePanic()
-		read(0, c)
-	}(d.internal)
 	
- 	// (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
-	//        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
-	//        the lock invariant.
-	d.mtx.Unlock()
-	for d.running {
-		time.Sleep(time.Second)
+	// (tlino) log.HandlePanic() not supported, adaped code is below
+	// go func(c BatchConn) {
+	// 	defer log.HandlePanic()
+	// 	read(0, c)
+	// }(d.internal)
+	assume unfolding acc(DataPlaneMutexInvariant(d), _) in d.internal != nil
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	go RunReadClosure(0, d.internal, d)
+	
+ 	// // (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
+	// //        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
+	// //        the lock invariant.
+	// d.mtx.Unlock()
+
+	// (tlino) use getter
+	// for d.running {
+	invariant acc(DataPlaneMutexInvariant(d), _)
+	for d.isRunning() {
+		// time.Sleep(time.Second)
 	}
 	return nil
 }
-*/
+
+// (tlino) Verified
+// (tlino) added helper function
+requires acc(bfdSess.Mem(), _)
+func bfdLauncher(bfdSess bfdSession) {
+	bfdSess.Run()
+}
 
 // (tlino) Verified
 // (joao) Closure extracted from the body of the Run function
