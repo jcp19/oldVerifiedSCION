@@ -889,11 +889,12 @@ func (d *DataPlane) Run() error {
 	d.running = true
 	fold DataPlaneMutexInvariant(d)
 
-	// d.initMetrics()
+	assume unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 
-	assume unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+	d.initMetrics()
 
 	// (joao) At this point, there used to be a closure definition, saved in a variable called "read"
+	// (tlino) The closure is replaced by the function RunReadClosure
 
 	// (tlino) range, closures, and the log package are not supported yet, adapted code is below
 	// for k, v := range d.bfdSessions {
@@ -941,7 +942,6 @@ func (d *DataPlane) Run() error {
 	// 	defer log.HandlePanic()
 	// 	read(0, c)
 	// }(d.internal)
-	assume unfolding acc(DataPlaneMutexInvariant(d), _) in d.internal != nil
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	go RunReadClosure(0, d.internal, d)
 	
@@ -1282,27 +1282,64 @@ func resetReadClosureBuffers(msgs underlayconn.Messages, pkts int) {
 	fold msgs.Mem()
 }
 
-preserves DataPlaneMutexInvariant(d)
-func (d *DataPlane) initMetrics() /* {
-	labels := interfaceToMetricLabels(0, d.localIA, d.neighborIAs)
-	d.Metrics.InputBytesTotal.With(labels).Add(0)
-	d.Metrics.InputPacketsTotal.With(labels).Add(0)
-	d.Metrics.OutputBytesTotal.With(labels).Add(0)
-	d.Metrics.OutputPacketsTotal.With(labels).Add(0)
-	d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
-	for id := range d.neighborIAs {
-		if _, notOwned := d.internalNextHops[id]; notOwned {
-			continue
+// (tlino) Verified
+requires acc(DataPlaneMutexInvariant(d), _)
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
+decreases
+func (d *DataPlane) initMetrics() {
+	labels := interfaceToMetricLabels(0, d.GetLocalAI(), d.GetNeighborIAs())
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	// (tlino) use getters to simplify verification, need to use float64 cast since gobra
+	// (tlino) cannot cast a numeric argument to float64
+	// d.Metrics.InputBytesTotal.With(labels).Add(0)
+	// d.Metrics.InputPacketsTotal.With(labels).Add(0)
+	// d.Metrics.OutputBytesTotal.With(labels).Add(0)
+	// d.Metrics.OutputPacketsTotal.With(labels).Add(0)
+	// d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
+	((d.Metrics.GetInputBytesTotal()).With(labels)).Add(float64(0))
+	((d.Metrics.GetInputPacketsTotal()).With(labels)).Add(float64(0))
+	((d.Metrics.GetOutputBytesTotal()).With(labels)).Add(float64(0))
+	((d.Metrics.GetOutputPacketsTotal()).With(labels)).Add(float64(0))
+	((d.Metrics.GetDroppedPacketsTotal()).With(labels)).Add(float64(0))
+
+	// (tlino) range is not supported yet by gobra, iterate over all keys instead
+	// (tlino) adapted code is below
+	// for id := range d.neighborIAs {
+	// 	if _, notOwned := d.internalNextHops[id]; notOwned {
+	// 		continue
+	// 	}
+	// 	labels = interfaceToMetricLabels(id, d.localIA, d.neighborIAs)
+	// 	d.Metrics.InputBytesTotal.With(labels).Add(0)
+	// 	d.Metrics.InputPacketsTotal.With(labels).Add(0)
+	// 	d.Metrics.OutputBytesTotal.With(labels).Add(0)
+	// 	d.Metrics.OutputPacketsTotal.With(labels).Add(0)
+	// 	d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
+	// }
+
+	mapKeyUpperBound := 65536
+
+	invariant 0 <= k && k <= mapKeyUpperBound
+	invariant acc(DataPlaneMutexInvariant(d), _)
+	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
+	decreases mapKeyUpperBound - k
+	for k := 0; k < mapKeyUpperBound; k++ {
+		unfold acc(DataPlaneMutexInvariant(d), _)
+		key := uint16(k)
+		_ , found := (d.neighborIAs)[key]
+		if found {
+			if _, notOwned := d.GetInternalNextHop(key); !notOwned {
+				labels = interfaceToMetricLabels(key, d.GetLocalAI(), d.GetNeighborIAs())
+				// (tlino) use getters to simplify verification, need to use float64 cast since gobra
+				// (tlino) cannot cast a numeric argument to float64
+				((d.Metrics.GetInputBytesTotal()).With(labels)).Add(float64(0))
+				((d.Metrics.GetInputPacketsTotal()).With(labels)).Add(float64(0))
+				((d.Metrics.GetOutputBytesTotal()).With(labels)).Add(float64(0))
+				((d.Metrics.GetOutputPacketsTotal()).With(labels)).Add(float64(0))
+				((d.Metrics.GetDroppedPacketsTotal()).With(labels)).Add(float64(0))
+			}
 		}
-		labels = interfaceToMetricLabels(id, d.localIA, d.neighborIAs)
-		d.Metrics.InputBytesTotal.With(labels).Add(0)
-		d.Metrics.InputPacketsTotal.With(labels).Add(0)
-		d.Metrics.OutputBytesTotal.With(labels).Add(0)
-		d.Metrics.OutputPacketsTotal.With(labels).Add(0)
-		d.Metrics.DroppedPacketsTotal.With(labels).Add(0)
 	}
 }
-*/
 
 type processResult struct {
 	EgressID uint16
