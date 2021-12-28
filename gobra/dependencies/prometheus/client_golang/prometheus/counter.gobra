@@ -96,6 +96,6 @@ func NewCounterVec(opts CounterOpts, labelNames []string) (c *CounterVec)
 //     myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
 preserves acc(v.Mem(), _)
 preserves acc(labels, _)
-decreases
 ensures c.Mem()
+decreases
 func (v *CounterVec) With(labels Labels) (c Counter)

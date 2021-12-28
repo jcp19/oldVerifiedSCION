@@ -15,7 +15,7 @@
 package router
 
 import (
-	// "bytes"
+	"bytes"
 	// "crypto/rand"
 	"errors"
 	// "fmt"
@@ -954,7 +954,7 @@ func (d *DataPlane) Run() error {
 	// for d.running {
 	invariant acc(DataPlaneMutexInvariant(d), _)
 	for d.isRunning() {
-		// time.Sleep(time.Second)
+		time.Sleep(time.Second)
 	}
 	return nil
 }
@@ -1618,8 +1618,7 @@ func translateBFDMemPred(b *layers.BFD) {
 	fold (*layers.BFD).MemWithOutSlices!<_!>(b)
 }
 
-// (tlino) partially verified
-// (tlino) TODO: add support for bytes package
+// (tlino) Verified
 requires acc(DataPlaneMutexInvariant(d), _)
 preserves acc(src.Mem(), 1/1000)
 preserves verifyutils.BytesAcc(data)
@@ -1677,6 +1676,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 
 	invariant 0 <= k && k <= mapKeyUpperBound
 	invariant acc(DataPlaneMutexInvariant(d), _)
+	invariant acc(srcUDPAddr.Mem(), 1/1000)
 	decreases mapKeyUpperBound - k
 	for k := 0; k < mapKeyUpperBound; k++ {
 		key := uint16(k)
@@ -1689,9 +1689,12 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 				// 	fmt.Sprintf("%v(%T)", remoteUDPAddr, remoteUDPAddr), "expected", "*net.UDPAddr")
 				return serrors.New("error")
 			}
-			// if bytes.Equal(remoteUDPAddr.IP, srcUDPAddr.IP) && remoteUDPAddr.Port == srcUDPAddr.Port {
-			// 	ifID = k
-			// }
+			unfold acc(remoteUDPAddr.Mem(), _)
+			unfold acc(srcUDPAddr.Mem(), 1/1000)
+			if bytes.Equal(remoteUDPAddr.IP, srcUDPAddr.IP) && remoteUDPAddr.Port == srcUDPAddr.Port {
+				ifID = key
+			}
+			fold acc(srcUDPAddr.Mem(), 1/1000)
 		}
 	}
 
@@ -3578,6 +3581,7 @@ type bfdSend struct {
 //	return err
 //}
 
+// (tlino) This interface is never used
 //type pathUpdater interface {
 //	update(p *scion.Raw) error
 //}
@@ -3707,8 +3711,10 @@ func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.Serializable
 // 	return s.buffer.Bytes(), scmpError{TypeCode: scmpH.TypeCode, Cause: cause}
 //}
 
+// (tlino) This type is never used
 type segIDUpdater struct{}
 
+// (tlino) This function is never used
 //func (segIDUpdater) update(p *scion.Raw) error {
 //	cHF, err := p.GetCurrentHopField()
 //	if err != nil {
@@ -3722,8 +3728,10 @@ type segIDUpdater struct{}
 //	return nil
 //}
 
+// (tlino) This type is never used
 type pathIncrementer struct{}
 
+// (tlino) This function is never used
 //func (pathIncrementer) update(p *scion.Raw) error {
 //	return p.IncPath()
 //}
