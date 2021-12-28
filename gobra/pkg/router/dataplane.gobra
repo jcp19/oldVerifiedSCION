@@ -878,7 +878,7 @@ func (d *DataPlane) AddNextHopBFD(ifID uint16, src, dst *net.UDPAddr, cfg contro
 	return d.addBFDController(ifID, s, cfg, m)
 }
 
-// (tlino) partially Verified
+// (tlino) Verified
 // Run starts running the dataplane. Note that configuration is not possible
 // after calling this method.
 requires d.mtx.LockP()
