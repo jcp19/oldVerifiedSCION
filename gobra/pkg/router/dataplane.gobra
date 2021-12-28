@@ -3597,6 +3597,10 @@ type scmpPacker struct {
 	quote  []byte
 }
 
+// (tlino) For the moment we don't verify this method, since it is hard to verify,
+// (tlino) and it's implementation significantly changed in the mean time in the original scion repo.
+// (tlino) Unfortunatly, we cannot just easy merge the most current implementation in our VerifiedScion code base,
+// (tlino) since this would require to adapt other structs and methods too.
 requires scmpH.Mem() && scmpP.Mem()
 preserves s.scionL.Mem() && s.buffer.Mem()
 preserves verifyutils.BytesAcc(s.origPacket)
