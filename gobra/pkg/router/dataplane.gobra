@@ -698,8 +698,8 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 	return nil
 }
 
+// (tlino) Verified
 // (joao) WIP
-// (joao) Partially Verified
 // AddSvc adds the address for the given service. This can be called multiple
 // times for the same service, with the address added to the list of addresses
 // that provide the service.
@@ -720,18 +720,24 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 		d.svc = newServices()
 	}
 	d.svc.AddSvc(svc, a)
-	// if d.Metrics != nil {
-	// 	labels := serviceMetricLabels(d.localIA, svc)
-	// 	d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
-	// 	d.Metrics.ServiceInstanceCount.With(labels).Add(1)
-	// }
+	if d.Metrics != nil {
+		labels := serviceMetricLabels(d.localIA, svc)
+		unfold d.Metrics.Mem()
+		// (tlino) use explicit cast to float64, since gobra cannot cast the
+		// (tlino) integer argument by default
+		// d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
+		// d.Metrics.ServiceInstanceCount.With(labels).Add(1)
+		(d.Metrics.ServiceInstanceChanges.WithSetup(labels)).Add(float64(1))
+		(d.Metrics.ServiceInstanceCount.WithSetup(labels)).Add(float64(1))
+		fold d.Metrics.Mem()
+	}
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
 }
 
+// (tlino) Verified
 // (joao) WIP
-// (joao) Partially Verified
 // DelSvc deletes the address for the given service.
 requires d.mtx.LockP() && acc(a.Mem(), _)
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
@@ -751,11 +757,15 @@ func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 		return nil
 	}
 	d.svc.DelSvc(svc, a)
-	// if d.Metrics != nil {
-	// 	labels := serviceMetricLabels(d.localIA, svc)
-	// 	d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
-	// 	d.Metrics.ServiceInstanceCount.With(labels).Add(-1)
-	// }
+	if d.Metrics != nil {
+		labels := serviceMetricLabels(d.localIA, svc)
+		unfold d.Metrics.Mem()
+		// d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
+		// d.Metrics.ServiceInstanceCount.With(labels).Add(-1)
+		(d.Metrics.ServiceInstanceChanges.WithSetup(labels)).Add(float64(1))
+		(d.Metrics.ServiceInstanceCount.WithSetup(labels)).Add(float64(-1))
+		fold d.Metrics.Mem()
+	}
 	fold DataPlaneMutexInvariant!<d!>()
 	d.mtx.Unlock()
 	return nil
@@ -3762,9 +3772,11 @@ func interfaceToMetricLabels(id uint16, localIA addr.IA,
 	}
 }
 
-//func serviceMetricLabels(localIA addr.IA, svc addr.HostSVC) prometheus.Labels {
-//	return prometheus.Labels{
-//		"isd_as":  localIA.String(),
-//		"service": svc.BaseString(),
-//	}
-//}
+ensures acc(res)
+decreases
+func serviceMetricLabels(localIA addr.IA, svc addr.HostSVC) (res prometheus.Labels) {
+	return prometheus.Labels{
+		"isd_as":  localIA.String(),
+		"service": svc.BaseString(),
+	}
+}

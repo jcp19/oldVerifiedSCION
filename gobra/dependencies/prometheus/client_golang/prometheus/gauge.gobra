@@ -96,3 +96,12 @@ requires opts.ConstLabels != nil ==> acc(opts.ConstLabels)
 requires forall i int :: 0 <= i && i < len(labelNames) ==> acc(&labelNames[i])
 ensures  g.Mem()
 func NewGaugeVec(opts GaugeOpts, labelNames []string) (g *GaugeVec)
+
+// (tlino) this method has been added to simplify verification.
+// (tlino) this method is only used during setup of the dataplane
+// (tlino) during setup we need to give back all access permission
+preserves acc(v.Mem(), 1/1000)
+preserves acc(labels, _)
+ensures g.Mem()
+decreases
+func (v *GaugeVec) WithSetup(labels Labels) (g Gauge)
