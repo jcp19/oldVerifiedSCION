@@ -1072,10 +1072,10 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 	}
 }
 
-// (tlino) partially verified
+// (tlino) Verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
-// (tlino) We cannot prove termination of this method, since d.processPkt does not terminate
+// (tlino) We cannot prove termination of this method, since processMessage does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1106,82 +1106,120 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
 	for i := 0; i < pkts; i++ {
-		unfold (&msgs[i]).Mem()
-		p := msgs[i]
-		assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
-		// (tlino) use local originPacket subslice
-		// origPacket = origPacket[:p.N]
-		LocalOrigPacket := origPacket[:p.N]
-		assert forall j int :: 0 <= j && j < len(LocalOrigPacket) ==> acc(&LocalOrigPacket[j])
-		assert forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
-
-		// TODO(karampok). Use meta for sanity checks. // (tlino) original scion comment
-		
-		// (tlino) added parentheses to make it parse
-		// p.Buffers[0] = p.Buffers[0][:p.N]
-		(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
-		// (tlino) use gobras copy function
-		// copy(origPacket[:p.N], p.Buffers[0])
-		verifyutils.OutlineMemorySafeCopy(LocalOrigPacket, (p.Buffers)[0])
-
-		// input metric
-		// (tlino) use getters to avoid unfolding
-		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-		inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
-		// (tlino) use getter to avoid unfolding d.Metrics.Mem()
-		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
-		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
-		unfold acc(DataPlaneMutexInvariant(d), _)
-		// assert acc(metrics.Mem(), _)
-		((d.Metrics.GetInputPacketsTotal()).With(inputLabels)).Inc()
-		((d.Metrics.GetInputBytesTotal()).With(inputLabels)).Add(float64(p.N))
-
-		fold verifyutils.BytesAcc((p.Buffers)[0])
-		fold verifyutils.BytesAcc(LocalOrigPacket)
-		localRawPkt := (p.Buffers)[0]
-		// (tlino) use local variables
-		// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
-		//	buffer)
-		result, err := d.processPkt(ingressID, localRawPkt, p.Addr, spkt, LocalOrigPacket,
-			buffer)
-
-		assert result.Mem() --* verifyutils.BytesAcc(localRawPkt)
-		// (tlino) continue isn't supported, move code after switch inside switch cases
-		switch {
-		case err == nil:
-			// (tlino) outline stuff after switch to processBatchHelper
-			processBatchHelper(d, result, localRawPkt)
-		case errors.As(err, scmpErr):
-			if !scmpErr.TypeCode.InfoMsg() {
-				// (tlino) log not yet supported
-				// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
-			}
-			// SCMP go back the way they came.
-			// (tlino) use setters to simplify verification
-			// result.OutAddr = p.Addr
-			// result.OutConn = rd
-			result.setOutAddr(p.Addr)
-			result.setOutConn(rd)
-		
-			// (tlino) outline stuff after switch to processBatchHelper
-			processBatchHelper(d, result, localRawPkt)
-		default:
-			// log.Debug("Error processing packet", "err", err)
-
-			// (tlino) use getter to avoid unfolding d.Metrics.Mem()
-			// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
-			((d.Metrics.GetDroppedPacketsTotal()).With(inputLabels)).Inc()
-
-			// (tlino) continue not supported
-			// continue
- 		}
-		apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
-
-		unfold verifyutils.BytesAcc(LocalOrigPacket)
-		unfold verifyutils.BytesAcc((p.Buffers)[0])
-		fold (&msgs[i]).Mem()
+		processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr)
   	}
 	fold msgs.Mem()
+}
+
+// (tlino) Verified
+// (tlino) added function to simplify verification
+// (tlino) used to be part of the read closure
+// (tlino) We cannot prove termination of this method, since d.processPkt does not terminate
+requires acc(DataPlaneMutexInvariant(d), _)
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+requires ingressID >= 0
+preserves acc(rd.Mem(), _)
+preserves p.Mem()
+preserves forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
+preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
+preserves isZeroSCION(spkt)
+preserves acc(scmpErr)
+preserves buffer.Mem()
+func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
+	buffer gopacket.SerializeBuffer, scmpErr *scmpError) {
+
+	unfold p.Mem()
+	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
+	// (tlino) use local originPacket subslice
+	// origPacket = origPacket[:p.N]
+	localOrigPacket := origPacket[:p.N]
+
+	// TODO(karampok). Use meta for sanity checks. // (tlino) original scion comment
+	
+	// (tlino) added parentheses to make it parse
+	// p.Buffers[0] = p.Buffers[0][:p.N]
+	(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
+	// (tlino) use gobras copy function
+	// copy(origPacket[:p.N], p.Buffers[0])
+	verifyutils.OutlineMemorySafeCopy(localOrigPacket, (p.Buffers)[0])
+	rawPkt := (p.Buffers)[0]
+
+	// input metric
+	// (tlino) use getters to avoid unfolding
+	// inputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+	inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
+	updateInputMetrics(d, inputLabels, p.N)
+
+	fold verifyutils.BytesAcc((p.Buffers)[0])
+	fold verifyutils.BytesAcc(localOrigPacket)
+
+	// (tlino) use local variables
+	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
+	//	buffer)
+	result, err := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
+		buffer)
+
+	assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
+	// (tlino) continue isn't supported, move code after switch inside switch cases
+	switch {
+	case err == nil:
+		// (tlino) outline stuff after switch to processMessageHelper
+		processMessageHelper(d, result, rawPkt)
+	case errors.As(err, scmpErr):
+		if !scmpErr.TypeCode.InfoMsg() {
+			// (tlino) log not yet supported
+			// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
+		}
+		// SCMP go back the way they came.
+		// (tlino) use setters to simplify verification
+		// result.OutAddr = p.Addr
+		// result.OutConn = rd
+		result.setOutAddr(p.Addr)
+		result.setOutConn(rd)
+	
+		// (tlino) outline stuff after switch to processMessageHelper
+		processMessageHelper(d, result, rawPkt)
+	default:
+		// log.Debug("Error processing packet", "err", err)
+
+		// (tlino) outline metric update to function
+		// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
+		updateDroppedPackets(d, inputLabels)
+
+		// (tlino) continue not supported
+		// continue
+	}
+	apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
+
+	unfold verifyutils.BytesAcc(localOrigPacket)
+	unfold verifyutils.BytesAcc((p.Buffers)[0])
+	fold p.Mem()
+}
+
+// (tlino) Verified
+// (tlino) added helper function to simplify verification
+requires acc(DataPlaneMutexInvariant(d), _)
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
+preserves acc(inputLabels, _)
+decreases
+func updateInputMetrics(d *DataPlane, inputLabels prometheus.Labels, totalInputBytes int) {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
+	// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
+	// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
+	((d.Metrics.GetInputPacketsTotal()).With(inputLabels)).Inc()
+	((d.Metrics.GetInputBytesTotal()).With(inputLabels)).Add(float64(totalInputBytes))
+}
+
+// (tlino) Verified
+// (tlino) added helper function to simplify verification
+requires acc(DataPlaneMutexInvariant(d), _)
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
+preserves acc(inputLabels, _)
+decreases
+func updateDroppedPackets(d *DataPlane, inputLabels prometheus.Labels) {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	((d.Metrics.GetDroppedPacketsTotal()).With(inputLabels)).Inc()
 }
 
 // (tlino) Verified
@@ -1191,7 +1229,7 @@ requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 preserves result.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
-func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
+func processMessageHelper(d *DataPlane, result processResult, rawPkt []byte) {
 	unfold result.Mem()
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
 		// (tlino) continue not supported
@@ -1942,7 +1980,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	fold p.Mem()
 }
 
-// (tlino) partially verified
+// (tlino) Verified
 // (tlino) outlined part of packSCMP
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
@@ -2367,7 +2405,7 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // 	return processResult{}, nil
 // }
 
-// (tlino) partially verified
+// (tlino) Verified
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
 // (tlino) we cannot prove termination of this method since p.d.resolveLocalDst() does not terminate
