@@ -108,11 +108,14 @@ type bfdSession interface {
 type BatchConn interface {
 	pred Mem()
 
+	requires token(t) && e_recvBatch(t)
 	preserves acc(Mem(), _)
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
-	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta) (n int, err error)
+	ensures err == nil ==> token(t1) && t1 == old(get_recvBatch_t1(t)) && e_recvBatch(t1)
+	ensures err != nil ==> t1 == t && token(t1) && e_recvBatch(t1) && get_recvBatch_t1(t) == old(get_recvBatch_t1(t))
+	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost t1 Place)
 
 	preserves acc(Mem(), _)
 	preserves acc(msgs.MemSend(), 1/1000)
@@ -181,8 +184,8 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	BfdSessionsAcc(d.bfdSessions) &&
 	BatchConnsAcc(d.external) &&
 	AddrsAcc(d.internalNextHops) &&
-	(d.internal != nil ==> d.internal.Mem()) &&
-	(d.Metrics != nil ==> d.Metrics.Mem())
+	(d.internal != nil ==> (d.internal).Mem()) &&
+	(d.Metrics != nil ==> (d.Metrics).Mem())
 }
 
 // (tlino) start of added getters and setters for DataPlane to simplify verification
@@ -219,7 +222,7 @@ ensures res != nil ==> acc(res, _)
 decreases
 func (d *DataPlane) GetNeighborIAs() (res map[uint16]addr.IA) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
-	res = d.neighborIAs
+	res =  d.neighborIAs
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
@@ -699,6 +702,7 @@ func (d *DataPlane) addBFDController(ifID uint16, s *bfdSend, cfg control.BFD,
 }
 
 // (tlino) Verified
+// (joao) WIP
 // AddSvc adds the address for the given service. This can be called multiple
 // times for the same service, with the address added to the list of addresses
 // that provide the service.
@@ -736,6 +740,7 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 }
 
 // (tlino) Verified
+// (joao) WIP
 // DelSvc deletes the address for the given service.
 requires d.mtx.LockP() && acc(a.Mem(), _)
 requires d.mtx.LockInv() == DataPlaneMutexInvariant!<d!>;
@@ -897,9 +902,6 @@ func (d *DataPlane) Run() error {
 	d.running = true
 	fold DataPlaneMutexInvariant(d)
 
-	// (tlino) When the border router is running, then it requires that d.Metrics, d.svc, and d.internal are not nil.
-	// (tlino) At the moment there is no way to encode this in the precondition of the method, since we cannot
-	// (tlino) unfold DataPlaneMutexInvariant!<d!> without aqcuiring a d.mtx.
 	assume unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 
 	d.initMetrics()
@@ -944,7 +946,10 @@ func (d *DataPlane) Run() error {
 		key := uint16(k)
 		batchConn, found := d.GetExternalBatchConn(key)
 		if found {
-			go RunReadClosure(key, batchConn, d)
+			ghost var p Place
+			fold token(p)
+			fold e_recvBatch(p)
+			go RunReadClosure(key, batchConn, d, p)
 		}
 	}
 	
@@ -953,8 +958,11 @@ func (d *DataPlane) Run() error {
 	// 	defer log.HandlePanic()
 	// 	read(0, c)
 	// }(d.internal)
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	go RunReadClosure(0, d.internal, d)
+	// unfold acc(DataPlaneMutexInvariant(d), _)
+	// ghost var p Place
+	// fold token(p)
+	// fold e_recvBatch(p)
+	// go RunReadClosure(0, d.internal, d, p)
 	
  	// // (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
 	// //        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
@@ -983,7 +991,8 @@ requires acc(rd.Mem(), _)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
-func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
+requires token(t) && e_recvBatch(t)
+func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane,  ghost t Place) {
 	// (tlino) outlined code to separate function
 	msgs, metas := initReadClosureBuffer()
 
@@ -997,6 +1006,8 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) change structure of loop
 	// for d.running {
 
+	ghost var currentPlace Place = t
+
 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
 	invariant acc(DataPlaneMutexInvariant(d), _)
 	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
@@ -1007,8 +1018,11 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant buffer.Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 	invariant len(origPacket) == bufSize
+	invariant token(currentPlace) && e_recvBatch(currentPlace)
 	for d.isRunning() {
-		pkts, err := rd.ReadBatch(msgs, metas)
+		pkts, err, t1 := rd.ReadBatch(msgs, metas, currentPlace)
+
+		currentPlace = t1
 
 		// (tlino) continue not supported by gobra
 		// adapted code is below
@@ -1073,10 +1087,10 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 	}
 }
 
-// (tlino) Verified
+// (tlino) partially verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
-// (tlino) We cannot prove termination of this method, since processMessage might not terminate
+// (tlino) We cannot prove termination of this method, since d.processPkt does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1107,125 +1121,82 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
 	for i := 0; i < pkts; i++ {
-		processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr)
+		unfold (&msgs[i]).Mem()
+		p := msgs[i]
+		assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
+		// (tlino) use local originPacket subslice
+		// origPacket = origPacket[:p.N]
+		LocalOrigPacket := origPacket[:p.N]
+		assert forall j int :: 0 <= j && j < len(LocalOrigPacket) ==> acc(&LocalOrigPacket[j])
+		assert forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
+
+		// TODO(karampok). Use meta for sanity checks. // (tlino) original scion comment
+		
+		// (tlino) added parentheses to make it parse
+		// p.Buffers[0] = p.Buffers[0][:p.N]
+		(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
+		// (tlino) use gobras copy function
+		// copy(origPacket[:p.N], p.Buffers[0])
+		verifyutils.OutlineMemorySafeCopy(LocalOrigPacket, (p.Buffers)[0])
+
+		// input metric
+		// (tlino) use getters to avoid unfolding
+		// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+		inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
+		// (tlino) use getter to avoid unfolding d.Metrics.Mem()
+		// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
+		// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
+		unfold acc(DataPlaneMutexInvariant(d), _)
+		// assert acc(metrics.Mem(), _)
+		((d.Metrics.GetInputPacketsTotal()).With(inputLabels)).Inc()
+		((d.Metrics.GetInputBytesTotal()).With(inputLabels)).Add(float64(p.N))
+
+		fold verifyutils.BytesAcc((p.Buffers)[0])
+		fold verifyutils.BytesAcc(LocalOrigPacket)
+		localRawPkt := (p.Buffers)[0]
+		// (tlino) use local variables
+		// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
+		//	buffer)
+		result, err := d.processPkt(ingressID, localRawPkt, p.Addr, spkt, LocalOrigPacket,
+			buffer)
+
+		assert result.Mem() --* verifyutils.BytesAcc(localRawPkt)
+		// (tlino) continue isn't supported, move code after switch inside switch cases
+		switch {
+		case err == nil:
+			// (tlino) outline stuff after switch to processBatchHelper
+			processBatchHelper(d, result, localRawPkt)
+		case errors.As(err, scmpErr):
+			if !scmpErr.TypeCode.InfoMsg() {
+				// (tlino) log not yet supported
+				// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
+			}
+			// SCMP go back the way they came.
+			// (tlino) use setters to simplify verification
+			// result.OutAddr = p.Addr
+			// result.OutConn = rd
+			result.setOutAddr(p.Addr)
+			result.setOutConn(rd)
+		
+			// (tlino) outline stuff after switch to processBatchHelper
+			processBatchHelper(d, result, localRawPkt)
+		default:
+			// log.Debug("Error processing packet", "err", err)
+
+			// (tlino) use getter to avoid unfolding d.Metrics.Mem()
+			// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
+			((d.Metrics.GetDroppedPacketsTotal()).With(inputLabels)).Inc()
+
+			// (tlino) continue not supported
+			// continue
+ 		}
+		apply result.Mem() --* verifyutils.BytesAcc(localRawPkt)
+
+		unfold verifyutils.BytesAcc(LocalOrigPacket)
+		unfold verifyutils.BytesAcc((p.Buffers)[0])
+		fold (&msgs[i]).Mem()
   	}
 	fold msgs.Mem()
-}
-
-// (tlino) Verified
-// (tlino) added function to simplify verification
-// (tlino) used to be part of the read closure
-// (tlino) We cannot prove termination of this method, since d.processPkt might not terminate
-requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
-requires ingressID >= 0
-preserves acc(rd.Mem(), _)
-preserves p.Mem()
-preserves forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
-preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
-preserves isZeroSCION(spkt)
-preserves acc(scmpErr)
-preserves buffer.Mem()
-func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpErr *scmpError) {
-
-	unfold p.Mem()
-	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
-	// (tlino) use local originPacket subslice
-	// origPacket = origPacket[:p.N]
-	localOrigPacket := origPacket[:p.N]
-
-	// TODO(karampok). Use meta for sanity checks. // (tlino) original scion comment
-	
-	// (tlino) added parentheses to make it parse
-	// p.Buffers[0] = p.Buffers[0][:p.N]
-	(p.Buffers)[0] = ((p.Buffers)[0])[:p.N]
-	// (tlino) use gobra's copy function
-	// copy(origPacket[:p.N], p.Buffers[0])
-	verifyutils.OutlineMemorySafeCopy(localOrigPacket, (p.Buffers)[0])
-	rawPkt := (p.Buffers)[0]
-
-	// input metric
-	// (tlino) use getters to avoid unfolding
-	// inputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-	inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
-	updateInputMetrics(d, inputLabels, p.N)
-
-	fold verifyutils.BytesAcc((p.Buffers)[0])
-	fold verifyutils.BytesAcc(localOrigPacket)
-
-	// (tlino) use local variables
-	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
-	//	buffer)
-	result, err := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
-		buffer)
-
-	assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
-	// (tlino) continue isn't supported, move code after switch inside switch cases
-	switch {
-	case err == nil:
-		// (tlino) in the original code processMessage was part of a loop
-		// (tlino) and after the non-default switch cases a set of
-		// (tlino) statements followd. These statements have been moved to processMessageHelper
-		processMessageHelper(d, result, rawPkt)
-	case errors.As(err, scmpErr):
-		if !scmpErr.TypeCode.InfoMsg() {
-			// (tlino) log not yet supported
-			// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
-		}
-		// SCMP go back the way they came.
-		// (tlino) use setters to simplify verification
-		// result.OutAddr = p.Addr
-		// result.OutConn = rd
-		// r := &result
-		// r.setOutAddr(p.Addr)
-		// r.setOutConn(rd)
-	
-		// (tlino) in the original code processMessage was part of a loop
-		// (tlino) and after the non-default switch cases a set of
-		// (tlino) statements followd. These statements have been moved to processMessageHelper
-		processMessageHelper(d, result, rawPkt)
-	default:
-		// log.Debug("Error processing packet", "err", err)
-
-		// (tlino) outline metric update to function
-		// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
-		updateDroppedPackets(d, inputLabels)
-
-		// (tlino) continue not supported
-		// continue
-	}
-	apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
-
-	unfold verifyutils.BytesAcc(localOrigPacket)
-	unfold verifyutils.BytesAcc((p.Buffers)[0])
-	fold p.Mem()
-}
-
-// (tlino) Verified
-// (tlino) added helper function to simplify verification
-requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
-preserves acc(inputLabels, _)
-decreases
-func updateInputMetrics(d *DataPlane, inputLabels prometheus.Labels, totalInputBytes int) {
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
-	// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
-	// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
-	((d.Metrics.GetInputPacketsTotal()).With(inputLabels)).Inc()
-	((d.Metrics.GetInputBytesTotal()).With(inputLabels)).Add(float64(totalInputBytes))
-}
-
-// (tlino) Verified
-// (tlino) added helper function to simplify verification
-requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
-preserves acc(inputLabels, _)
-decreases
-func updateDroppedPackets(d *DataPlane, inputLabels prometheus.Labels) {
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	((d.Metrics.GetDroppedPacketsTotal()).With(inputLabels)).Inc()
 }
 
 // (tlino) Verified
@@ -1235,11 +1206,10 @@ requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 preserves result.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
-func processMessageHelper(d *DataPlane, result processResult, rawPkt []byte) {
+func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 	unfold result.Mem()
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
-		// (tlino) This helper function used to be a part of a loop,
-		// (tlino) since the continue isn't supported we use a return statement
+		// (tlino) continue not supported
 		// continue
 		fold result.Mem()
 		return
@@ -1272,8 +1242,7 @@ func processMessageHelper(d *DataPlane, result processResult, rawPkt []byte) {
 		// (tlino) log not supported yet
 		// log.Debug("Error writing packet", "err", err)
 		// error metric // (tlino) original scion comment
-		// (tlino) This helper function used to be a part of a loop,
-		// (tlino) since the continue isn't supported we use a return statement
+		// (tlino) continue not supported
 		// continue
 		return
 	}
@@ -1424,23 +1393,25 @@ func (pr processResult) GetOutPktLen() (res int) {
 
 // (tlino) TODO: cannot verify body with this contracts, 
 // (tlino) however function verifies if we use "requires pr.Mem()" instead of "preserves pr.Mem()"
-preserves acc(pr) && (*pr).Mem()
+preserves pr.Mem()
 decreases
-func (pr *processResult) setOutAddr(add net.Addr) {
-	unfold (*pr).Mem()
-	(*pr).OutAddr = add
-	fold (*pr).Mem()
+func (pr processResult) setOutAddr(add net.Addr) {
+	// unfold pr.Mem()
+	// pr.OutAddr = add
+	// fold pr.Mem()
+	// assert pr.Mem()
 }
 
 // (tlino) TODO: cannot verify body with this contracts, 
 // (tlino) however function verifies if we use "requires pr.Mem()" instead of "preserves pr.Mem()"
-preserves acc(pr) && (*pr).Mem()
+preserves pr.Mem()
 requires acc(b.Mem(), _)
 decreases
-func (pr *processResult) setOutConn(b BatchConn) {
-	unfold (*pr).Mem()
-	(*pr).OutConn = b
-	fold (*pr).Mem()
+func (pr processResult) setOutConn(b BatchConn) {
+	// unfold pr.Mem()
+	// pr.OutConn = b
+	// fold pr.Mem()
+	// assert pr.Mem()
 }
 // (tlino) end of getters and setters
 
@@ -1501,7 +1472,7 @@ func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 }
 
 // (tlino) Verified
-// (tlino) We cannot prove termination of this method, since d.processSCION() and d.processOHP() might not terminate
+// (tlino) We cannot prove termination of this method, since d.processSCION() and d.processOHP() do not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires ingressID >= 0
@@ -1765,7 +1736,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 }
 
 // (tlino) Verified
-// (tlino) We cannot prove termination of this method, since p.process() might not terminate
+// (tlino) We cannot prove termination of this method, since p.process() does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires s != nil && s.Mem() && s.getRawPkt() == rawPkt
@@ -1986,7 +1957,7 @@ func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.Seri
 	fold p.Mem()
 }
 
-// (tlino) Verified
+// (tlino) partially verified
 // (tlino) outlined part of packSCMP
 requires acc(DataPlaneMutexInvariant(d), _)
 requires forall i int :: 0 <= i && i < len(quote) ==> acc(&quote[i])
@@ -2411,10 +2382,10 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // 	return processResult{}, nil
 // }
 
-// (tlino) Verified
+// (tlino) partially verified
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
-// (tlino) we cannot prove termination of this method since p.d.resolveLocalDst() might not terminate
+// (tlino) we cannot prove termination of this method since p.d.resolveLocalDst() does not terminate
 preserves p.Mem()
 ensures pr.Mem()
 func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error) {
@@ -2906,7 +2877,7 @@ func processHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
 // (tlino) Verified
 // (tlino) This method needs an alias to rawPkt as ghost argument, such that it can relate
 // (tlino) pr.Mem() --* verifyutils.BytesAcc(rawPktAlias) to pr.Mem() --* verifyutils.BytesAcc(p.rawPkt)
-// (tlino) We cannot prove termination of this method, since p.resolveInbound() might not terminate
+// (tlino) We cannot prove termination of this method, since p.resolveInbound() doesn't terminate
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 requires acc(&p.infoField) && acc(&p.segmentChange)
@@ -3259,7 +3230,7 @@ func processOHPHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 }
 
 // (tlino) Verified
-// (tlino) we cannot prove termination of this method, since processOHP2 might not terminate
+// (tlino) we cannot prove termination of this method, since processOHP2 does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires ingressID >= 0
@@ -3405,7 +3376,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 // (tlino) Verified
 // (tlino) added method to simplify verification
-// (tlino) we cannot prove termination of this method, since d.resolveLocalDst() might not terminate
+// (tlino) we cannot prove termination of this method, since d.resolveLocalDst() does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires ingressID >= 0
@@ -3475,7 +3446,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 // (tlino) res contains a subslice of s.rawPkt
 // (tlino) This method doesn't establish res.Mem(), since the caller embedds res
 // (tlino) in a processResult together with the rawPkt.
-// (tlino) we cannot prove termination of this method, since  d.svc.Any() might not terminate
+// (tlino) we cannot prove termination of this method, since  d.svc.Any() does not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 preserves acc(s.Mem(), 1/100)
@@ -3816,6 +3787,7 @@ func interfaceToMetricLabels(id uint16, localIA addr.IA,
 	}
 }
 
+// (tlino) Verified
 ensures acc(res)
 decreases
 func serviceMetricLabels(localIA addr.IA, svc addr.HostSVC) (res prometheus.Labels) {
@@ -3824,3 +3796,15 @@ func serviceMetricLabels(localIA addr.IA, svc addr.HostSVC) (res prometheus.Labe
 		"service": svc.BaseString(),
 	}
 }
+
+type Place domain {
+	func place(int) Place
+}
+
+pred token(t Place)
+
+pred e_recvBatch(ghost t Place)
+
+ghost
+requires e_recvBatch(t)
+pure func get_recvBatch_t1(t Place) (t1 Place)
