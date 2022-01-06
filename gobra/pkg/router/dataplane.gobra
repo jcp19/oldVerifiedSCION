@@ -926,7 +926,7 @@ func (d *DataPlane) Run() error {
 		key := uint16(k)
 		bfdSess, found := d.GetBfdSession(key)
 		if found {
-			go bfdLauncher(bfdSess)
+			go bfdSess.Run()
 		}
 	}
 	// (tlino) range, closures, and the log package are not supported yet, adapted code is below
