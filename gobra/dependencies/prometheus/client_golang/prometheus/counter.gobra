@@ -97,7 +97,7 @@ func NewCounterVec(opts CounterOpts, labelNames []string) (c *CounterVec)
 preserves acc(v.Mem(), _)
 preserves acc(labels, _)
 ensures c.Mem()
-decreases
+decreases _
 func (v *CounterVec) With(labels Labels) (c Counter)
 
 // (tlino) this method has been added to simplify verification.
@@ -106,5 +106,5 @@ func (v *CounterVec) With(labels Labels) (c Counter)
 preserves acc(v.Mem(), 1/1000)
 preserves acc(labels, _)
 ensures c.Mem()
-decreases
+decreases _
 func (v *CounterVec) WithSetup(labels Labels) (c Counter)

@@ -145,7 +145,6 @@ func decodeSCMPExternalInterfaceDown(data []byte, pb gopacket.PacketBuilder) err
 }
 */
 
-// (tlino) added implementation proof
 (*SCMPExternalInterfaceDown) implements gopacket.SerializableLayer {
 	pure (i *SCMPExternalInterfaceDown) LayerType() gopacket.LayerType {
 		return i.LayerType()
@@ -685,8 +684,7 @@ func (i *SCMPDestinationUnreachable) DecodeFromBytes(data []byte,
 // (tlino) Verified
 // SerializeTo writes the serialized form of this layer into the
 // SerializationBuffer, implementing gopacket.SerializableLayer.
-requires i.Mem() && b.Mem()
-ensures i.Mem() && b.Mem()
+preserves i.Mem() && b.Mem()
 func (i *SCMPDestinationUnreachable) SerializeTo(b gopacket.SerializeBuffer,
 	opts gopacket.SerializeOptions) error {
 

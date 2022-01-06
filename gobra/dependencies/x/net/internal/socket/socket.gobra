@@ -5,8 +5,8 @@ import (
 	"gobra/verifyutils"
 )
 
-// (tlino) this predicate is tailored for the SCION code
-// (tlino) this predicate is used to initialize a *Message struct
+// (tlino) This predicate is tailored for the SCION code.
+// (tlino) This predicate is established right after initializing a *Message
 pred (m *Message) MemPartiallyInitialized() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&
@@ -17,9 +17,10 @@ pred (m *Message) MemPartiallyInitialized() {
 	m.Addr.Mem()
 }
 
-// (tlino) this predicate is tailored for the SCION code
-// (tlino) this predicate is used for the message buffer.
-// (tlino) thus, it needs to have a capacity of verifyutils.BufSize, such tht we can resize it
+// (tlino) This predicate is tailored for the SCION code
+// (tlino) This predicate is established for the message buffer.
+// (tlino) A valid buffer in the dataplane must have a capacity of verifyutils.BufSize.
+// (tlino) If this property does not hold, slice resizing operations may fail.
 pred (m *Message) Mem() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&
@@ -31,8 +32,8 @@ pred (m *Message) Mem() {
 	m.Addr.Mem()
 }
 
-// (tlino) this predicate is tailored for the SCION code
-// (tlino) this predicate is used when the dataplane sends a processed packet
+// (tlino) This predicate is tailored for the SCION code.
+// (tlino) This predicate is established for every message sent by the SCION border router.
 pred (m *Message) MemSend() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&
