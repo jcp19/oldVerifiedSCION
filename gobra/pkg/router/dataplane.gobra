@@ -108,12 +108,18 @@ type bfdSession interface {
 type BatchConn interface {
 	pred Mem()
 
+	// pred e_recvBatch(ghost t Place)
+
+	// ghost
+	// requires e_recvBatch(t)
+	// pure func get_recvBatch_t1(t Place) (t1 Place)
+
 	requires token(t) && e_recvBatch(t)
 	preserves acc(Mem(), _)
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
-	ensures err == nil ==> token(t1) && t1 == old(get_recvBatch_t1(t)) && e_recvBatch(t1)
+	ensures err == nil ==> token(t1) && t1 == old(get_recvBatch_t1(t))
 	ensures err != nil ==> t1 == t && token(t1) && e_recvBatch(t1) && get_recvBatch_t1(t) == old(get_recvBatch_t1(t))
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost t1 Place)
 
@@ -991,7 +997,7 @@ requires acc(rd.Mem(), _)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
-requires token(t) && e_recvBatch(t)
+requires token(t) && P(t)
 func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane,  ghost t Place) {
 	// (tlino) outlined code to separate function
 	msgs, metas := initReadClosureBuffer()
@@ -1018,8 +1024,9 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane,  ghost t Place
 	invariant buffer.Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 	invariant len(origPacket) == bufSize
-	invariant token(currentPlace) && e_recvBatch(currentPlace)
+	invariant token(currentPlace) && P(currentPlace)
 	for d.isRunning() {
+		unfold P(currentPlace)
 		pkts, err, t1 := rd.ReadBatch(msgs, metas, currentPlace)
 
 		currentPlace = t1
@@ -3801,10 +3808,15 @@ type Place domain {
 	func place(int) Place
 }
 
-pred token(t Place)
-
 pred e_recvBatch(ghost t Place)
 
 ghost
 requires e_recvBatch(t)
 pure func get_recvBatch_t1(t Place) (t1 Place)
+
+pred token(t Place)
+
+pred P(pl place) {
+	(e_recvBatch(pl) && P(get_recvBatch_t1(pl))) &&
+	(e_sendBatch(pl) && P(get_sendBatch_t1(pl)))
+}
