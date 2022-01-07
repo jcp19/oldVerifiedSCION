@@ -86,6 +86,9 @@ const (
 	hopFieldDefaultExpTime = 63
 )
 
+// (tlino) The scion code base uses a reference implementation of this interface.
+// (tlino) This reference implementation is thread-safe.
+// (tlino) Thus, it is fine to use wildcard permissions
 type bfdSession interface {
 	pred Mem()
 
@@ -926,7 +929,7 @@ func (d *DataPlane) Run() error {
 		key := uint16(k)
 		bfdSess, found := d.GetBfdSession(key)
 		if found {
-			go bfdSess.Run()
+			go bfdLauncher(bfdSess)
 		}
 	}
 	// (tlino) range, closures, and the log package are not supported yet, adapted code is below
@@ -1160,6 +1163,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	result, err := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
 		buffer)
 
+	assert result.Mem()
 	assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
 	// (tlino) continue isn't supported, move code after switch inside switch cases
 	switch {
@@ -1177,6 +1181,14 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// (tlino) use setters to simplify verification
 		// result.OutAddr = p.Addr
 		// result.OutConn = rd
+
+		// unfold result.Mem()
+		// result.OutAddr = p.Addr
+		// result.OutConn = rd
+		// fold result.Mem()
+		result = foo(result)
+
+
 		// r := &result
 		// r.setOutAddr(p.Addr)
 		// r.setOutConn(rd)
@@ -1201,6 +1213,11 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	unfold verifyutils.BytesAcc((p.Buffers)[0])
 	fold p.Mem()
 }
+
+requires r.Mem()
+ensures res.Mem()
+ensures res == r
+func foo(r processResult) (res processResult)
 
 // (tlino) Verified
 // (tlino) added helper function to simplify verification

@@ -91,6 +91,10 @@ requires forall i int :: 0 <= i && i < len(labelNames) ==> acc(&labelNames[i], 1
 ensures  c.Mem()
 func NewCounterVec(opts CounterOpts, labelNames []string) (c *CounterVec)
 
+// (tlino) We use wildcard permissions for this function, since the code in dataplane.gobra
+// (tlino) can only access the *CounterVec receiver with wildcard permissions.
+// (tlino) Since the Prometheus reference implementaiton of CounterVec and Counter is used,
+// (tlino) we can be sure that CounterVec and Counter are thread safe
 // With works as GetMetricWith, but panics where GetMetricWithLabels would have
 // returned an error. Not returning an error allows shortcuts like
 //     myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
@@ -100,6 +104,8 @@ ensures c.Mem()
 decreases _
 func (v *CounterVec) With(labels Labels) (c Counter)
 
+// (tlino) Since the Prometheus reference implementaiton of CounterVec and Counter is used,
+// (tlino) we can be sure that CounterVec and Counter are thread safe
 // (tlino) this method has been added to simplify verification.
 // (tlino) this method is only used during setup of the dataplane
 // (tlino) during setup we need to give back all access permission
