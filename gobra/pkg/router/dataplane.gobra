@@ -952,10 +952,7 @@ func (d *DataPlane) Run() error {
 		key := uint16(k)
 		batchConn, found := d.GetExternalBatchConn(key)
 		if found {
-			ghost var p Place
-			fold token(p)
-			fold e_recvBatch(p)
-			go RunReadClosure(key, batchConn, d, p)
+			go RunReadClosure(key, batchConn, d)
 		}
 	}
 	
@@ -964,11 +961,8 @@ func (d *DataPlane) Run() error {
 	// 	defer log.HandlePanic()
 	// 	read(0, c)
 	// }(d.internal)
-	// unfold acc(DataPlaneMutexInvariant(d), _)
-	// ghost var p Place
-	// fold token(p)
-	// fold e_recvBatch(p)
-	// go RunReadClosure(0, d.internal, d, p)
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	go RunReadClosure(0, d.internal, d)
 	
  	// // (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
 	// //        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
@@ -997,9 +991,12 @@ requires acc(rd.Mem(), _)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
-requires token(t) && P(t)
-func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane,  ghost t Place) {
+func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) outlined code to separate function
+
+	ghost var currentPlace Place
+	inhale token(currentPlace) && P(currentPlace)
+
 	msgs, metas := initReadClosureBuffer()
 
 	// (tlino) use pointer
@@ -1011,8 +1008,6 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane,  ghost t Place
 
 	// (tlino) change structure of loop
 	// for d.running {
-
-	ghost var currentPlace Place = t
 
 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
 	invariant acc(DataPlaneMutexInvariant(d), _)
@@ -1030,6 +1025,10 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane,  ghost t Place
 		pkts, err, t1 := rd.ReadBatch(msgs, metas, currentPlace)
 
 		currentPlace = t1
+
+		ghost if err != nil {
+			fold P(currentPlace)
+		}
 
 		// (tlino) continue not supported by gobra
 		// adapted code is below
@@ -3816,7 +3815,6 @@ pure func get_recvBatch_t1(t Place) (t1 Place)
 
 pred token(t Place)
 
-pred P(pl place) {
-	(e_recvBatch(pl) && P(get_recvBatch_t1(pl))) &&
-	(e_sendBatch(pl) && P(get_sendBatch_t1(pl)))
+pred P(pl Place) {
+	(e_recvBatch(pl) && P(get_recvBatch_t1(pl))) //&& (e_sendBatch(pl) && P(get_sendBatch_t1(pl)))
 }
