@@ -729,8 +729,8 @@ func (d *DataPlane) AddSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 		// (tlino) integer argument by default
 		// d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
 		// d.Metrics.ServiceInstanceCount.With(labels).Add(1)
-		(d.Metrics.ServiceInstanceChanges.WithSetup(labels)).Add(float64(1))
-		(d.Metrics.ServiceInstanceCount.WithSetup(labels)).Add(float64(1))
+		(d.Metrics.ServiceInstanceChanges.With(labels)).Add(float64(1))
+		(d.Metrics.ServiceInstanceCount.With(labels)).Add(float64(1))
 		fold d.Metrics.Mem()
 	}
 	fold DataPlaneMutexInvariant!<d!>()
@@ -763,8 +763,8 @@ func (d *DataPlane) DelSvc(svc addr.HostSVC, a *net.UDPAddr) error {
 		unfold d.Metrics.Mem()
 		// d.Metrics.ServiceInstanceChanges.With(labels).Add(1)
 		// d.Metrics.ServiceInstanceCount.With(labels).Add(-1)
-		(d.Metrics.ServiceInstanceChanges.WithSetup(labels)).Add(float64(1))
-		(d.Metrics.ServiceInstanceCount.WithSetup(labels)).Add(float64(-1))
+		(d.Metrics.ServiceInstanceChanges.With(labels)).Add(float64(1))
+		(d.Metrics.ServiceInstanceCount.With(labels)).Add(float64(-1))
 		fold d.Metrics.Mem()
 	}
 	fold DataPlaneMutexInvariant!<d!>()
@@ -1186,8 +1186,6 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// result.OutAddr = p.Addr
 		// result.OutConn = rd
 		// fold result.Mem()
-		result = foo(result)
-
 
 		// r := &result
 		// r.setOutAddr(p.Addr)
@@ -1213,11 +1211,6 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	unfold verifyutils.BytesAcc((p.Buffers)[0])
 	fold p.Mem()
 }
-
-requires r.Mem()
-ensures res.Mem()
-ensures res == r
-func foo(r processResult) (res processResult)
 
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
