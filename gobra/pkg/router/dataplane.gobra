@@ -1164,7 +1164,6 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		buffer)
 
 	assert result.Mem()
-	assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
 	// (tlino) continue isn't supported, move code after switch inside switch cases
 	switch {
 	case err == nil:
@@ -1172,6 +1171,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// (tlino) and after the non-default switch cases a set of
 		// (tlino) statements followd. These statements have been moved to processMessageHelper
 		processMessageHelper(d, result, rawPkt)
+		apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
 	case errors.As(err, scmpErr):
 		if !scmpErr.TypeCode.InfoMsg() {
 			// (tlino) log not yet supported
@@ -1186,6 +1186,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// result.OutAddr = p.Addr
 		// result.OutConn = rd
 		// fold result.Mem()
+		result = updateProcessResult(result, rd, p.Addr)
 
 		// r := &result
 		// r.setOutAddr(p.Addr)
@@ -1205,11 +1206,23 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// (tlino) continue not supported
 		// continue
 	}
-	apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
 
 	unfold verifyutils.BytesAcc(localOrigPacket)
 	unfold verifyutils.BytesAcc((p.Buffers)[0])
 	fold p.Mem()
+}
+
+// (tlino) added helper function to simplify verification
+requires pr.Mem()
+preserves acc(rd.Mem(), _)
+ensures res.Mem()
+decreases
+func updateProcessResult(pr processResult, rd BatchConn, addr net.Addr) (res processResult) {
+	unfold pr.Mem()
+	pr.OutAddr = addr
+	pr.OutConn = rd
+	fold pr.Mem()
+	return pr
 }
 
 // (tlino) Verified
@@ -1243,7 +1256,6 @@ func updateDroppedPackets(d *DataPlane, inputLabels prometheus.Labels) {
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
-preserves result.Mem() --* verifyutils.BytesAcc(rawPkt)
 decreases
 func processMessageHelper(d *DataPlane, result processResult, rawPkt []byte) {
 	unfold result.Mem()
@@ -1522,7 +1534,8 @@ preserves cap(rawPkt) == bufSize
 preserves acc(srcAddr.Mem(), 1/1000)
 preserves buffer.Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, errRet error) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
@@ -1541,8 +1554,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet =  processResult{}, err
 		fold pr.Mem()
-		
-		package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
 		return
 	}
 	
@@ -1553,7 +1564,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 		fold pr.Mem()
-		ghost processPktHelper(pr, sNew, rawPkt)
+		sNew.getRawPktAccWithoutPreservePath(rawPkt)
 		return
 	}
 
@@ -1570,7 +1581,11 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			pr, errRet = processResult{}, d.processIntraBFD(srcAddr, sNew.EmbeddedBaseLayer.Payload)
 			fold sNew.Mem()
 			fold pr.Mem()
-			ghost processPktHelper(pr, sNew, rawPkt)
+			ghost if errRet == nil {
+				processPktHelper(pr, sNew, rawPkt)
+			} else {
+				sNew.getRawPktAccWithoutPreservePath(rawPkt)
+			}
 			return 
 		}
 		// (tlino) original code, adapted code is below
@@ -1580,7 +1595,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathTypeNextHeader(),
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 		fold pr.Mem()
-		ghost processPktHelper(pr, sNew, rawPkt)
+		sNew.getRawPktAccWithoutPreservePath(rawPkt)
 		return 
 	case slayers.PathTypeOneHop:
 		// (tlino) use sNew instead of s and use getters
@@ -1596,7 +1611,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				// return processResult{}, malformedPath
 				pr, errRet = processResult{}, malformedPath()
 				fold pr.Mem()
-				ghost processPktHelper(pr, sNew, rawPkt)
+				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 				return
 			}
 			
@@ -1606,7 +1621,11 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			pr, errRet = processResult{}, d.processInterBFD(ingressID, ohp, sNew.EmbeddedBaseLayer.Payload)
 			fold sNew.Mem()
 			fold pr.Mem()
-			ghost processPktHelper(pr, sNew, rawPkt)
+			ghost if errRet == nil {
+				processPktHelper(pr, sNew, rawPkt)
+			} else {
+				sNew.getRawPktAccWithoutPreservePath(rawPkt)
+			}
 			return
 		}
 		// (tlino) original code, adapted code is below
@@ -1626,7 +1645,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
 		fold pr.Mem()
-		ghost processPktHelper(pr, sNew, rawPkt)
+		sNew.getRawPktAccWithoutPreservePath(rawPkt)
 		return
  	}
 }
@@ -1783,7 +1802,8 @@ preserves verifyutils.BytesAcc(origPacket)
 preserves cap(rawPkt) == bufSize
 preserves buffer.Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures err == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures err != nil ==> verifyutils.BytesAcc(rawPkt)
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
@@ -1859,6 +1879,7 @@ pred (p *scionPacketProcessor) Mem() {
 requires scmpH.Mem() && scmpP.Mem()
 preserves p.Mem()
 ensures pr.Mem()
+ensures errRet != nil
 decreases
 func (p *scionPacketProcessor) packSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer,
 	cause error) (pr processResult, errRet error) {
@@ -2006,6 +2027,7 @@ preserves verifyutils.BytesAcc(origPacket)
 ensures scionLayer.getRawScionPath() == old(scionLayer.getRawScionPath())
 ensures scionLayer.getRawPkt() == old(scionLayer.getRawPkt())
 ensures pr.Mem()
+ensures err != nil
 decreases
 func packSCMP2(d *DataPlane, quote []byte, origPacket []byte, ingressID uint16, scionLayer *slayers.SCION, 
 	buffer gopacket.SerializeBuffer, scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, cause error) (pr processResult, err error) {
@@ -2933,14 +2955,12 @@ ensures acc(&p.infoField) && acc(&p.segmentChange)
 ensures verifyutils.BytesAcc(p.origPacket)
 ensures (p.buffer).Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+ensures errProcess == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+ensures errProcess != nil ==> verifyutils.BytesAcc(rawPktAlias)
 func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
 		pr, errProcess := r, err
-		
-		processHelper(pr, p.scionLayer, p.rawPkt)
-
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+		p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess
 	}
 
@@ -2953,10 +2973,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 		unfold p.Mem()
 		pr, errProcess = r, err
-		
-		processHelper(pr, p.scionLayer, p.rawPkt)
-
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+		p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess
 	}
 
@@ -2967,10 +2984,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		unfold p.Mem()
 		pr, errProcess = processResult{}, err
 		fold pr.Mem()
-
-		processHelper(pr, p.scionLayer, p.rawPkt)
-
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+		p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess
 	}
 	
@@ -2980,10 +2994,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 		unfold p.Mem()
 		pr, errProcess = r, err
-
-		processHelper(pr, p.scionLayer, p.rawPkt)
-
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+		p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess
 	}
 	
@@ -2993,10 +3004,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 		unfold p.Mem()
 		pr, errProcess = r, err
-
-		processHelper(pr, p.scionLayer, p.rawPkt)
-
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+		p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess
 	}
 	
@@ -3029,10 +3037,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 			unfold p.Mem()
 			pr, errProcess = r, err
-
-			processHelper(pr, p.scionLayer, p.rawPkt)
-
-			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+			p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 			return pr, errProcess
 		}
 		// (tlino) original code, adapted code below
@@ -3077,10 +3082,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			// return r, err
 
 			pr, errProcess = r, err
-
-			processHelper(pr, p.scionLayer, p.rawPkt)
-
-			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+			p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 			return pr, errProcess
 		}
 	}
@@ -3092,11 +3094,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		unfold p.Mem()
 		pr, errProcess = r, err
 		assert pr.Mem()
-		assert p.scionLayer.Mem()
-		
-		processHelper(pr, p.scionLayer, p.rawPkt)
-
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+		p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess
 	}
 	
@@ -3109,10 +3107,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 		unfold p.Mem()
 		pr, errProcess = r, err
-
-		processHelper(pr, p.scionLayer, p.rawPkt)
-
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+		p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess
 	}
 	if r, err := p.validateEgressUp(); err != nil {
@@ -3121,10 +3116,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 		unfold p.Mem()
 		pr, errProcess = r, err
-
-		processHelper(pr, p.scionLayer, p.rawPkt)
-
-		assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+		p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess
 	}
 	egressID := p.egressInterface()
@@ -3139,10 +3131,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 			unfold p.Mem()
 			pr, errProcess = processResult{}, err
 			fold pr.Mem()
-
-			processHelper(pr, p.scionLayer, p.rawPkt)
-
-			assert pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
+			p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 			return pr, errProcess
 		}
 		// (tlino) original code, adapted code is below
@@ -3229,19 +3218,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 	assert pr.Mem()
 	unfold p.Mem()
-
-	// get access to rawPkt, use new variables to make Gobra work
-	assert p.scionLayer.Mem()
-	sl := p.scionLayer
-	rp := p.rawPkt
-	sl.getRawPktAccWithoutPreservePath(rp)
-	assert verifyutils.BytesAcc(rp)
-
-	package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
-		unfold pr.Mem()
-	}
-
-	assert pr.Mem() --* (verifyutils.BytesAcc(rp))
+	p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 	return pr, errProcess
 }
 
@@ -3276,7 +3253,8 @@ requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
 preserves buffer.Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 // (tlino) s is now a *slayers.SCION
 // func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
@@ -3293,7 +3271,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		pr, errRet = processResult{}, malformedPath()
 		fold pr.Mem()
 		fold s.Mem()
-		ghost processOHPHelper(pr, s, rawPkt)
+		s.getRawPktAccWithoutPreservePath(rawPkt)
 		return 
 	}
 	// (tlino) the deserializer enforces that p != nil holds
@@ -3317,7 +3295,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 			malformedPath(), "srcIA", s.SrcIA, "dstIA", s.DstIA)
 		fold pr.Mem()
 		fold s.Mem()
-		ghost processOHPHelper(pr, s, rawPkt)
+		s.getRawPktAccWithoutPreservePath(rawPkt)
 		return 
 	}
 	
@@ -3335,7 +3313,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 		fold pr.Mem()
 		fold s.Mem()
-		ghost processOHPHelper(pr, s, rawPkt)
+		s.getRawPktAccWithoutPreservePath(rawPkt)
 		return 
 	}
 
@@ -3361,7 +3339,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 			// return processResult{}, err
 			pr, errRet = processResult{}, err
 			fold pr.Mem()
-			ghost processOHPHelper(pr, s, rawPkt)
+			s.getRawPktAccWithoutPreservePath(rawPkt)
 			return 
 		}
 
@@ -3403,7 +3381,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 
 		fold pr.Mem()
 		fold s.Mem()
-		ghost processOHPHelper(pr, s, rawPkt)
+		s.getRawPktAccWithoutPreservePath(rawPkt)
 		return 
 	}
 
@@ -3423,7 +3401,8 @@ requires s.Mem() && s.getRawPkt() == rawPkt
 requires p != nil && p == s.getOHPPath() 
 preserves buffer.Mem()
 ensures pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCION,
 	buffer gopacket.SerializeBuffer, p *onehop.Path) (pr processResult, errRet error) {
 
@@ -3454,7 +3433,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		// return processResult{}, err
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
-		ghost processOHPHelper(pr, s, rawPkt)
+		s.getRawPktAccWithoutPreservePath(rawPkt)
 		return 
 	}
 	
@@ -3464,7 +3443,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		// return processResult{}, err
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
-		ghost processOHPHelper(pr, s, rawPkt)
+		s.getRawPktAccWithoutPreservePath(rawPkt)
 		return
 	}
 	// (tlino) original code, adapted code is below
@@ -3672,6 +3651,7 @@ ensures s.scionL == old(s.scionL)
 ensures s.scionL.getRawScionPath() == old(s.scionL.getRawScionPath())
 ensures s.scionL.getRawPkt() == old(s.scionL.getRawPkt())
 ensures b != nil ==> verifyutils.BytesAcc(b)
+ensures e != nil
 decreases _
 func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
 	incPath bool, cause error) (b []byte, e error) //{
