@@ -108,26 +108,29 @@ type bfdSession interface {
 type BatchConn interface {
 	pred Mem()
 
-	// pred e_recvBatch(ghost t Place)
+	// pred recvBatch(ghost t Place)
 
 	// ghost
-	// requires e_recvBatch(t)
+	// requires recvBatch(t)
 	// pure func get_recvBatch_t1(t Place) (t1 Place)
 
-	requires token(t) && e_recvBatch(t)
+	requires token(t) && recvBatch(t)
 	preserves acc(Mem(), _)
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
 	ensures err == nil ==> token(t1) && t1 == old(get_recvBatch_t1(t))
-	ensures err != nil ==> t1 == t && token(t1) && e_recvBatch(t1) && get_recvBatch_t1(t) == old(get_recvBatch_t1(t))
+	ensures err != nil ==> t1 == t && token(t1) && recvBatch(t1) && get_recvBatch_t1(t) == old(get_recvBatch_t1(t))
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost t1 Place)
 
+	requires token(t) && sendBatch(t)
 	preserves acc(Mem(), _)
 	preserves acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 <= n && n <= len(msgs)
+	ensures err == nil ==> token(t1) && t1 == old(get_sendBatch_t1(t))
+	ensures err != nil ==> t1 == t && token(t1) && sendBatch(t1) && get_sendBatch_t1(t) == old(get_sendBatch_t1(t))
 	decreases
-	WriteBatch(msgs underlayconn.Messages) (n int, err error)
+	WriteBatch(msgs underlayconn.Messages, ghost t Place) (n int, err error, ghost t1 Place)
 
 	requires Mem()
 	Close() error
@@ -1238,7 +1241,10 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 	messages := createMessages(pld, address, connection)
 	assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 
-	_, err := result.OutConn.WriteBatch(messages)
+	ghost var currentPlace Place
+	inhale token(currentPlace) && P(currentPlace)
+
+	_, err, t1 := result.OutConn.WriteBatch(messages, currentPlace)
 
 	apply acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 	assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
@@ -3807,14 +3813,20 @@ type Place domain {
 	func place(int) Place
 }
 
-pred e_recvBatch(ghost t Place)
+pred recvBatch(ghost t Place)
 
 ghost
-requires e_recvBatch(t)
+requires recvBatch(t)
 pure func get_recvBatch_t1(t Place) (t1 Place)
+
+pred sendBatch(ghost t Place)
+
+ghost
+requires sendBatch(t)
+pure func get_sendBatch_t1(t Place) (t1 Place) 
 
 pred token(t Place)
 
 pred P(pl Place) {
-	(e_recvBatch(pl) && P(get_recvBatch_t1(pl))) //&& (e_sendBatch(pl) && P(get_sendBatch_t1(pl)))
+	(recvBatch(pl) && P(get_recvBatch_t1(pl))) //&& (e_sendBatch(pl) && P(get_sendBatch_t1(pl)))
 }
