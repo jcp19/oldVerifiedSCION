@@ -1,0 +1,12 @@
+package message
+
+import (
+    underlayconn "gobra/lib/underlay/conn"
+)
+
+type Message domain {}
+
+ghost
+requires msgs.Mem()
+ensures len(msgs) == len(res)
+pure func AbsMessages(msgs underlayconn.Messages) (res seq[Message])

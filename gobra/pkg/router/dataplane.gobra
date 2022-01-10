@@ -69,6 +69,11 @@ import (
 	"gobra/pkg/router/control"
 
 	"gobra/verifyutils"
+	pl "gobra/io_verification/place"
+	io "gobra/io_verification/iospec"
+	absMsg "gobra/io_verification/message"
+
+
 )
 
 const (
@@ -114,23 +119,23 @@ type BatchConn interface {
 	// requires recvBatch(t)
 	// pure func get_recvBatch_t1(t Place) (t1 Place)
 
-	requires token(t) && recvBatch(t)
+	requires pl.token(t) && io.recvBatch(t)
 	preserves acc(Mem(), _)
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
-	ensures err == nil ==> token(t1) && t1 == old(get_recvBatch_t1(t))
-	ensures err != nil ==> t1 == t && token(t1) && recvBatch(t1) && get_recvBatch_t1(t) == old(get_recvBatch_t1(t))
-	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost t1 Place)
+	ensures err == nil ==> pl.token(t1) && t1 == old(io.get_recvBatch_t1(t))
+	ensures err != nil ==> t1 == t && pl.token(t1) && io.recvBatch(t1) && io.get_recvBatch_t1(t) == old(io.get_recvBatch_t1(t))
+	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t pl.Place) (n int, err error, ghost t1 pl.Place)
 
-	requires token(t) && sendBatch(t)
+	requires pl.token(t) && io.sendBatch(t)
 	preserves acc(Mem(), _)
 	preserves acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 <= n && n <= len(msgs)
-	ensures err == nil ==> token(t1) && t1 == old(get_sendBatch_t1(t))
-	ensures err != nil ==> t1 == t && token(t1) && sendBatch(t1) && get_sendBatch_t1(t) == old(get_sendBatch_t1(t))
+	ensures err == nil ==> pl.token(t1) && t1 == old(io.get_sendBatch_t1(t))
+	ensures err != nil ==> t1 == t && pl.token(t1) && io.sendBatch(t1) && io.get_sendBatch_t1(t) == old(io.get_sendBatch_t1(t))
 	decreases
-	WriteBatch(msgs underlayconn.Messages, ghost t Place) (n int, err error, ghost t1 Place)
+	WriteBatch(msgs underlayconn.Messages, ghost t pl.Place) (n int, err error, ghost t1 pl.Place)
 
 	requires Mem()
 	Close() error
@@ -997,8 +1002,8 @@ requires ingressID >= 0
 func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) outlined code to separate function
 
-	ghost var currentPlace Place
-	inhale token(currentPlace) && P(currentPlace)
+	ghost var currentPlace pl.Place
+	inhale pl.token(currentPlace) && io.P(currentPlace)
 
 	msgs, metas := initReadClosureBuffer()
 
@@ -1022,16 +1027,12 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant buffer.Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 	invariant len(origPacket) == bufSize
-	invariant token(currentPlace) && P(currentPlace)
+	invariant pl.token(currentPlace) && io.P(currentPlace)
 	for d.isRunning() {
-		unfold P(currentPlace)
+		unfold io.P(currentPlace)
 		pkts, err, t1 := rd.ReadBatch(msgs, metas, currentPlace)
 
 		currentPlace = t1
-
-		ghost if err != nil {
-			fold P(currentPlace)
-		}
 
 		// (tlino) continue not supported by gobra
 		// adapted code is below
@@ -1048,9 +1049,10 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			// (tlino) log not supported yet
 			// log.Debug("Failed to read batch", "err", err)
 			// error metric
+			fold io.P(currentPlace)
 		} else if pkts > 0 {
 			// (tlino) outlined code to separate function
-			processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt)
+			currentPlace = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, currentPlace)
 
 			// (tlino) outlined code to separate function
 			resetReadClosureBuffers(msgs, pkts)
@@ -1100,6 +1102,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since d.processPkt does not terminate
+requires pl.token(t) && io.P(t)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1112,9 +1115,12 @@ preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
 preserves acc(scmpErr)
 preserves buffer.Mem()
+ensures pl.token(t1) && io.P(t1)
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
-	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) {
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost t pl.Place) (ghost t1 pl.Place) {
 	unfold msgs.Mem()
+
+	ghost var currentPlace pl.Place = t
 
 	// (tlino) range not supported by Gobra
 	// for _, p := range msgs[:pkts] {
@@ -1129,6 +1135,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant acc(scmpErr)
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
+	invariant pl.token(currentPlace) && io.P(currentPlace)
 	for i := 0; i < pkts; i++ {
 		unfold (&msgs[i]).Mem()
 		p := msgs[i]
@@ -1174,7 +1181,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 		switch {
 		case err == nil:
 			// (tlino) outline stuff after switch to processBatchHelper
-			processBatchHelper(d, result, localRawPkt)
+			currentPlace = processBatchHelper(d, result, localRawPkt, currentPlace)
 		case errors.As(err, scmpErr):
 			if !scmpErr.TypeCode.InfoMsg() {
 				// (tlino) log not yet supported
@@ -1188,7 +1195,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 			result.setOutConn(rd)
 		
 			// (tlino) outline stuff after switch to processBatchHelper
-			processBatchHelper(d, result, localRawPkt)
+			currentPlace = processBatchHelper(d, result, localRawPkt, currentPlace)
 		default:
 			// log.Debug("Error processing packet", "err", err)
 
@@ -1206,22 +1213,25 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 		fold (&msgs[i]).Mem()
   	}
 	fold msgs.Mem()
+	return currentPlace
 }
 
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
+requires pl.token(t) && io.P(t)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 preserves result.Mem() --* verifyutils.BytesAcc(rawPkt)
+ensures pl.token(t1) && io.P(t1)
 decreases
-func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
+func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost t pl.Place) (ghost t1 pl.Place) {
 	unfold result.Mem()
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
 		// (tlino) continue not supported
 		// continue
 		fold result.Mem()
-		return
+		return t
 	}
 	// (tlino) original code, adapted code is below
 	// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
@@ -1241,10 +1251,8 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 	messages := createMessages(pld, address, connection)
 	assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 
-	ghost var currentPlace Place
-	inhale token(currentPlace) && P(currentPlace)
-
-	_, err, t1 := result.OutConn.WriteBatch(messages, currentPlace)
+	unfold io.P(t)
+	_, err, t1 := result.OutConn.WriteBatch(messages, t)
 
 	apply acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 	assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
@@ -1256,7 +1264,8 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 		// error metric // (tlino) original scion comment
 		// (tlino) continue not supported
 		// continue
-		return
+		fold io.P(t1)
+		return t1
 	}
 	// ok metric
 	// (tlino) use getters to simplify verification
@@ -1266,6 +1275,7 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
 	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
+	return t1
 }
 
 // (tlino) Verified
@@ -3807,26 +3817,4 @@ func serviceMetricLabels(localIA addr.IA, svc addr.HostSVC) (res prometheus.Labe
 		"isd_as":  localIA.String(),
 		"service": svc.BaseString(),
 	}
-}
-
-type Place domain {
-	func place(int) Place
-}
-
-pred recvBatch(ghost t Place)
-
-ghost
-requires recvBatch(t)
-pure func get_recvBatch_t1(t Place) (t1 Place)
-
-pred sendBatch(ghost t Place)
-
-ghost
-requires sendBatch(t)
-pure func get_sendBatch_t1(t Place) (t1 Place) 
-
-pred token(t Place)
-
-pred P(pl Place) {
-	(recvBatch(pl) && P(get_recvBatch_t1(pl))) //&& (e_sendBatch(pl) && P(get_sendBatch_t1(pl)))
 }

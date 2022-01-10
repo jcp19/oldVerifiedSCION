@@ -1,0 +1,24 @@
+package iospec
+
+import (
+    "gobra/io_verification/place"
+    "gobra/io_verification/message"
+)
+
+//////////////////// recvBatch ////////////////////
+pred recvBatch(ghost t place.Place)
+
+ghost
+requires recvBatch(t)
+pure func get_recvBatch_t1(t place.Place) (t1 place.Place)
+
+ghost
+requires recvBatch(t)
+pure func get_recvBatch_msgs(t place.Place) (msgs seq[message.Message])
+
+//////////////////// recvBatch ////////////////////
+pred sendBatch(ghost t place.Place)
+
+ghost
+requires sendBatch(t)
+pure func get_sendBatch_t1(t place.Place) (t1 place.Place) 

@@ -1,0 +1,10 @@
+package iospec
+
+import (
+    "gobra/io_verification/place"
+)
+
+pred P(pl place.Place) {
+	(recvBatch(pl) && P(get_recvBatch_t1(pl))) &&
+	(sendBatch(pl) && P(get_sendBatch_t1(pl)))
+}
