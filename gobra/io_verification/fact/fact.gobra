@@ -1,0 +1,47 @@
+package fact
+
+import (
+    . "gobra/io_verification/message"
+)
+
+type Fact domain {
+
+    // each fact has a unique 'type':
+    func getType(Fact) int
+
+    // incoming batches
+    func inFact(Messages) Fact
+    func getIn(Fact) Messages
+
+    // outgoing batches
+    func outFact(Messages) Fact
+    func getOut(Fact) Messages
+
+    // message
+    func messageFact(Message) Fact
+    func getMessage(Fact) Message
+
+    // processed message
+    func processedMessageFact(Message) Fact
+    func getProcessedMessage(Fact) Message
+
+    // inFact injective
+    axiom {
+        forall t Messages :: { inFact(t) } getIn(inFact(t)) == t && getType(inFact(t)) == 0
+    }
+
+    // outFact injective
+    axiom {
+        forall t Messages :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 1
+    }
+
+    // messageFact injective
+    axiom {
+        forall t Message :: { messageFact(t) } getMessage(messageFact(t)) == t && getType(messageFact(t)) == 2
+    }
+
+    // processed message injective
+    axiom {
+        forall t Message :: { processedMessageFact(t) } getProcessedMessage(processedMessageFact(t)) == t && getType(processedMessageFact(t)) == 3
+    }
+}
