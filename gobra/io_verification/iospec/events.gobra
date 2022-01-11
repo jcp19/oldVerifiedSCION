@@ -6,19 +6,19 @@ import (
 )
 
 //////////////////// recvBatch ////////////////////
-pred recvBatch(ghost t Place)
+pred recvBatch(ghost batchConnId uint16, ghost t Place)
 
 ghost
-requires recvBatch(t)
-pure func get_recvBatch_t1(t Place) (t1 Place)
+requires recvBatch(batchConnId, t)
+pure func get_recvBatch_t1(batchConnId uint16, t Place) (t1 Place)
 
 ghost
-requires recvBatch(t)
-pure func get_recvBatch_msgs(t Place) (msgs Messages)
+requires recvBatch(batchConnId, t)
+pure func get_recvBatch_msgs(batchConnId uint16, t Place) (msgs Messages)
 
 //////////////////// recvBatch ////////////////////
-pred sendBatch(ghost t Place, ghost msg Messages)
+pred sendBatch(ghost batchConnId uint16, ghost t Place, ghost msg Messages)
 
 ghost
-requires sendBatch(t, msgs)
-pure func get_sendBatch_t1(t Place, msgs Messages) (t1 Place)
+requires sendBatch(batchConnId, t, msgs)
+pure func get_sendBatch_t1(batchConnId uint16, t Place, msgs Messages) (t1 Place)

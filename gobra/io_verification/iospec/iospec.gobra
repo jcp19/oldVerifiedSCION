@@ -6,15 +6,15 @@ import (
     . "gobra/io_verification/message"
 )
 
-pred P(pl Place, ghost s mset[Fact]) {
-	P_recvBatch(pl, s) &&
-    P_sendBatch(pl, s)
+pred P(batchConnId uint16, pl Place, ghost s mset[Fact]) {
+	P_recvBatch(batchConnId, pl, s) &&
+    P_sendBatch(batchConnId, pl, s)
 }
 
-pred P_recvBatch(pl Place, ghost s mset[Fact]) {
-    recvBatch(pl) && P(get_recvBatch_t1(pl), s union mset[Fact]{ inFact(get_recvBatch_msgs(pl)) })
+pred P_recvBatch(batchConnId uint16, pl Place, ghost s mset[Fact]) {
+    recvBatch(batchConnId, pl) && P(batchConnId, get_recvBatch_t1(batchConnId, pl), s union mset[Fact]{ inFact(get_recvBatch_msgs(batchConnId, pl)) })
 }
 
-pred P_sendBatch(pl Place, ghost s mset[Fact]) {
-    forall m Messages :: (outFact(m) # s) > 0 ==> sendBatch(pl, m) && P(get_sendBatch_t1(pl, m), s setminus mset[Fact]{ outFact(m) })
+pred P_sendBatch(batchConnId uint16, pl Place, ghost s mset[Fact]) {
+    forall m Messages :: (outFact(m) # s) > 0 ==> sendBatch(batchConnId, pl, m) && P(batchConnId, get_sendBatch_t1(batchConnId, pl, m), s setminus mset[Fact]{ outFact(m) })
 }

@@ -4,4 +4,4 @@ type Place domain {
 	func place(int) Place
 }
 
-pred token(t Place)
+pred token(batchConnId uint16, t Place)

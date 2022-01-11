@@ -118,26 +118,26 @@ type BatchConn interface {
 	// requires recvBatch(t)
 	// pure func get_recvBatch_t1(t Place) (t1 Place)
 
-	requires token(t) && recvBatch(t)
+	requires token(batchConnId, t) && recvBatch(batchConnId, t)
 	preserves acc(Mem(), _)
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 < n && n <= len(msgs) && n <= len(metas)
 	ensures err == nil ==> rcvMsgs == msgs && absMsgs == AbsMessages(rcvMsgs)
-	ensures err == nil ==> token(t1) && t1 == old(get_recvBatch_t1(t)) && absMsgs == old(get_recvBatch_msgs(t))
-	ensures err != nil ==> t1 == t && token(t1) && recvBatch(t1) && get_recvBatch_t1(t) == old(get_recvBatch_t1(t)) && get_recvBatch_msgs(t) == old(get_recvBatch_msgs(t))
-	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost rcvMsgs underlayconn.Messages, ghost absMsgs Messages, ghost t1 Place)
+	ensures err == nil ==> token(batchConnId, t1) && t1 == old(get_recvBatch_t1(batchConnId, t)) && absMsgs == old(get_recvBatch_msgs(batchConnId, t))
+	ensures err != nil ==> t1 == t && token(batchConnId, t1) && recvBatch(batchConnId, t1) && get_recvBatch_t1(batchConnId, t) == old(get_recvBatch_t1(batchConnId, t)) && get_recvBatch_msgs(batchConnId, t) == old(get_recvBatch_msgs(batchConnId, t))
+	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place, ghost batchConnId uint16) (n int, err error, ghost rcvMsgs underlayconn.Messages, ghost absMsgs Messages, ghost t1 Place)
 
 	requires acc(msgs.MemSend(), 1/1000)
-	requires token(t) && sendBatch(t, absMsgs)
+	requires token(batchConnId, t) && sendBatch(batchConnId, t, absMsgs)
 	requires absMsgs == AbsMessagesSend(msgs)
 	preserves acc(Mem(), _)
 	ensures acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 < n && n <= len(msgs)
-	ensures err == nil ==> token(t1) && t1 == old(get_sendBatch_t1(t, absMsgs))
-	ensures err != nil ==> t1 == t && token(t1) && sendBatch(t, absMsgs) && get_sendBatch_t1(t, absMsgs) == old(get_sendBatch_t1(t, absMsgs))
+	ensures err == nil ==> token(batchConnId, t1) && t1 == old(get_sendBatch_t1(batchConnId, t, absMsgs))
+	ensures err != nil ==> t1 == t && token(batchConnId, t1) && sendBatch(batchConnId, t, absMsgs) && get_sendBatch_t1(batchConnId, t, absMsgs) == old(get_sendBatch_t1(batchConnId, t, absMsgs))
 	decreases
-	WriteBatch(msgs underlayconn.Messages, ghost t Place, ghost absMsgs Messages) (n int, err error, ghost t1 Place)
+	WriteBatch(msgs underlayconn.Messages, ghost t Place, ghost absMsgs Messages, ghost batchConnId uint16) (n int, err error, ghost t1 Place)
 
 	requires Mem()
 	Close() error
@@ -1006,7 +1006,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 
 	ghost var currentPlace Place
 	ghost var state mset[Fact]
-	inhale token(currentPlace) && P(currentPlace, state)
+	inhale token(ingressID, currentPlace) && P(ingressID, currentPlace, state)
 
 	msgs, metas := initReadClosureBuffer()
 
@@ -1030,11 +1030,11 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant buffer.Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 	invariant len(origPacket) == bufSize
-	invariant token(currentPlace) && P(currentPlace, state)
+	invariant token(ingressID, currentPlace) && P(ingressID, currentPlace, state)
 	for d.isRunning() {
-		unfold P(currentPlace, state)
-		unfold P_recvBatch(currentPlace, state)
-		pkts, err, aliasMessages, absMessages, t1 := rd.ReadBatch(msgs, metas, currentPlace)
+		unfold P(ingressID, currentPlace, state)
+		unfold P_recvBatch(ingressID, currentPlace, state)
+		pkts, err, aliasMessages, absMessages, t1 := rd.ReadBatch(msgs, metas, currentPlace, ingressID)
 		currentPlace = t1
 
 		// (tlino) continue not supported by gobra
@@ -1052,14 +1052,14 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			// (tlino) log not supported yet
 			// log.Debug("Failed to read batch", "err", err)
 			// error metric
-			fold P_recvBatch(currentPlace, state)
-			fold P(currentPlace, state)
-			assert P(currentPlace, state)
+			fold P_recvBatch(ingressID, currentPlace, state)
+			fold P(ingressID, currentPlace, state)
+			assert P(ingressID, currentPlace, state)
 		} else if pkts > 0 {
 			state = state union mset[Fact]{ inFact(absMessages) }
 			// (tlino) outlined code to separate function
 			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, currentPlace, state)
-			assert P(currentPlace, state)
+			assert P(ingressID, currentPlace, state)
 
 			// (tlino) outlined code to separate function
 			resetReadClosureBuffers(msgs, pkts)
@@ -1109,7 +1109,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since d.processPkt does not terminate
-requires token(t) && P(t, s)
+requires token(ingressID, t) && P(ingressID, t, s)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1122,7 +1122,7 @@ preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
 preserves acc(scmpErr)
 preserves buffer.Mem()
-ensures token(t1) && P(t1, s1)
+ensures token(ingressID, t1) && P(ingressID, t1, s1)
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
 	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold msgs.Mem()
@@ -1143,7 +1143,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant acc(scmpErr)
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
-	invariant token(currentPlace) && P(currentPlace, currentState)
+	invariant token(ingressID, currentPlace) && P(ingressID, currentPlace, currentState)
 	for i := 0; i < pkts; i++ {
 		unfold (&msgs[i]).Mem()
 		p := msgs[i]
@@ -1189,7 +1189,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 		switch {
 		case err == nil:
 			// (tlino) outline stuff after switch to processBatchHelper
-			currentPlace, currentState = processBatchHelper(d, result, localRawPkt, currentPlace, currentState)
+			currentPlace, currentState = processBatchHelper(d, result, localRawPkt, currentPlace, currentState, ingressID)
 		case errors.As(err, scmpErr):
 			if !scmpErr.TypeCode.InfoMsg() {
 				// (tlino) log not yet supported
@@ -1203,7 +1203,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 			result.setOutConn(rd)
 		
 			// (tlino) outline stuff after switch to processBatchHelper
-			currentPlace, currentState = processBatchHelper(d, result, localRawPkt, currentPlace, currentState)
+			currentPlace, currentState = processBatchHelper(d, result, localRawPkt, currentPlace, currentState, ingressID)
 		default:
 			// log.Debug("Error processing packet", "err", err)
 
@@ -1226,21 +1226,22 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
-requires token(t) && P(t, s)
+requires ingressID >= 0
+requires token(ingressID, t) && P(ingressID, t, s)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 preserves result.Mem() --* verifyutils.BytesAcc(rawPkt)
-ensures token(t1) && P(t1, s1)
+ensures token(ingressID, t1) && P(ingressID, t1, s1)
 decreases
-func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
+func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost t Place, ghost s mset[Fact], ghost ingressID uint16) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold result.Mem()
 	ghost var currentState mset[Fact] = s
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
 		// (tlino) continue not supported
 		// continue
 		fold result.Mem()
-		assert P(t, currentState)
+		assert P(ingressID, t, currentState)
 		return t, currentState
 	}
 	// (tlino) original code, adapted code is below
@@ -1261,13 +1262,13 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost
 	messages := createMessages(pld, address, connection)
 	assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 
-	unfold P(t,s)
-	unfold P_sendBatch(t,s)
+	unfold P(ingressID, t,s)
+	unfold P_sendBatch(ingressID, t,s)
 
 	ghost var absMsgs Messages
 	assume absMsgs == AbsMessagesSend(messages)
 	assume (outFact(absMsgs) # currentState) > 0
-	_, err, t1 := result.OutConn.WriteBatch(messages, t, absMsgs)
+	_, err, t1 := result.OutConn.WriteBatch(messages, t, absMsgs, ingressID)
 
 	apply acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 	assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && acc(result.OutConn.Mem(), 1/1000)) --* result.Mem()
@@ -1279,9 +1280,9 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost
 		// error metric // (tlino) original scion comment
 		// (tlino) continue not supported
 		// continue
-		fold P_sendBatch(t1,currentState)
-		fold P(t, currentState)
-		assert P(t, currentState)
+		fold P_sendBatch(ingressID, t1, currentState)
+		fold P(ingressID, t, currentState)
+		assert P(ingressID, t, currentState)
 		return t1, currentState
 	}
 	currentState = currentState setminus mset[Fact]{ outFact(absMsgs) }
@@ -1293,7 +1294,7 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
 	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
-	assert P(t1, currentState)
+	assert P(ingressID, t1, currentState)
 	return t1, currentState
 }
 
