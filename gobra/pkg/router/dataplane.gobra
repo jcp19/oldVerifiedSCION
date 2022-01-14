@@ -1170,7 +1170,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// (tlino) in the original code processMessage was part of a loop
 		// (tlino) and after the non-default switch cases a set of
 		// (tlino) statements followd. These statements have been moved to processMessageHelper
-		processMessageHelper(d, result, rawPkt)
+		processMessageHelper(d, result)
 		apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
 	case errors.As(err, scmpErr):
 		if !scmpErr.TypeCode.InfoMsg() {
@@ -1178,24 +1178,15 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 			// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
 		}
 		// SCMP go back the way they came.
-		// (tlino) use setters to simplify verification
+		// (tlino) use update method to simplify verification
 		// result.OutAddr = p.Addr
 		// result.OutConn = rd
-
-		// unfold result.Mem()
-		// result.OutAddr = p.Addr
-		// result.OutConn = rd
-		// fold result.Mem()
 		result = updateProcessResult(result, rd, p.Addr)
-
-		// r := &result
-		// r.setOutAddr(p.Addr)
-		// r.setOutConn(rd)
 	
 		// (tlino) in the original code processMessage was part of a loop
 		// (tlino) and after the non-default switch cases a set of
 		// (tlino) statements followd. These statements have been moved to processMessageHelper
-		processMessageHelper(d, result, rawPkt)
+		processMessageHelper(d, result)
 	default:
 		// log.Debug("Error processing packet", "err", err)
 
@@ -1212,6 +1203,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	fold p.Mem()
 }
 
+// (tlino) Verified
 // (tlino) added helper function to simplify verification
 requires pr.Mem()
 preserves acc(rd.Mem(), _)
@@ -1257,7 +1249,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 decreases
-func processMessageHelper(d *DataPlane, result processResult, rawPkt []byte) {
+func processMessageHelper(d *DataPlane, result processResult) {
 	unfold result.Mem()
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
 		// (tlino) This helper function used to be a part of a loop,
@@ -1442,27 +1434,6 @@ ensures res == unfolding acc(pr.Mem(), _) in len(pr.OutPkt)
 decreases
 func (pr processResult) GetOutPktLen() (res int) {
 	return unfolding acc(pr.Mem(), _) in len(pr.OutPkt)
-}
-
-// (tlino) TODO: cannot verify body with this contracts, 
-// (tlino) however function verifies if we use "requires pr.Mem()" instead of "preserves pr.Mem()"
-preserves acc(pr) && (*pr).Mem()
-decreases
-func (pr *processResult) setOutAddr(add net.Addr) {
-	unfold (*pr).Mem()
-	(*pr).OutAddr = add
-	fold (*pr).Mem()
-}
-
-// (tlino) TODO: cannot verify body with this contracts, 
-// (tlino) however function verifies if we use "requires pr.Mem()" instead of "preserves pr.Mem()"
-preserves acc(pr) && (*pr).Mem()
-requires acc(b.Mem(), _)
-decreases
-func (pr *processResult) setOutConn(b BatchConn) {
-	unfold (*pr).Mem()
-	(*pr).OutConn = b
-	fold (*pr).Mem()
 }
 // (tlino) end of getters and setters
 
@@ -2921,21 +2892,6 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 }
 
 // (tlino) Verified
-// (tlino) added helper function to create magic wand 
-ghost
-requires pr.Mem()
-requires scionLayer.Mem()
-requires rawPkt != nil && rawPkt == scionLayer.getRawPkt()
-ensures pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
-decreases
-func processHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
-	scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
-	assert verifyutils.BytesAcc(rawPkt)
-	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
-}
-
-// (tlino) Verified
 // (tlino) This method needs an alias to rawPkt as ghost argument, such that it can relate
 // (tlino) pr.Mem() --* verifyutils.BytesAcc(rawPktAlias) to pr.Mem() --* verifyutils.BytesAcc(p.rawPkt)
 // (tlino) We cannot prove termination of this method, since p.resolveInbound() might not terminate
@@ -3230,20 +3186,6 @@ ensures len(res) == path.MacLen
 ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
 decreases _
 func (d *DataPlane) getDummyMac(p *onehop.Path) (res []byte)
-
-// (tlino) Verified
-// (tlino) added helper function to create the magic wand
-ghost
-requires scionLayer.Mem()
-requires rawPkt == scionLayer.getRawPkt()
-preserves pr.Mem()
-ensures pr.Mem() --* verifyutils.BytesAcc(rawPkt)
-decreases
-func processOHPHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte) {
-	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
-		scionLayer.getRawPktAccWithoutPreservePath(rawPkt)
-	}
-}
 
 // (tlino) Verified
 // (tlino) we cannot prove termination of this method, since processOHP2 might not terminate
@@ -3656,41 +3598,16 @@ decreases _
 func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.SerializableLayer, 
 	incPath bool, cause error) (b []byte, e error) //{
 
-	// // We use the original packet but put the already updated path, because usually a router will
-	// // not keep a copy of the original/unmodified packet around.
-	// unfold s.Mem()
-	// unfold s.scionL.Mem()
-	// // (tlino) access Raw over tmp, added check
-	// // (tlino) find more elegant solution
-	// // pathRaw := (s.scionL.Path).(*scion.Raw).Raw
-	// tmpPath, ok := (s.scionL.Path).(*scion.Raw)
-	// // if !ok {
-	// // 	assume false
-	// // 	panic(e)
-	// // }
+// 	// We use the original packet but put the already updated path, because usually a router will
+// 	// not keep a copy of the original/unmodified packet around.
+// 	pathRaw := s.scionL.Path.(*scion.Raw).Raw
 
-	// assume typeOf(tmpPath) == *scion.Raw && tmpPath != nil
-	// unfold tmpPath.Mem()
-	// pathRaw := tmpPath.Raw
-	// assert forall i int :: 0 <= i && i < len(pathRaw) ==> acc(&pathRaw[i])
-	// // (tlino) use gopacket.NilDecodeFeedback{} instead of global gopacket.NilDecodeFeedback
-	// // if err := s.scionL.DecodeFromBytes(s.origPacket, gopacket.NilDecodeFeedback); err != nil {
-	// // 	panic(err)
-	// // }
-	
-	// fold tmpPath.Mem()
-	// unfold verifyutils.BytesAcc(s.origPacket)
-	// df := gopacket.NilDecodeFeedback{}
-	// fold df.Mem()
-	// if err := s.scionL.DecodeFromBytes(s.origPacket, df); err != nil {
-	// 	assume false
-	// 	panic(err)
-	// }
+// 	if err := s.scionL.DecodeFromBytes(s.origPacket, gopacket.NilDecodeFeedback); err != nil {
+// 		panic(err)
+// 	}
+// 	path := s.scionL.Path.(*scion.Raw)
 
-	// unfold s.scionL.Mem()
-	// path := (s.scionL.Path).(*scion.Raw)
-
- 	// path.Raw = pathRaw
+// 	path.Raw = pathRaw
 // 	decPath, err := path.ToDecoded()
 // 	if err != nil {
 // 		return nil, serrors.Wrap(cannotRoute, err, "details", "decoding raw path")
@@ -3736,7 +3653,7 @@ func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.Serializable
 // 	}
 // 	scmpLayers := []gopacket.SerializableLayer{s.scionL, scmpH, scmpP}
 // 	if cause != nil {
-// 		add quote for errors.
+// 		// add quote for errors.
 // 		hdrLen := slayers.CmnHdrLen + s.scionL.AddrHdrLen() + s.scionL.Path.Len()
 // 		switch scmpH.TypeCode.Type() {
 // 		case slayers.SCMPTypeExternalInterfaceDown:
@@ -3756,8 +3673,8 @@ func (s scmpPacker) prepareSCMP(scmpH *slayers.SCMP, scmpP gopacket.Serializable
 // 	if err != nil {
 // 		return nil, serrors.Wrap(cannotRoute, err, "details", "serializing SCMP message")
 // 	}
-// 	return s.buffer.Bytes(), scmpError{TypeCode: scmpH.TypeCode, Cause: cause}
-//}
+// 	return s.buffer.Bytes(), scmpError{TypeCode: scmpH.TypeCode, Cause: cause}	
+// }
 
 // (tlino) This type is never used
 type segIDUpdater struct{}

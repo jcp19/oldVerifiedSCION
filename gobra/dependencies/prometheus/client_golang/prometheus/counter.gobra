@@ -101,14 +101,3 @@ preserves acc(labels, _)
 ensures acc(c.Mem(), _)
 decreases _
 func (v *CounterVec) With(labels Labels) (c Counter)
-
-// (tlino) Since the Prometheus reference implementaiton of CounterVec and Counter is used,
-// (tlino) we can be sure that CounterVec and Counter are thread safe
-// (tlino) this method has been added to simplify verification.
-// (tlino) this method is only used during setup of the dataplane
-// (tlino) during setup we need to give back all access permission
-preserves acc(v.Mem(), 1/1000)
-preserves acc(labels, _)
-ensures c.Mem()
-decreases _
-func (v *CounterVec) WithSetup(labels Labels) (c Counter)
