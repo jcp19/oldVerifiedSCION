@@ -14,11 +14,23 @@ pure func get_recvBatch_t1(t Place) (t1 Place)
 
 ghost
 requires recvBatch(t)
-pure func get_recvBatch_msgs(t Place) (msgs Messages)
+pure func get_recvBatch_msgs(t Place) (msgs seq[Message])
 
 //////////////////// recvBatch ////////////////////
-pred sendBatch(ghost t Place, ghost msg Messages)
+pred sendBatch(ghost t Place, ghost msg Message)
 
 ghost
 requires sendBatch(t, msgs)
-pure func get_sendBatch_t1(t Place, msgs Messages) (t1 Place)
+pure func get_sendBatch_t1(t Place, msgs Message) (t1 Place)
+
+// foo
+pred foo(ghost t Place, ghost msg Message)
+
+ghost
+requires foo(t, msg)
+pure func get_foo_t1(t Place, msg Message) (t1 Place)
+
+ghost
+requires token(t) && foo(t, msg)
+ensures token(t1) && t1 == old(get_foo_t1(t, msg))
+func internal_foo(t Place, msg Message) (t1 Place)

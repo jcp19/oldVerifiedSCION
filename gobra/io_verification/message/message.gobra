@@ -6,17 +6,13 @@ import (
 
 type Message domain {}
 
-type Messages domain {
-    func getMessage(int) Message
-}
-
 // (tlino) used to abstract messages when receiving
 ghost
 requires msgs.Mem()
-pure func AbsMessages(msgs underlayconn.Messages) (res Messages)
+pure func AbsMessages(msgs underlayconn.Messages) (res seq[Message])
 
 // (tlino) used to abstract message when sending
 // (tlino) scion only sends a single message at a time
 ghost
 requires acc(msgs.MemSend(), 1/1000)
-pure func AbsMessagesSend(msgs underlayconn.Messages) (res Messages)
+pure func AbsMessagesSend(msgs underlayconn.Messages) (res Message)
