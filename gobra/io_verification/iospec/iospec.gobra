@@ -3,27 +3,41 @@ package iospec
 import (
     . "gobra/io_verification/place"
     . "gobra/io_verification/fact"
-    . "gobra/io_verification/message"
+    . "gobra/io_verification/abstract"
 )
 
 pred P(pl Place, ghost s mset[Fact]) {
-	P_recvBatch(pl, s) &&
-    P_sendBatch(pl, s)
+    P_readBatch(pl, s) &&
+    P_writeBatch(pl, s)
 }
 
-pred P_recvBatch(pl Place, ghost s mset[Fact]) {
-    recvBatch(pl) && P(get_recvBatch_t1(pl), s union ToMset(get_recvBatch_msgs(pl)))
+pred P_readBatch(pl Place, ghost s mset[Fact]) {
+    readBatch_p(pl) && P(get_readBatch_t1(pl), s union ToMset(get_readBatch_msgs(pl)))
 }
 
-pred P_sendBatch(pl Place, ghost s mset[Fact]) {
-    forall m Message :: { sendBatch(pl, m) } (outFact(m) # s) > 0 ==> sendBatch(pl, m) && P(get_sendBatch_t1(pl, m), s setminus mset[Fact]{ outFact(m) })
+pred P_writeBatch(pl Place, ghost s mset[Fact]) {
+    forall m AbsMessage :: (outFact(m) # s) > 0 ==> writeBatch_p(pl, m) && P(get_writeBatch_t1(pl, m), s setminus mset[Fact]{ outFact(m) })
 }
 
 pred P_foo(pl Place, ghost s mset[Fact]) {
-    forall m Message :: { foo(pl, m) } foo(pl, m) && P(get_foo_t1(pl, m), s union mset[Fact]{ outFact(m) }) 
+    forall m AbsMessage :: { foo(pl, m) } foo(pl, m) && P(get_foo_t1(pl, m), s union mset[Fact]{ outFact(m) }) 
 }
 
 ghost
 ensures forall i int :: 0 <= i && i < len(s) ==> inFact(s[i]) in res
 // should not add other facts
-pure func ToMset(s seq[Message]) (res mset[Fact])
+pure func ToMset(s seq[AbsMessage]) (res mset[Fact])
+
+requires token(t) && P(t, s)
+func test1(ghost t Place, ghost s mset[Fact]) {
+    unfold P(t,s)
+    unfold P_writeBatch(t,s)
+    fold P_writeBatch(t,s)
+    fold P(t,s)
+}
+
+// requires token(t) && P_foo(t, s)
+// func test(ghost t Place, ghost s mset[Fact]) {
+//     unfold P_foo(t, s)
+//     fold P_foo(t, s)
+// }

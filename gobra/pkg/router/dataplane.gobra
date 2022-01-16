@@ -71,7 +71,7 @@ import (
 	"gobra/verifyutils"
 	. "gobra/io_verification/place"
 	. "gobra/io_verification/iospec"
-	. "gobra/io_verification/message"
+	. "gobra/io_verification/abstract"
 	. "gobra/io_verification/fact"
 )
 
@@ -118,26 +118,26 @@ type BatchConn interface {
 	// requires recvBatch(t)
 	// pure func get_recvBatch_t1(t Place) (t1 Place)
 
-	requires token(t) && recvBatch(t)
+	requires token(t) && readBatch_p(t)
 	preserves acc(Mem(), _)
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 < n && n <= len(msgs) && n <= len(metas)
 	ensures err == nil ==> absMsgs == AbsMessages(msgs)
-	ensures err == nil ==> token(t1) && t1 == old(get_recvBatch_t1(t)) && absMsgs == old(get_recvBatch_msgs(t))
-	ensures err != nil ==> t1 == t && token(t1) && recvBatch(t1) && get_recvBatch_t1(t) == old(get_recvBatch_t1(t)) && get_recvBatch_msgs(t) == old(get_recvBatch_msgs(t))
-	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost absMsgs seq[Message], ghost t1 Place)
+	ensures err == nil ==> token(t1) && t1 == old(get_readBatch_t1(t)) && absMsgs == old(get_readBatch_msgs(t))
+	ensures err != nil ==> t1 == t && token(t1) && readBatch_p(t1) && get_readBatch_t1(t) == old(get_readBatch_t1(t)) && get_readBatch_msgs(t) == old(get_readBatch_msgs(t))
+	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost absMsgs seq[AbsMessage], ghost t1 Place)
 
 	requires acc(msgs.MemSend(), 1/1000)
-	requires token(t) && sendBatch(t, absMsgs)
+	requires token(t) && writeBatch_p(t, absMsgs)
 	requires absMsgs == AbsMessagesSend(msgs)
 	preserves acc(Mem(), _)
 	ensures acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 < n && n <= len(msgs)
-	ensures err == nil ==> token(t1) && t1 == old(get_sendBatch_t1(t, absMsgs))
-	ensures err != nil ==> t1 == t && token(t1) && sendBatch(t, absMsgs) && get_sendBatch_t1(t, absMsgs) == old(get_sendBatch_t1(t, absMsgs))
+	ensures err == nil ==> token(t1) && t1 == old(get_writeBatch_t1(t, absMsgs))
+	ensures err != nil ==> t1 == t && token(t1) && writeBatch_p(t, absMsgs) && get_writeBatch_t1(t, absMsgs) == old(get_writeBatch_t1(t, absMsgs))
 	decreases
-	WriteBatch(msgs underlayconn.Messages, ghost t Place, ghost absMsgs Message) (n int, err error, ghost t1 Place)
+	WriteBatch(msgs underlayconn.Messages, ghost t Place, ghost absMsgs AbsMessage) (n int, err error, ghost t1 Place)
 
 	requires Mem()
 	Close() error
@@ -1033,7 +1033,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant token(currentPlace) && P(currentPlace, state)
 	for d.isRunning() {
 		unfold P(currentPlace, state)
-		unfold P_recvBatch(currentPlace, state)
+		unfold P_readBatch(currentPlace, state)
 		pkts, err, absMessages, t1 := rd.ReadBatch(msgs, metas, currentPlace)
 		currentPlace = t1
 
@@ -1052,7 +1052,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			// (tlino) log not supported yet
 			// log.Debug("Failed to read batch", "err", err)
 			// error metric
-			fold P_recvBatch(currentPlace, state)
+			fold P_readBatch(currentPlace, state)
 			fold P(currentPlace, state)
 			assert P(currentPlace, state)
 		} else if pkts > 0 {
@@ -1262,9 +1262,9 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost
 	assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && acc(address.Mem(), 1/1000) && acc(connection.Mem(), 1/1000))
 
 	unfold P(t,s)
-	unfold P_sendBatch(t,s)
+	unfold P_writeBatch(t,s)
 
-	ghost var absMsgs Message
+	ghost var absMsgs AbsMessage
 	assume absMsgs == AbsMessagesSend(messages)
 	assume (outFact(absMsgs) # currentState) > 0
 	_, err, t1 := result.OutConn.WriteBatch(messages, t, absMsgs)
@@ -1279,7 +1279,7 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost
 		// error metric // (tlino) original scion comment
 		// (tlino) continue not supported
 		// continue 
-		fold P_sendBatch(t1,currentState)
+		fold P_writeBatch(t1,currentState)
 		fold P(t, currentState)
 		assert P(t, currentState)
 		return t1, currentState
@@ -1301,8 +1301,8 @@ func processBatchHelper(d *DataPlane, result processResult, rawPkt []byte, ghost
 requires token(t) && P(t, s)
 func foo(ghost t Place, ghost s mset[Fact]) {
 	unfold P(t,s)
-	unfold P_sendBatch(t,s)
-	fold P_sendBatch(t,s)
+	unfold P_writeBatch(t,s)
+	fold P_writeBatch(t,s)
 	fold P(t,s)
 }
 

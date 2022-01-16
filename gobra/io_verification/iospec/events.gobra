@@ -2,35 +2,35 @@ package iospec
 
 import (
     . "gobra/io_verification/place"
-    . "gobra/io_verification/message"
+    . "gobra/io_verification/abstract"
 )
 
-//////////////////// recvBatch ////////////////////
-pred recvBatch(ghost t Place)
+// readBatch (BIO)
+pred readBatch_p(ghost t Place)
 
 ghost
-requires recvBatch(t)
-pure func get_recvBatch_t1(t Place) (t1 Place)
+requires readBatch_p(t)
+pure func get_readBatch_t1(t Place) (t1 Place)
 
 ghost
-requires recvBatch(t)
-pure func get_recvBatch_msgs(t Place) (msgs seq[Message])
+requires readBatch_p(t)
+pure func get_readBatch_msgs(t Place) (msgs seq[AbsMessage])
 
-//////////////////// recvBatch ////////////////////
-pred sendBatch(ghost t Place, ghost msg Message)
+// writeBatch (BIO)
+pred writeBatch_p(ghost t Place, ghost msg AbsMessage)
 
 ghost
-requires sendBatch(t, msgs)
-pure func get_sendBatch_t1(t Place, msgs Message) (t1 Place)
+requires writeBatch_p(t, msgs)
+pure func get_writeBatch_t1(t Place, msgs AbsMessage) (t1 Place)
 
-// foo
-pred foo(ghost t Place, ghost msg Message)
+// foo (internal)
+pred foo(ghost t Place, ghost msg AbsMessage)
 
 ghost
 requires foo(t, msg)
-pure func get_foo_t1(t Place, msg Message) (t1 Place)
+pure func get_foo_t1(t Place, msg AbsMessage) (t1 Place)
 
 ghost
 requires token(t) && foo(t, msg)
 ensures token(t1) && t1 == old(get_foo_t1(t, msg))
-func internal_foo(t Place, msg Message) (t1 Place)
+func internal_foo(t Place, msg AbsMessage) (t1 Place)

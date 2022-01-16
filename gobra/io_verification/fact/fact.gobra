@@ -1,7 +1,7 @@
 package fact
 
 import (
-    . "gobra/io_verification/message"
+    . "gobra/io_verification/abstract"
 )
 
 type Fact domain {
@@ -10,42 +10,54 @@ type Fact domain {
     func getType(Fact) int
 
     // incoming batches
-    func inFact(Message) Fact
-    func getIn(Fact) Message
+    func inFact(AbsMessage) Fact
+    func getIn(Fact) AbsMessage
 
     // outgoing batches
-    func outFact(Message) Fact
-    func getOut(Fact) Message
+    func outFact(AbsMessage) Fact
+    func getOut(Fact) AbsMessage
 
-    // message
-    func messageFact(Message) Fact
-    func getMessage(Fact) Message
+    // Absmessage
+    func messageFact(AbsMessage) Fact
+    func getMessage(Fact) AbsMessage
 
-    // processed message
-    func processedMessageFact(Message) Fact
-    func getProcessedMessage(Fact) Message
+    // processed Absmessage
+    func processedMessageFact(AbsMessage) Fact
+    func getProcessedMessage(Fact) AbsMessage
 
     // inFact injective
     axiom {
-        forall t Message :: { inFact(t) } getIn(inFact(t)) == t && getType(inFact(t)) == 0
+        forall t AbsMessage :: { inFact(t) } getIn(inFact(t)) == t && getType(inFact(t)) == 0
     }
 
     // outFact injective
     axiom {
-        forall t Message :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 1
+        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 1
     }
-
+    // outFact injective
     axiom {
-        forall t1 Message, t2 Message :: t1 != t2 ==> outFact(t1) != outFact(t2)
+        forall t1, t2 AbsMessage :: t1 != t2 ==> outFact(t1) != outFact(t2)
     }
 
     // messageFact injective
     axiom {
-        forall t Message :: { messageFact(t) } getMessage(messageFact(t)) == t && getType(messageFact(t)) == 2
+        forall t AbsMessage :: { messageFact(t) } getMessage(messageFact(t)) == t && getType(messageFact(t)) == 2
     }
 
-    // processed message injective
+    // processed Absmessage injective
     axiom {
-        forall t Message :: { processedMessageFact(t) } getProcessedMessage(processedMessageFact(t)) == t && getType(processedMessageFact(t)) == 3
+        forall t AbsMessage :: { processedMessageFact(t) } getProcessedMessage(processedMessageFact(t)) == t && getType(processedMessageFact(t)) == 3
     }
+}
+
+ghost
+ensures res == l subset s
+pure func G(l, s mset[Fact]) (res bool) {
+    return l subset s
+}
+
+ghost
+ensures res == (s setminus l) union r
+pure func U(l, r, s mset[Fact]) (res mset[Fact]) {
+    return (s setminus l) union r
 }
