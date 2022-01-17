@@ -15,6 +15,18 @@ pred P_readBatch(pl Place, ghost s mset[Fact]) {
     readBatch_p(pl) && P(get_readBatch_t1(pl), s union ToMset(get_readBatch_msgs(pl)))
 }
 
+pred P_decodePkt(pl Place, ghost s mset[Fact]) {
+    forall m AbsMessage :: { decodePkt_p(pl, m) } (
+        (inFact(m) # s) > 0 && G_decodePkt(m, s)) ==> 
+    decodePkt_p(pl, m) && P(get_decodePkt_t1(pl, m), U(s, mset[Fact]{inFact(m)}, mset[Fact]{decodedPktFact(get_decodePkt_res(pl, m))}))}
+
+// pred P_decodePktV2(pl Place, ghost s mset[Fact]) {
+//     forall m AbsMessage, pkt AbsSCION, l mset[Fact], r mset[Fact] :: { decodePkt_p_2(pl, l, r) } (
+//         l == mset[Fact]{inFact(m)} &&
+//         r == mset[Fact]{decodedPktFact(pkt)}) ==> 
+//     decodePkt_p_2(pl, l, r) && P(get_decodePkt_t1_2(pl, l, r), U(s, l, r))
+// }
+
 pred P_writeBatch(pl Place, ghost s mset[Fact]) {
     forall m AbsMessage :: (outFact(m) # s) > 0 ==> writeBatch_p(pl, m) && P(get_writeBatch_t1(pl, m), s setminus mset[Fact]{ outFact(m) })
 }
@@ -41,3 +53,21 @@ func test1(ghost t Place, ghost s mset[Fact]) {
 //     unfold P_foo(t, s)
 //     fold P_foo(t, s)
 // }
+
+requires token(t) && P_decodePkt(t, s)
+requires mset[Fact]{inFact(m)} subset s
+requires G_decodePkt(m, s)
+func test(ghost t Place, ghost s mset[Fact], m AbsMessage, pkt AbsSCION) {
+    unfold P_decodePkt(t, s)
+    assert decodePkt_p(t, m)
+    p_end := get_decodePkt_t1(t, m)
+    set_end := (s setminus mset[Fact]{inFact(m)}) union mset[Fact]{decodedPktFact(get_decodePkt_res(t, m))}
+
+    assert P(p_end, set_end)
+}
+
+ghost
+ensures res == true
+pure func G_decodePkt(m AbsMessage, s mset[Fact]) (res bool) {
+    return true
+}

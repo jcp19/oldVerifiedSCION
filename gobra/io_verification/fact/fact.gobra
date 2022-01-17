@@ -9,55 +9,73 @@ type Fact domain {
     // each fact has a unique 'type':
     func getType(Fact) int
 
-    // incoming batches
+    // incoming Message
     func inFact(AbsMessage) Fact
     func getIn(Fact) AbsMessage
 
-    // outgoing batches
+    // decoded Pkt
+    func decodedPktFact(AbsSCION) Fact
+    func getDecodedPktFact(Fact) AbsSCION
+
+    // processed Pkt
+    func processedPktFact(AbsProcessResult) Fact
+    func getProcessedPktFact(Fact) AbsProcessResult
+
+    // outgoing Message
     func outFact(AbsMessage) Fact
     func getOut(Fact) AbsMessage
-
-    // Absmessage
-    func messageFact(AbsMessage) Fact
-    func getMessage(Fact) AbsMessage
-
-    // processed Absmessage
-    func processedMessageFact(AbsMessage) Fact
-    func getProcessedMessage(Fact) AbsMessage
 
     // inFact injective
     axiom {
         forall t AbsMessage :: { inFact(t) } getIn(inFact(t)) == t && getType(inFact(t)) == 0
     }
+    // inFact injective
+    axiom {
+        forall t1, t2 AbsMessage :: t1 != t2 ==> inFact(t1) != inFact(t2)
+    }
+
+    // decodedPktFact injective
+    axiom {
+        forall t AbsSCION :: { decodedPktFact(t) } getDecodedPktFact(decodedPktFact(t)) == t && getType(decodedPktFact(t)) == 1
+    }
+    // decodedPktFact injective
+    axiom {
+        forall t1, t2 AbsSCION :: t1 != t2 ==> decodedPktFact(t1) != decodedPktFact(t2)
+    }
+
+    // processedPktFact injective
+    axiom {
+        forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t && getType(processedPktFact(t)) == 2
+    }
+    // processedPktFact injective
+    axiom {
+        forall t1, t2 AbsProcessResult :: t1 != t2 ==> processedPktFact(t1) != processedPktFact(t2)
+    }
 
     // outFact injective
     axiom {
-        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 1
+        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 3
     }
     // outFact injective
     axiom {
         forall t1, t2 AbsMessage :: t1 != t2 ==> outFact(t1) != outFact(t2)
     }
-
-    // messageFact injective
-    axiom {
-        forall t AbsMessage :: { messageFact(t) } getMessage(messageFact(t)) == t && getType(messageFact(t)) == 2
-    }
-
-    // processed Absmessage injective
-    axiom {
-        forall t AbsMessage :: { processedMessageFact(t) } getProcessedMessage(processedMessageFact(t)) == t && getType(processedMessageFact(t)) == 3
-    }
 }
 
 ghost
 ensures res == l subset s
-pure func G(l, s mset[Fact]) (res bool) {
+pure func G(s, l mset[Fact]) (res bool) {
     return l subset s
 }
 
 ghost
 ensures res == (s setminus l) union r
-pure func U(l, r, s mset[Fact]) (res mset[Fact]) {
+pure func U(s, l, r mset[Fact]) (res mset[Fact]) {
     return (s setminus l) union r
+}
+
+ghost
+ensures res == mset[Fact] {}
+pure func EmptySet() (res mset[Fact]) {
+    return mset[Fact] {}
 }
