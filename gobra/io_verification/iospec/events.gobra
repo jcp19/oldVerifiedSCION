@@ -35,18 +35,6 @@ ensures token(t1) && t1 == old(get_decodePkt_t1(t, m))
 ensures res == old(get_decodePkt_res(t, m))
 func decodePkt_f(t Place, m AbsMessage) (t1 Place, res AbsSCION)
 
-// decodePkt (internal) v2
-pred decodePkt_p_2(ghost t Place, ghost l mset[Fact], ghost r mset[Fact])
-
-ghost
-requires decodePkt_p_2(t, l, r)
-pure func get_decodePkt_t1_2(t Place, l mset[Fact], r mset[Fact]) (t1 Place)
-
-ghost
-requires token(t) && decodePkt_p_2(t, l, r)
-ensures token(t1) && t1 == old(get_decodePkt_t1_2(t, l, r))
-func decodePkt_f_2(t Place, l mset[Fact], r mset[Fact]) (t1 Place)
-
 // processIntraBFD (internal)
 pred processIntraBFD_p(ghost t Place, ghost s AbsSCION)
 
@@ -138,15 +126,3 @@ pred writeBatch_p(ghost t Place, ghost msg AbsMessage)
 ghost
 requires writeBatch_p(t, msgs)
 pure func get_writeBatch_t1(t Place, msgs AbsMessage) (t1 Place)
-
-// foo (internal)
-pred foo(ghost t Place, ghost msg AbsMessage)
-
-ghost
-requires foo(t, msg)
-pure func get_foo_t1(t Place, msg AbsMessage) (t1 Place)
-
-ghost
-requires token(t) && foo(t, msg)
-ensures token(t1) && t1 == old(get_foo_t1(t, msg))
-func internal_foo(t Place, msg AbsMessage) (t1 Place)
