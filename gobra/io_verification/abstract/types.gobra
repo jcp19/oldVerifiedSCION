@@ -1,0 +1,22 @@
+package abstract
+
+import (
+    underlayconn "gobra/lib/underlay/conn"
+)
+
+type AbsMessage domain {}
+
+type AbsSCION domain {}
+
+type AbsProcessResult domain {}
+
+// (tlino) used to abstract messages when receiving
+ghost
+requires msgs.Mem()
+pure func AbsMessages(msgs underlayconn.Messages) (res seq[AbsMessage])
+
+// (tlino) used to abstract Absmessage when sending
+// (tlino) scion only sends a single Absmessage at a time
+ghost
+requires acc(msgs.MemSend(), 1/1000)
+pure func AbsMessagesSend(msgs underlayconn.Messages) (res AbsMessage)
