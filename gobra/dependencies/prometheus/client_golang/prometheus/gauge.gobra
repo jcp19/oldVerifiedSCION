@@ -104,12 +104,12 @@ requires forall i int :: 0 <= i && i < len(labelNames) ==> acc(&labelNames[i])
 ensures  g.Mem()
 func NewGaugeVec(opts GaugeOpts, labelNames []string) (g *GaugeVec)
 
-// The Prometheus reference implementaiton of GaugeVec and Gauge ensures thread-safety
+// (tlino) The Prometheus reference implementaiton of GaugeVec and Gauge ensures thread-safety
 // With works as GetMetricWith, but panics where GetMetricWithLabels would have
 // returned an error. Not returning an error allows shortcuts like
 //     myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
 preserves acc(v.Mem(), _)
 preserves acc(labels, _)
 ensures g.Mem()
-decreases
+decreases _
 func (v *GaugeVec) With(labels Labels) (g Gauge)
