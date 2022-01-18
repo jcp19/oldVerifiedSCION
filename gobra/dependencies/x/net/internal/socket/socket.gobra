@@ -40,7 +40,7 @@ pred (m *Message) MemSend() {
 	acc(&(m.Buffers)[0]) &&
 	(forall k int :: 0 <= k && k < len((m.Buffers)[0]) ==> acc(&(m.Buffers)[0][k])) &&
 	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
-	m.Addr.Mem()
+	(m.Addr != nil ==> m.Addr.Mem())
 }
 
 // (tlino) added helper function

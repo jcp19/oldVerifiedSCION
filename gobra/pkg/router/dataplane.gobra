@@ -1415,18 +1415,23 @@ func (d *DataPlane) initMetrics() {
 	}
 }
 
+// (tlino) added ghost field AddrFromDataplane, since the OutAddr is eigher given by the router
+// (tlino) or it is parsed from the Packet (OutPkt).
 type processResult struct {
 	EgressID uint16
 	OutConn  BatchConn
 	OutAddr  net.Addr
 	OutPkt   []byte
+	// ghost
+	AddrFromDataplane bool
 }
 
-// (tlino) This predicate doesn't require permission to pr.OutAddr, since
-// (tlino) pr.OutAddr is often a subslice of pr.OutPkt.
+// (tlino) This predicate only requires permission to pr.OutAddr, when pr.OutAddr comes from
+// (tlino) a lookup in the Dataplane. In other cases pr.OutAddr might be aliased with pr.OutPkt
 pred (pr processResult) Mem() {
 	(pr.EgressID >= 0) &&
 	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
+	(pr.AddrFromDataplane && pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), _)) &&
 	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
 }
 
@@ -3139,7 +3144,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		ghost sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
 
-		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt}, nil
+		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt, AddrFromDataplane: true}, nil
 		fold pr.Mem()
 		assert pr.Mem()
 
