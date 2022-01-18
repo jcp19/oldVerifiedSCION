@@ -118,7 +118,7 @@ type BatchConn interface {
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta) (n int, err error)
 
 	preserves acc(Mem(), _)
-	preserves acc(msgs.MemSend(), 1/200000)
+	preserves acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 <= n && n <= len(msgs)
 	decreases
 	WriteBatch(msgs underlayconn.Messages) (n int, err error)
@@ -1270,21 +1270,20 @@ func processMessageHelper(d *DataPlane, result processResult) {
 
 	fold result.Mem()
 	ghost result.getAddrAndRawPktAndAddrAcc()
-	assert (acc(result.OutAddr.Mem(), 1/200000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/200000) && acc(result.OutConn.Mem(), 1/200000)) --* result.Mem()
+	assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
 
 	// (tlino) moved message creation to outlined function
 	// (tlino) use new variables to make gobra work
 	pld := result.OutPkt
 	address := result.OutAddr
-	connection := result.OutConn
-	messages := createMessages(pld, address, connection)
-	assert acc(messages.MemSend(), 1/200000) --* (acc(verifyutils.BytesAcc(pld), 1/200000) && acc(address.Mem(), 1/200000) && acc(connection.Mem(), 1/200000))
+	messages := createMessages(pld, address)
+	assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000))
 
 	_, err := result.OutConn.WriteBatch(messages)
 
-	apply acc(messages.MemSend(), 1/200000) --* (acc(verifyutils.BytesAcc(pld), 1/200000) && acc(address.Mem(), 1/200000) && acc(connection.Mem(), 1/200000))
-	assert (acc(result.OutAddr.Mem(), 1/200000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/200000) && acc(result.OutConn.Mem(), 1/200000)) --* result.Mem()
-	apply (acc(result.OutAddr.Mem(), 1/200000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/200000) && acc(result.OutConn.Mem(), 1/200000)) --* result.Mem()
+	apply acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000))
+	assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+	apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
 	assert result.Mem()
 	if err != nil {
 		// (tlino) log not supported yet
@@ -1307,26 +1306,25 @@ func processMessageHelper(d *DataPlane, result processResult) {
 
 // (tlino) Verified
 // (tlino) added helper function
-requires acc(verifyutils.BytesAcc(payload), 1/200000)
-requires acc(address.Mem(), 1/200000)
-requires acc(connection.Mem(), 1/200000)
-ensures acc(msgs.MemSend(), 1/200000)
-ensures acc(msgs.MemSend(), 1/200000) --* (acc(verifyutils.BytesAcc(payload), 1/200000) && acc(address.Mem(), 1/200000) && acc(connection.Mem(), 1/200000))
+requires acc(verifyutils.BytesAcc(payload), 1/1000)
+requires address != nil ==> acc(address.Mem(), _)
+ensures acc(msgs.MemSend(), 1/1000)
+ensures acc(msgs.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(payload), 1/1000)
 decreases
-func createMessages(payload []byte, address net.Addr, connection BatchConn) (msgs underlayconn.Messages) {
-	unfold acc(verifyutils.BytesAcc(payload), 1/200000)
+func createMessages(payload []byte, address net.Addr) (msgs underlayconn.Messages) {
+	unfold acc(verifyutils.BytesAcc(payload), 1/1000)
 	msgs := make(underlayconn.Messages, 1)
 	msgs[0].Buffers = make([][]byte, 1)
 	(msgs[0].Buffers)[0] = payload 
 	msgs[0].Addr = address
-	assert forall i int :: 0 <= i && i < len((msgs[0].Buffers)[0]) ==> acc(&((msgs[0].Buffers)[0])[i], 1/200000)
-	fold acc((&msgs[0]).MemSend(), 1/200000)
-	fold acc(msgs.MemSend(), 1/200000)
+	assert forall i int :: 0 <= i && i < len((msgs[0].Buffers)[0]) ==> acc(&((msgs[0].Buffers)[0])[i], 1/1000)
+	fold acc((&msgs[0]).MemSend(), 1/1000)
+	fold acc(msgs.MemSend(), 1/1000)
 
-	package acc(msgs.MemSend(), 1/200000) --* (acc(verifyutils.BytesAcc(payload), 1/200000) && acc(address.Mem(), 1/200000) && acc(connection.Mem(), 1/200000)) {
-		unfold acc(msgs.MemSend(), 1/200000)
-		unfold acc((&msgs[0]).MemSend(), 1/200000)
-		fold acc(verifyutils.BytesAcc(payload), 1/200000)
+	package acc(msgs.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(payload), 1/1000) {
+		unfold acc(msgs.MemSend(), 1/1000)
+		unfold acc((&msgs[0]).MemSend(), 1/1000)
+		fold acc(verifyutils.BytesAcc(payload), 1/1000)
 	}
 }
 
@@ -1462,8 +1460,10 @@ func (pr processResult) GetOutPktLen() (res int) {
 // (tlino) thus we use a concrete permission amount
 ghost
 requires pr.Mem()
-ensures acc(pr.OutAddr.Mem(), 1/200000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/200000) && acc(pr.OutConn.Mem(), 1/200000)
-ensures (acc(pr.OutAddr.Mem(), 1/200000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/200000) && acc(pr.OutConn.Mem(), 1/200000)) --* pr.Mem()
+ensures pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), _)
+ensures acc(pr.OutConn.Mem(), _)
+ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)
+ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem()
 decreases _
 func (pr processResult) getAddrAndRawPktAndAddrAcc()
 
