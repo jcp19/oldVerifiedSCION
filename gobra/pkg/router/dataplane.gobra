@@ -1171,26 +1171,24 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// (tlino) continue isn't supported, move code after switch inside switch cases
 	switch {
 	case err == nil:
-		// (tlino) in the original code processMessage was part of a loop
-		// (tlino) and after the non-default switch cases a set of
-		// (tlino) statements followd. These statements have been moved to processMessageHelper
-		processMessageHelper(d, result)
+		// (tlino) In the original code the statements in processRegularPkt came after the switch cases.
+		// (tlino) These statements have been moved to processRegularPkt to simplify verification
+		processRegularPkt(d, result)
 		apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
 	case errors.As(err, scmpErr):
 		if !scmpErr.TypeCode.InfoMsg() {
 			// (tlino) log not yet supported
 			// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
 		}
-		// SCMP go back the way they came.
-		// (tlino) update these fields in processMessageHelper2 to simplify verification
+		// (tlino) set ghost field 
+		ghost result.setSCMPErrorFlag()
+		// SCMP go back the way they came. // (tlino) original scion comemnt
+		// (tlino) update these fields in processSCMPPkt to simplify verification
+		// (tlino) In the original code the statements in processSCMPPkt came after the switch cases.
+		// (tlino) These statements have been moved to processSCMPPkt to simplify verification
 		// result.OutAddr = p.Addr
 		// result.OutConn = rd
-		inhale verifyutils.BytesAcc(result.OutPkt)
-		processMessageHelper2(d, result, rd, p.Addr)
-	
-		// (tlino) in the original code processMessage was part of a loop
-		// (tlino) and after the non-default switch cases a set of
-		// (tlino) statements followd. These statements have been moved to processMessageHelper
+		processSCMPPkt(d, result, rd, p.Addr)
 	default:
 		// log.Debug("Error processing packet", "err", err)
 
@@ -1206,26 +1204,6 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	unfold verifyutils.BytesAcc((p.Buffers)[0])
 	fold p.Mem()
 }
-
-// (tlino) Verified
-// (tlino) added helper function to simplify verification
-// requires pr.Mem()
-// requires pr.SCMPError
-// preserves rd != nil && acc(rd.Mem(), _)
-// ensures res.Mem()
-// decreases
-// func updateProcessResult(pr processResult, rd BatchConn, addr net.Addr) (res processResult) {
-// 	unfold pr.Mem()
-// 	assert pr.SCMPError
-// 	assert pr.SCMPError ==> verifyutils.BytesAcc(pr.OutPkt)
-// 	assert verifyutils.BytesAcc(pr.OutPkt)
-// 	pr.OutConn = rd
-// 	assert pr.OutConn != nil
-// 	assert pr.OutConn != nil ==> verifyutils.BytesAcc(pr.OutPkt)
-// 	assert verifyutils.BytesAcc(pr.OutPkt)
-// 	fold pr.Mem()
-// 	return pr
-// }
 
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
@@ -1259,7 +1237,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 decreases
-func processMessageHelper(d *DataPlane, result processResult) {
+func processRegularPkt(d *DataPlane, result processResult) {
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
 		// (tlino) This helper function used to be a part of a loop,
 		// (tlino) since the continue isn't supported we use a return statement
@@ -1275,7 +1253,21 @@ func processMessageHelper(d *DataPlane, result processResult) {
 	// (tlino) added if-else block. Distinguish between two cases
 	var err error
 	if result.AddrFromDataplane {
-		return
+		ghost result.getOutPktAcc()
+		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+
+		// (tlino) moved message creation to outlined function
+		// (tlino) use new variables to make gobra work
+		pld := result.OutPkt
+		address := result.OutAddr
+		messages := createMessages(pld, address)
+		assert acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
+
+		_, err = result.OutConn.WriteBatch(messages)
+
+		apply acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
+		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+		apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
 
 	} else {
 		ghost result.getAddrAndRawPktAndAddrAcc()
@@ -1285,7 +1277,7 @@ func processMessageHelper(d *DataPlane, result processResult) {
 		// (tlino) use new variables to make gobra work
 		pld := result.OutPkt
 		address := result.OutAddr
-		messages := createMessages3(pld, address)
+		messages := createMessages2(pld, address)
 		assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000)))
 
 		_, err = result.OutConn.WriteBatch(messages)
@@ -1319,11 +1311,12 @@ func processMessageHelper(d *DataPlane, result processResult) {
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 requires acc(rd.Mem(), _)
-requires verifyutils.BytesAcc(result.OutPkt)
+requires result.SCMPError
 requires result.Mem()
 preserves acc(messageAddr.Mem(), 1/1000)
 decreases
-func processMessageHelper2(d *DataPlane, result processResult, rd BatchConn, messageAddr net.Addr) {
+func processSCMPPkt(d *DataPlane, result processResult, rd BatchConn, messageAddr net.Addr) {
+	unfold result.Mem()
 
 	// (tlino) moved updates here
 	result.OutAddr = messageAddr
@@ -1347,7 +1340,7 @@ func processMessageHelper2(d *DataPlane, result processResult, rd BatchConn, mes
 	// (tlino) use new variables to make gobra work
 	pld := result.OutPkt
 	address := result.OutAddr
-	messages := createMessages2(pld, address)
+	messages := createMessages3(pld, address)
 	assert acc(messages.MemSend(), 1/1000) --* acc(address.Mem(), 1/1000)
 
 	_, err := result.OutConn.WriteBatch(messages)
@@ -1398,12 +1391,15 @@ func createMessages(payload []byte, address net.Addr) (msgs underlayconn.Message
 		fold acc(verifyutils.BytesAcc(payload), 1/1000)
 	}
 }
+
+// (tlino) Verified
+// (tlino) added helper function
 requires acc(verifyutils.BytesAcc(payload), 1/1000)
 requires address != nil ==> acc(address.Mem(), 1/1000)
 ensures acc(msgs.MemSend(), 1/1000)
 ensures acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000)))
 decreases
-func createMessages3(payload []byte, address net.Addr) (msgs underlayconn.Messages) {
+func createMessages2(payload []byte, address net.Addr) (msgs underlayconn.Messages) {
 	unfold acc(verifyutils.BytesAcc(payload), 1/1000)
 	msgs := make(underlayconn.Messages, 1)
 	msgs[0].Buffers = make([][]byte, 1)
@@ -1427,7 +1423,7 @@ requires acc(address.Mem(), 1/1000)
 ensures acc(msgs.MemSend(), 1/1000)
 ensures acc(msgs.MemSend(), 1/1000) --* acc(address.Mem(), 1/1000)
 decreases
-func createMessages2(payload []byte, address net.Addr) (msgs underlayconn.Messages) {
+func createMessages3(payload []byte, address net.Addr) (msgs underlayconn.Messages) {
 	unfold acc(verifyutils.BytesAcc(payload), 1/1000)
 	msgs := make(underlayconn.Messages, 1)
 	msgs[0].Buffers = make([][]byte, 1)
@@ -1547,8 +1543,7 @@ pred (pr processResult) Mem() {
 	(pr.EgressID >= 0) &&
 	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
 	(pr.AddrFromDataplane && pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), _)) &&
-	(pr.OutConn != nil ==> verifyutils.BytesAcc(pr.OutPkt)) &&
-	(pr.SCMPError ==> verifyutils.BytesAcc(pr.OutPkt))
+	((pr.OutConn != nil || pr.SCMPError) ==> verifyutils.BytesAcc(pr.OutPkt))
 }
 
 // (tlino) added getter and setter methods to simplify verification
@@ -1581,6 +1576,23 @@ ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)
 ensures (acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000))) --* pr.Mem()
 decreases _
 func (pr processResult) getAddrAndRawPktAndAddrAcc()
+
+// (tlino) helper method to get read access to OutPkt
+ghost
+requires pr.Mem()
+ensures pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), _)
+ensures acc(pr.OutConn.Mem(), _)
+ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)
+ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem()
+decreases _
+func (pr processResult) getOutPktAcc()
+
+// (tlino) helper method to define a processResult as a result of type SCMP.
+ghost
+requires pr.Mem()
+ensures pr.Mem() && pr.SCMPError
+decreases _
+func (pr processResult) setSCMPErrorFlag()
 
 decreases
 pure func isZeroSCION(s slayers.SCION) bool {
