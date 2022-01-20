@@ -1250,38 +1250,43 @@ func processRegularPkt(d *DataPlane, result processResult) {
 	// 	Addr:    result.OutAddr,
 	// }}))
 
-	// (tlino) added if-else block. Distinguish between two cases
-	var err error
-	if result.AddrFromDataplane {
+	// (tlino) added if-else block. Distinguish between two cases.
+	// (tlino) if-case: address comes from dataplane and has wildcard permission
+	// (tlino) else-case: address is aliased with result.OutPkt
+	addrFromDataplane := result.AddrFromDataplane
+	var messages underlayconn.Messages
+	var pld []byte
+	var address net.Addr
+	if addrFromDataplane {
 		ghost result.getOutPktAcc()
 		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
 
 		// (tlino) moved message creation to outlined function
 		// (tlino) use new variables to make gobra work
-		pld := result.OutPkt
-		address := result.OutAddr
-		messages := createMessages(pld, address)
+		pld = result.OutPkt
+		address = result.OutAddr
+		messages = createMessages(pld, address)
 		assert acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
-
-		_, err = result.OutConn.WriteBatch(messages)
-
-		apply acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
-		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
-		apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
-
 	} else {
 		ghost result.getAddrAndRawPktAndAddrAcc()
 		assert (acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && (result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000))) --* result.Mem()
 
 		// (tlino) moved message creation to outlined function
 		// (tlino) use new variables to make gobra work
-		pld := result.OutPkt
-		address := result.OutAddr
-		messages := createMessages2(pld, address)
+		pld = result.OutPkt
+		address = result.OutAddr
+		messages = createMessages2(pld, address)
 		assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000)))
+	}
 
-		_, err = result.OutConn.WriteBatch(messages)
+	_, err := result.OutConn.WriteBatch(messages)
 
+	ghost if addrFromDataplane {
+		apply acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
+		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+		apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+
+	} else {
 		apply  acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000)))
 		assert (acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && (result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000))) --* result.Mem()
 		apply (acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && (result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000))) --* result.Mem()
@@ -1297,17 +1302,16 @@ func processRegularPkt(d *DataPlane, result processResult) {
 		// continue
 		return
 	}
-	// ok metric
-	// (tlino) use getters to simplify verification
-	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
+	// ok metric // (tlino) original scion comment
+	// (tlino) outline to own function to simplify verification
+	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
-	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
+	updateSentPacketMetrics(d, result.GetEgressID(), result.GetOutPktLen())
 }
 
 // Verified
+// (tlino) added helper function to simplify verification
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 requires acc(rd.Mem(), _)
@@ -1317,6 +1321,9 @@ preserves acc(messageAddr.Mem(), 1/1000)
 decreases
 func processSCMPPkt(d *DataPlane, result processResult, rd BatchConn, messageAddr net.Addr) {
 	unfold result.Mem()
+
+	// (tlino) added field
+	egressId := result.EgressID
 
 	// (tlino) moved updates here
 	result.OutAddr = messageAddr
@@ -1356,15 +1363,25 @@ func processSCMPPkt(d *DataPlane, result processResult, rd BatchConn, messageAdd
 		// continue
 		return
 	}
-	// ok metric
-	// (tlino) use getters to simplify verification
-	assume result.EgressID >= 0
-	outputLabels := interfaceToMetricLabels(result.EgressID, d.GetLocalAI(), d.GetNeighborIAs())
+	// ok metric // (tlino) original scion comment
+	// (tlino) outline to own function to simplify verification
+	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+	updateSentPacketMetrics(d, egressId, len(pld))
+}
+
+// (tlino) Verified
+// (tlino) added helper function
+requires acc(DataPlaneMutexInvariant(d), _)
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
+requires egressID >= 0
+decreases
+func updateSentPacketMetrics(d *DataPlane, egressID uint16, pldLength int) {
+	outputLabels := interfaceToMetricLabels(egressID, d.GetLocalAI(), d.GetNeighborIAs())
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
-	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(len(pld)))
+	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(pldLength))
 }
 
 // (tlino) Verified
@@ -3638,6 +3655,9 @@ func updateSCIONLayer(rawPkt []byte, s *slayers.SCION, buffer gopacket.Serialize
 	return nil
 }
 
+// (tlino) This type is used in the BFD protocol implementation.
+// (tlino) The BFD session as an independant component.
+// (tlino) At the moment we only verify the dataplane.
 type bfdSend struct {
 	conn             BatchConn
 	srcAddr, dstAddr *net.UDPAddr
@@ -3646,10 +3666,12 @@ type bfdSend struct {
 	ifID             uint16
 }
 
+// (tlino) Function used in the BFD protocol implementation.
 //pure func (b *bfdSend) String() string {
 //	return b.srcAddr.String()
 //}
 
+// (tlino) Function used in the BFD protocol implementation.
 //func (b *bfdSend) Send(bfd *layers.BFD) error {
 //	scn := &slayers.SCION{
 //		Version:      0,
@@ -3861,6 +3883,7 @@ func interfaceToMetricLabels(id uint16, localIA addr.IA,
 	}
 }
 
+// (tlino) Verified
 ensures acc(res)
 decreases
 func serviceMetricLabels(localIA addr.IA, svc addr.HostSVC) (res prometheus.Labels) {
