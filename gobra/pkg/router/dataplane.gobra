@@ -1250,7 +1250,7 @@ func processRegularPkt(d *DataPlane, result processResult) {
 	// 	Addr:    result.OutAddr,
 	// }}))
 
-	// (tlino) added if-else block. Distinguish between two cases.
+	// (tlino) added if-else block distinguishes between two cases.
 	// (tlino) if-case: address comes from dataplane and has wildcard permission
 	// (tlino) else-case: address is aliased with result.OutPkt
 	addrFromDataplane := result.AddrFromDataplane
