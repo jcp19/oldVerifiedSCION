@@ -20,7 +20,6 @@ jobs:
       - name: Verify all Gobra files
         uses: jogasser/gobra-action@main
         with:
-          imageVersion: verified-scion-preview-without-selective
           packageLocation: gobra
           globalTimeout: 13h
           packageTimeout: 10h
