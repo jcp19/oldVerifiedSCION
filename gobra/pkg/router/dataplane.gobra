@@ -1604,6 +1604,40 @@ ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem()
 decreases _
 func (pr processResult) getOutPktAcc()
 
+ghost
+requires acc(pr.Mem(), 1/1000)
+requires !pr.AddrFromDataplane
+requires pr.OutAddr != nil
+requires pr.OutPkt != nil
+ensures acc(pr.OutAddr.Mem(), 1/1000)
+ensures acc(pr.OutAddr.Mem(), 1/1000) --* acc(pr.Mem(), 1/1000)
+decreases _
+func (pr processResult) getOutAddr()
+
+ghost
+requires pr.Mem()
+requires pr.OutAddr != nil
+requires pr.OutPkt != nil
+ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)
+ensures pr.AddrFromDataplane ==> acc(pr.OutAddr.Mem(), _) && (acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem())
+ensures !pr.AddrFromDataplane ==> acc(pr.OutAddr.Mem(), 1/1000) && ((acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
+decreases _
+func (pr processResult) getOutAddrAndOutPkt() //{
+// 	if pr.AddrFromDataplane {
+// 		unfold pr.Mem()
+// 		package acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem() {
+// 			fold pr.Mem()
+// 		}
+// 	} else {
+// 		pr.getOutAddr()
+// 		unfold acc(pr.Mem(), 1/1000)
+// 		package (acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
+// 			apply acc(pr.OutAddr.Mem(), 1/1000) --* acc(pr.Mem(), 1/1000)
+// 			fold acc(pr.Mem(), 1/1000)
+// 		}
+// 	}
+// }
+
 // (tlino) helper method to define a processResult as a result of type SCMP.
 ghost
 requires pr.Mem()
