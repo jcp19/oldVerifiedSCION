@@ -1181,7 +1181,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 			// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
 		}
 		// (tlino) set ghost field 
-		ghost result.setSCMPErrorFlag()
+		// ghost result.setSCMPErrorFlag()
 		// SCMP go back the way they came. // (tlino) original scion comemnt
 		// (tlino) update these fields in processSCMPPkt to simplify verification
 		// (tlino) In the original code the statements in processSCMPPkt came after the switch cases.
@@ -1315,7 +1315,7 @@ func processRegularPkt(d *DataPlane, result processResult) {
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 requires acc(rd.Mem(), _)
-requires result.SCMPError
+// requires result.SCMPError
 requires result.Mem()
 preserves acc(messageAddr.Mem(), 1/1000)
 decreases
@@ -1551,7 +1551,6 @@ type processResult struct {
 	OutPkt   []byte
 	// ghost
 	AddrFromDataplane bool
-	SCMPError bool
 }
 
 // (tlino) This predicate only requires permission to pr.OutAddr, when pr.OutAddr comes from
@@ -1560,7 +1559,7 @@ pred (pr processResult) Mem() {
 	(pr.EgressID >= 0) &&
 	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
 	(pr.AddrFromDataplane && pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), _)) &&
-	((pr.OutConn != nil || pr.SCMPError) ==> verifyutils.BytesAcc(pr.OutPkt))
+	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
 }
 
 // (tlino) added getter and setter methods to simplify verification
@@ -1614,6 +1613,7 @@ ensures acc(pr.OutAddr.Mem(), 1/1000) --* acc(pr.Mem(), 1/1000)
 decreases _
 func (pr processResult) getOutAddr()
 
+// (tlino) Verified
 ghost
 requires pr.Mem()
 requires pr.OutAddr != nil
@@ -1622,28 +1622,28 @@ ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)
 ensures pr.AddrFromDataplane ==> acc(pr.OutAddr.Mem(), _) && (acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem())
 ensures !pr.AddrFromDataplane ==> acc(pr.OutAddr.Mem(), 1/1000) && ((acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
 decreases _
-func (pr processResult) getOutAddrAndOutPkt() //{
-// 	if pr.AddrFromDataplane {
-// 		unfold pr.Mem()
-// 		package acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem() {
-// 			fold pr.Mem()
-// 		}
-// 	} else {
-// 		pr.getOutAddr()
-// 		unfold acc(pr.Mem(), 1/1000)
-// 		package (acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
-// 			apply acc(pr.OutAddr.Mem(), 1/1000) --* acc(pr.Mem(), 1/1000)
-// 			fold acc(pr.Mem(), 1/1000)
-// 		}
-// 	}
-// }
+func (pr processResult) getOutAddrAndOutPkt() {
+	if pr.AddrFromDataplane {
+		unfold pr.Mem()
+		package acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem() {
+			fold pr.Mem()
+		}
+	} else {
+		pr.getOutAddr()
+		unfold acc(pr.Mem(), 1/1000)
+		package (acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
+			apply acc(pr.OutAddr.Mem(), 1/1000) --* acc(pr.Mem(), 1/1000)
+			fold acc(pr.Mem(), 1/1000)
+		}
+	}
+}
 
 // (tlino) helper method to define a processResult as a result of type SCMP.
-ghost
-requires pr.Mem()
-ensures pr.Mem() && pr.SCMPError
-decreases _
-func (pr processResult) setSCMPErrorFlag()
+// ghost
+// requires pr.Mem()
+// ensures pr.Mem() && pr.SCMPError
+// decreases _
+// func (pr processResult) setSCMPErrorFlag()
 
 decreases
 pure func isZeroSCION(s slayers.SCION) bool {
