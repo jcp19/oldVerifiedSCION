@@ -507,10 +507,11 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 		return emptyValue()
 	}
 	// (joao) original code:
+	// (tlino) rename exists to ex, since exists clashes with a reversed Gobra keyword
 	// if _, exists := d.external[ifID]; exists {
 	// 		return serrors.WithCtx(alreadySet, "ifID", ifID)
 	unfold BatchConnsAcc(d.external)
-	if _, exists := (d.external)[ifID]; exists {
+	if _, ex := (d.external)[ifID]; ex {
 		// (joao) no support for defer
 		fold BatchConnsAcc(d.external)
 		fold DataPlaneMutexInvariant!<d!>()
@@ -558,10 +559,11 @@ func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
 		return emptyValue()
 	}
 	// (joao) original code (changed below):
+	// (tlino) rename exists to ex, since exists clashes with a reversed Gobra keyword
 	// if _, exists := d.neighborIAs[ifID]; exists {
 	// 	return serrors.WithCtx(alreadySet, "ifID", ifID)
 	// }
-	if _, exists := (d.neighborIAs)[ifID]; exists {
+	if _, ex := (d.neighborIAs)[ifID]; ex {
 		// (joao) Unlock explictly added, no support for defer
 		fold DataPlaneMutexInvariant!<d!>()
 		d.mtx.Unlock()
@@ -586,11 +588,12 @@ requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 	// (joao) original code (changed below):
+	// (tlino) rename exists to ex, since exists clashes with a reversed Gobra keyword
 	// if _, exists := d.linkTypes[ifID]; exists {
 	// 	return serrors.WithCtx(alreadySet, "ifID", ifID)
 	// }
 	unfold DataPlaneMutexInvariant(d)
-	if _, exists := (d.linkTypes)[ifID]; exists {
+	if _, ex := (d.linkTypes)[ifID]; ex {
 		fold DataPlaneMutexInvariant(d)
 		return serrors.WithCtx(alreadySet(), "ifID", ifID)
 	}
@@ -800,11 +803,12 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 		return emptyValue()
 	}
 	// (joao) original code (changed below):
+	// (tlino) rename exists to ex, since exists clashes with a reversed Gobra keyword
 	// if _, exists := d.internalNextHops[ifID]; exists {
 	//	 return serrors.WithCtx(alreadySet, "ifID", ifID)
 	// }
 	unfold AddrsAcc(d.internalNextHops)
-	if _, exists := (d.internalNextHops)[ifID]; exists {
+	if _, ex := (d.internalNextHops)[ifID]; ex {
 		// (joao) Unlock explictly added, no support for defer
 		fold AddrsAcc(d.internalNextHops)
 		fold DataPlaneMutexInvariant!<d!>()
@@ -1270,78 +1274,79 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 decreases
-func processMessageHelper(d *DataPlane, result processResult) //{
-// 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
-// 		// (tlino) This helper function used to be a part of a loop,
-// 		// (tlino) since the continue isn't supported we use a return statement
-// 		// continue
-// 		return
-// 	}
-// 	// (tlino) original code, adapted code is below
-// 	// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
-// 	// 	Buffers: [][]byte{result.OutPkt},
-// 	// 	Addr:    result.OutAddr,
-// 	// }}))
+func processMessageHelper(d *DataPlane, result processResult) {
+	if result.OutConn == nil { // e.g. BFD case no message is forwarded
+		// (tlino) This helper function used to be a part of a loop,
+		// (tlino) since the continue isn't supported we use a return statement
+		// continue
+		return
+	}
+	// (tlino) original code, adapted code is below
+	// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
+	// 	Buffers: [][]byte{result.OutPkt},
+	// 	Addr:    result.OutAddr,
+	// }}))
 
-// 	// (tlino) added if-else block distinguishes between two cases.
-// 	// (tlino) if-case: address comes from dataplane and has wildcard permission
-// 	// (tlino) else-case: address is aliased with result.OutPkt
-// 	addrSrc := result.AddrSrc
-// 	var messages underlayconn.Messages
-// 	var pld []byte
-// 	var address net.Addr
-// 	if addrSrc == AddrFromDataplane {
-// 		ghost result.getOutPktAcc()
-// 		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+	// (tlino) added if-else block distinguishes between two cases.
+	// (tlino) if-case: address comes from dataplane and has wildcard permission
+	// (tlino) else-case: address is aliased with result.OutPkt
 
-// 		// (tlino) moved message creation to outlined function
-// 		// (tlino) use new variables to make gobra work
-// 		pld = result.OutPkt
-// 		address = result.OutAddr
-// 		messages = createMessages(pld, address)
-// 		assert acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
-// 	} else {
-// 		ghost result.getAddrAndRawPktAndAddrAcc()
-// 		assert (acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && (result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000))) --* result.Mem()
+	ghost resultCase := result.getOutAddrAndOutPkt()
 
-// 		// (tlino) moved message creation to outlined function
-// 		// (tlino) use new variables to make gobra work
-// 		pld = result.OutPkt
-// 		address = result.OutAddr
-// 		messages = createMessages2(pld, address)
-// 		assert acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000)))
-// 	}
-
-// 	_, err := result.OutConn.WriteBatch(messages)
-
-// 	ghost if addrFromDataplane {
-// 		apply acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
-// 		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
-// 		apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
-
-// 	} else {
-// 		apply  acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000)))
-// 		assert (acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && (result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000))) --* result.Mem()
-// 		apply (acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) && (result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000))) --* result.Mem()
-// 	}
+	addrSrc := result.AddrSrc
+	var messages underlayconn.Messages
+	pld := result.OutPkt
+	address := result.OutAddr
 	
-// 	assert result.Mem()
-// 	if err != nil {
-// 		// (tlino) log not supported yet
-// 		// log.Debug("Error writing packet", "err", err)
-// 		// error metric // (tlino) original scion comment
-// 		// (tlino) This helper function used to be a part of a loop,
-// 		// (tlino) since the continue isn't supported we use a return statement
-// 		// continue
-// 		return
-// 	}
-// 	// ok metric // (tlino) original scion comment
-// 	// (tlino) outline to own function to simplify verification
-// 	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
-// 	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
-// 	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-// 	updateSentPacketMetrics(d, result.GetEgressID(), result.GetOutPktLen())
-// }
+	ghost if resultCase == 0 {
+		assert (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+		apply (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+	} else if resultCase == 1 {
+		assert (acc(result.OutAddr.Mem(), 1/1000) && (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000))) --* result.Mem()
+		apply (acc(result.OutAddr.Mem(), 1/1000) && (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000))) --* result.Mem()
+	} else if resultCase == 2 {
+		assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+		apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+	} else if resultCase == 3 {
+		assert result.Mem()
+	} else {
+		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+		apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+	}
+
+
+	// (tlino) moved message creation to outlined function
+	// messages = createMessages(pld, address, addrSrc)
+	// _, err := result.OutConn.WriteBatch(messages)
+
+	// ghost if addrSrc == AddrFromDataplane {
+	// 	apply acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
+	// 	assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+	// 	apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
+
+	// } else {
+	// 	apply  acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000)))
+	// 	assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+	// 	apply (acc(result.OutAddr.Mem(), 1/1000) &&  acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+	// }
+	
+	assert result.Mem()
+	// if err != nil {
+	// 	// (tlino) log not supported yet
+	// 	// log.Debug("Error writing packet", "err", err)
+	// 	// error metric // (tlino) original scion comment
+	// 	// (tlino) This helper function used to be a part of a loop,
+	// 	// (tlino) since the continue isn't supported we use a return statement
+	// 	// continue
+	// 	return
+	// }
+	// ok metric // (tlino) original scion comment
+	// (tlino) outline to own function to simplify verification
+	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
+	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
+	updateSentPacketMetrics(d, result.GetEgressID(), result.GetOutPktLen())
+}
 
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
@@ -1498,7 +1503,7 @@ func updateSentPacketMetrics(d *DataPlane, egressID uint16, pldLength int) {
 
 // (tlino) Verified
 // (tlino) added helper function
-requires acc(verifyutils.BytesAcc(payload), 1/1000)
+requires payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)
 requires address != nil && addrSrc == AddrFromDataplane ==> acc(address.Mem(), _)
 requires address != nil && addrSrc != AddrFromDataplane ==> acc(address.Mem(), 1/1000)
 ensures acc(msgs.MemSend(), 1/1000)
@@ -1506,9 +1511,13 @@ ensures addrSrc == AddrFromDataplane ==> (acc(msgs.MemSend(), 1/1000) --* acc(ve
 ensures addrSrc != AddrFromDataplane ==> (acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000))))
 decreases
 func createMessages(payload []byte, address net.Addr, addrSrc AddrSource) (msgs underlayconn.Messages) {
-	unfold acc(verifyutils.BytesAcc(payload), 1/1000)
 	msgs := make(underlayconn.Messages, 1)
 	msgs[0].Buffers = make([][]byte, 1)
+
+	if payload != nil {
+		unfold acc(verifyutils.BytesAcc(payload), 1/1000)
+	}
+
 	(msgs[0].Buffers)[0] = payload
 
 	if addrSrc == AddrFromDataplane {
@@ -1751,31 +1760,63 @@ decreases _
 func (pr processResult) getOutAddr()
 
 // (tlino) Verified
+// (tlino) helper method to get access pr.OutConn.Mem(), pr.OutAddr.Mem(), pr.OutPkt.Mem()
+// (tlino) this function returns different access permissions to the OutAddr and OutPkt fields.
+// (tlino) in any case the caller musst be able to get permission to pr.Mem(). Thus many magic wands are used.
+// (tlino) case 0: OutAddr comes from the dataplane, thus it has wildcard permission. The OutPkt maybe nil
+// (tlino) case 1: OutAddr comes from an ipv4.Message, thus it has a concrete permission amount of 1/1000. The OutPkt maybe nil.
+// (tlino) case 2: OutAddr is aliased with OutPkt. Inorder to perform the WriteBatch operation later, we musst give a permission amount of 1/1000 to both OutAddr and OutPkt
+// (tlino) case 3: OutAddr and OutPkt are nil, Thus only return acc(OutConn.Mem(),_) permission
+// (tlino) case 4: OutAddr is nil and OutPkt is not nil, Thus return acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)
 ghost
 requires pr.Mem()
-requires pr.OutAddr != nil
-requires pr.OutPkt != nil
-ensures acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)
-ensures pr.AddrSrc == AddrFromDataplane ==> acc(pr.OutAddr.Mem(), _) && (acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem())
-ensures pr.AddrSrc != AddrFromDataplane ==> acc(pr.OutAddr.Mem(), 1/1000) && ((acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
+requires pr.OutConn != nil
+ensures acc(pr.OutConn.Mem(), _)
+ensures r == 0 ==> acc(pr.OutAddr.Mem(), _) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && ((pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
+ensures r == 1 ==> acc(pr.OutAddr.Mem(), 1/1000) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && ((acc(pr.OutAddr.Mem(), 1/1000) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000))) --* pr.Mem())
+ensures r == 2 ==> acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && ((acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
+ensures r == 3 ==> pr.Mem()
+ensures r == 4 ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && (acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem())
+ensures 0 <= r && r <= 4
 decreases
-func (pr processResult) getOutAddrAndOutPkt() {
-	if pr.AddrSrc == AddrFromDataplane {
-		unfold pr.Mem()
-		package acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem() {
+func (pr processResult) getOutAddrAndOutPkt() (r uint8) {
+	if pr.OutAddr != nil {
+		if pr.AddrSrc == AddrFromDataplane {
+			unfold pr.Mem()
+			package (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
+				fold pr.Mem()
+			}
+			r = 0
+		} else if pr.AddrSrc == AddrFromMessage {
+			unfold pr.Mem()
+			package (acc(pr.OutAddr.Mem(), 1/1000) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000))) --* pr.Mem() {
+				fold pr.Mem()
+			}
+			r = 1
+		} else if pr.OutPkt != nil {
+			pr.getOutAddr()
+			unfold acc(pr.Mem(), 1/1000)
+			package (acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
+				apply acc(pr.OutAddr.Mem(), 1/1000) --* acc(pr.Mem(), 1/1000)
+				fold acc(pr.Mem(), 1/1000)
+			}
+			r = 2
+		} else {
+			unfold pr.Mem()
 			fold pr.Mem()
-		}
-	} else if pr.AddrSrc == AddrFromMessage {
-		unfold pr.Mem()
-		package (acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
-			fold pr.Mem()
+			r = 3
 		}
 	} else {
-		pr.getOutAddr()
-		unfold acc(pr.Mem(), 1/1000)
-		package (acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
-			apply acc(pr.OutAddr.Mem(), 1/1000) --* acc(pr.Mem(), 1/1000)
-			fold acc(pr.Mem(), 1/1000)
+		if pr.OutPkt != nil {
+			unfold pr.Mem()
+			package acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem() {
+				fold pr.Mem()
+			}
+			r = 4
+		} else {
+			unfold pr.Mem()
+			fold pr.Mem()
+			r = 3
 		}
 	}
 }
