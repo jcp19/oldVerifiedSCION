@@ -1308,7 +1308,8 @@ func processMessageHelper(d *DataPlane, result processResult) {
 		assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
 		apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
 	} else if resultCase == 3 {
-		assert result.Mem()
+		assert (result.OutAddr == nil && result.OutPkt == nil) --* result.Mem()
+		apply (result.OutAddr == nil && result.OutPkt == nil) --* result.Mem()
 	} else {
 		assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
 		apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
@@ -1503,49 +1504,53 @@ func updateSentPacketMetrics(d *DataPlane, egressID uint16, pldLength int) {
 
 // (tlino) Verified
 // (tlino) added helper function
-requires payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)
-requires address != nil && addrSrc == AddrFromDataplane ==> acc(address.Mem(), _)
-requires address != nil && addrSrc != AddrFromDataplane ==> acc(address.Mem(), 1/1000)
-ensures acc(msgs.MemSend(), 1/1000)
-ensures addrSrc == AddrFromDataplane ==> (acc(msgs.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(payload), 1/1000))
-ensures addrSrc != AddrFromDataplane ==> (acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000))))
-decreases
-func createMessages(payload []byte, address net.Addr, addrSrc AddrSource) (msgs underlayconn.Messages) {
-	msgs := make(underlayconn.Messages, 1)
-	msgs[0].Buffers = make([][]byte, 1)
+// requires messageCase == 0 ==> acc(address.Mem(), _) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+// requires messageCase == 1 ==> acc(address.Mem(), 1/1000) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+// requires messageCase == 2 ==> acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(payload), 1/1000)
+// requires messageCase == 3 
+// requires payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)
+// requires address != nil && addrSrc == AddrFromDataplane ==> acc(address.Mem(), _)
+// requires address != nil && addrSrc != AddrFromDataplane ==> acc(address.Mem(), 1/1000)
+// ensures acc(msgs.MemSend(), 1/1000)
+// ensures addrSrc == AddrFromDataplane ==> (acc(msgs.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(payload), 1/1000))
+// ensures addrSrc != AddrFromDataplane ==> (acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000))))
+// decreases
+// func createMessages(payload []byte, address net.Addr, ghost messageCase uint8) (msgs underlayconn.Messages) {
+// 	msgs := make(underlayconn.Messages, 1)
+// 	msgs[0].Buffers = make([][]byte, 1)
 
-	if payload != nil {
-		unfold acc(verifyutils.BytesAcc(payload), 1/1000)
-	}
+// 	if payload != nil {
+// 		unfold acc(verifyutils.BytesAcc(payload), 1/1000)
+// 	}
 
-	(msgs[0].Buffers)[0] = payload
+// 	(msgs[0].Buffers)[0] = payload
 
-	if addrSrc == AddrFromDataplane {
-		msgs[0].WildcardAddressAcc = true
-		msgs[0].Addr = address
-		assert forall i int :: 0 <= i && i < len((msgs[0].Buffers)[0]) ==> acc(&((msgs[0].Buffers)[0])[i], 1/1000)
-		fold acc((&msgs[0]).MemSend(), 1/1000)
-		fold acc(msgs.MemSend(), 1/1000)
+// 	if addrSrc == AddrFromDataplane {
+// 		msgs[0].WildcardAddressAcc = true
+// 		msgs[0].Addr = address
+// 		assert forall i int :: 0 <= i && i < len((msgs[0].Buffers)[0]) ==> acc(&((msgs[0].Buffers)[0])[i], 1/1000)
+// 		fold acc((&msgs[0]).MemSend(), 1/1000)
+// 		fold acc(msgs.MemSend(), 1/1000)
 
-		package acc(msgs.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(payload), 1/1000) {
-			unfold acc(msgs.MemSend(), 1/1000)
-			unfold acc((&msgs[0]).MemSend(), 1/1000)
-			fold acc(verifyutils.BytesAcc(payload), 1/1000)
-		}
-	} else {
-		msgs[0].WildcardAddressAcc = false
-		msgs[0].Addr = address
-		assert forall i int :: 0 <= i && i < len((msgs[0].Buffers)[0]) ==> acc(&((msgs[0].Buffers)[0])[i], 1/1000)
-		fold acc((&msgs[0]).MemSend(), 1/1000)
-		fold acc(msgs.MemSend(), 1/1000)
+// 		package acc(msgs.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(payload), 1/1000) {
+// 			unfold acc(msgs.MemSend(), 1/1000)
+// 			unfold acc((&msgs[0]).MemSend(), 1/1000)
+// 			fold acc(verifyutils.BytesAcc(payload), 1/1000)
+// 		}
+// 	} else {
+// 		msgs[0].WildcardAddressAcc = false
+// 		msgs[0].Addr = address
+// 		assert forall i int :: 0 <= i && i < len((msgs[0].Buffers)[0]) ==> acc(&((msgs[0].Buffers)[0])[i], 1/1000)
+// 		fold acc((&msgs[0]).MemSend(), 1/1000)
+// 		fold acc(msgs.MemSend(), 1/1000)
 
-		package acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000))) {
-			unfold acc(msgs.MemSend(), 1/1000)
-			unfold acc((&msgs[0]).MemSend(), 1/1000)
-			fold acc(verifyutils.BytesAcc(payload), 1/1000)
-		}
-	}
-}
+// 		package acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000))) {
+// 			unfold acc(msgs.MemSend(), 1/1000)
+// 			unfold acc((&msgs[0]).MemSend(), 1/1000)
+// 			fold acc(verifyutils.BytesAcc(payload), 1/1000)
+// 		}
+// 	}
+// }
 
 // (tlino) Verified
 // (tlino) added helper function
@@ -1766,7 +1771,7 @@ func (pr processResult) getOutAddr()
 // (tlino) case 0: OutAddr comes from the dataplane, thus it has wildcard permission. The OutPkt maybe nil
 // (tlino) case 1: OutAddr comes from an ipv4.Message, thus it has a concrete permission amount of 1/1000. The OutPkt maybe nil.
 // (tlino) case 2: OutAddr is aliased with OutPkt. Inorder to perform the WriteBatch operation later, we musst give a permission amount of 1/1000 to both OutAddr and OutPkt
-// (tlino) case 3: OutAddr and OutPkt are nil, Thus only return acc(OutConn.Mem(),_) permission
+// (tlino) case 3: OutAddr and OutPkt are nil.
 // (tlino) case 4: OutAddr is nil and OutPkt is not nil, Thus return acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)
 ghost
 requires pr.Mem()
@@ -1775,7 +1780,7 @@ ensures acc(pr.OutConn.Mem(), _)
 ensures r == 0 ==> acc(pr.OutAddr.Mem(), _) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && ((pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
 ensures r == 1 ==> acc(pr.OutAddr.Mem(), 1/1000) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && ((acc(pr.OutAddr.Mem(), 1/1000) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000))) --* pr.Mem())
 ensures r == 2 ==> acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && ((acc(pr.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
-ensures r == 3 ==> pr.Mem()
+ensures r == 3 ==> pr.OutAddr == nil && pr.OutPkt == nil && (pr.OutAddr == nil && pr.OutPkt == nil) --* pr.Mem()
 ensures r == 4 ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && (acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) --* pr.Mem())
 ensures 0 <= r && r <= 4
 decreases
@@ -1803,7 +1808,9 @@ func (pr processResult) getOutAddrAndOutPkt() (r uint8) {
 			r = 2
 		} else {
 			unfold pr.Mem()
-			fold pr.Mem()
+			package (pr.OutAddr == nil && pr.OutPkt == nil) --* pr.Mem() {
+				fold pr.Mem()
+			}
 			r = 3
 		}
 	} else {
@@ -1815,7 +1822,9 @@ func (pr processResult) getOutAddrAndOutPkt() (r uint8) {
 			r = 4
 		} else {
 			unfold pr.Mem()
-			fold pr.Mem()
+			package (pr.OutAddr == nil && pr.OutPkt == nil) --* pr.Mem() {
+				fold pr.Mem()
+			}
 			r = 3
 		}
 	}
