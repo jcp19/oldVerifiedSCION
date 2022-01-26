@@ -1293,51 +1293,52 @@ func processMessageHelper(d *DataPlane, result processResult) {
 
 	ghost resultCase := result.getOutAddrAndOutPkt()
 
-	addrSrc := result.AddrSrc
 	var messages underlayconn.Messages
 	pld := result.OutPkt
 	address := result.OutAddr
 	
 	ghost if resultCase == 1 {
 		assert (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
-		apply (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
 	} else if resultCase == 2 {
 		assert ((result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000)) && (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000))) --* result.Mem()
-		apply ((result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000)) && (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000))) --* result.Mem()
 	} else if resultCase == 3 {
 		assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
-		apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
 	} else {
 		assert (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
-		apply (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
 	}
 
-
 	// (tlino) moved message creation to outlined function
-	// messages = createMessages(pld, address, addrSrc)
-	// _, err := result.OutConn.WriteBatch(messages)
+	messages = createMessages(pld, address, resultCase)
+	 _, err := result.OutConn.WriteBatch(messages)
 
-	// ghost if addrSrc == AddrFromDataplane {
-	// 	apply acc(messages.MemSend(), 1/1000) --* acc(verifyutils.BytesAcc(pld), 1/1000)
-	// 	assert acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
-	// 	apply acc(verifyutils.BytesAcc(result.OutPkt), 1/1000) --* result.Mem()
-
-	// } else {
-	// 	apply  acc(messages.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(pld), 1/1000) && (address != nil ==> acc(address.Mem(), 1/1000)))
-	// 	assert (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
-	// 	apply (acc(result.OutAddr.Mem(), 1/1000) &&  acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
-	// }
+	ghost if resultCase == 1 {
+		assert acc(messages.MemSend(), 1/1000) --* (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000))
+		apply acc(messages.MemSend(), 1/1000) --* (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000))
+		apply (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+	} else if resultCase == 2 {
+		assert acc(messages.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000)))
+		apply acc(messages.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000)))
+		apply ((result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000)) && (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000))) --* result.Mem()
+	} else if resultCase == 3 {
+		assert acc(messages.MemSend(), 1/1000) --* (acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pld), 1/1000))
+		apply acc(messages.MemSend(), 1/1000) --* (acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(pld), 1/1000))
+		apply (acc(result.OutAddr.Mem(), 1/1000) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+	} else {
+		assert acc(messages.MemSend(), 1/1000) --* (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000))
+		apply acc(messages.MemSend(), 1/1000) --* (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000))
+		apply (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
+	}
 	
 	assert result.Mem()
-	// if err != nil {
-	// 	// (tlino) log not supported yet
-	// 	// log.Debug("Error writing packet", "err", err)
-	// 	// error metric // (tlino) original scion comment
-	// 	// (tlino) This helper function used to be a part of a loop,
-	// 	// (tlino) since the continue isn't supported we use a return statement
-	// 	// continue
-	// 	return
-	// }
+	if err != nil {
+		// (tlino) log not supported yet
+		// log.Debug("Error writing packet", "err", err)
+		// error metric // (tlino) original scion comment
+		// (tlino) This helper function used to be a part of a loop,
+		// (tlino) since the continue isn't supported we use a return statement
+		// continue
+		return
+	}
 	// ok metric // (tlino) original scion comment
 	// (tlino) outline to own function to simplify verification
 	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
