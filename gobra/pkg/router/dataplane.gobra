@@ -1501,83 +1501,65 @@ func updateSentPacketMetrics(d *DataPlane, egressID uint16, pldLength int) {
 
 // (tlino) Verified
 // (tlino) added helper function
-// requires 0 <= messageCase && messageCase <= 4
-// requires messageCase == 0 ==> acc(address.Mem(), _) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
-// requires messageCase == 1 ==> acc(address.Mem(), 1/1000) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
-// requires messageCase == 2 ==> acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(payload), 1/1000)
-// requires messageCase == 3 ==> address == nil && payload == nil
-// requires messageCase == 4 ==> address acc(verifyutils.BytesAcc(payload), 1/1000)
-// ensures acc(msgs.MemSend(), 1/1000)
-// ensures messageCase == 0 ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
-// ensures messageCase == 1 ==> acc(msgs.MemSend(), 1/1000) --* (acc(address.Mem(), 1/1000) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)))
-// ensures messageCase == 2 ==> acc(msgs.MemSend(), 1/1000) --* (acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(payload), 1/1000))
-// ensures messageCase == 3 ==> acc(msgs.MemSend(), 1/1000) --* (address == nil && payload == nil)
-// ensures messageCase == 4 ==> acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000))
-// decreases
-// func createMessages(payload []byte, address net.Addr, ghost messageCase uint8) (msgs underlayconn.Messages) {
-// 	msgs := make(underlayconn.Messages, 1)
-// 	msgs[0].Buffers = make([][]byte, 1)
-// 	(msgs[0].Buffers)[0] = payload
+requires 1 <= messageCase && messageCase <= 4
+requires messageCase == 1 ==> (address != nil ==> acc(address.Mem(), _)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+requires messageCase == 2 ==> (address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+requires messageCase == 3 ==> acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(payload), 1/1000)
+requires messageCase == 4 ==> (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+ensures acc(msgs.MemSend(), 1/1000)
+ensures messageCase == 1 ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+ensures messageCase == 2 ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)))
+ensures messageCase == 3 ==> acc(msgs.MemSend(), 1/1000) --* (acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(payload), 1/1000))
+ensures messageCase == 4 ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+decreases
+func createMessages(payload []byte, address net.Addr, ghost messageCase uint8) (msgs underlayconn.Messages) {
+	msgs := make(underlayconn.Messages, 1)
+	msgs[0].Buffers = make([][]byte, 1)
+	(msgs[0].Buffers)[0] = payload
+	if payload != nil {
+		unfold acc(verifyutils.BytesAcc(payload), 1/1000)
+	}
+	msgs[0].Addr = address
 
-// 	ghost if messageCase == 0 {
-// 		if payload != nil {
-// 			unfold acc(verifyutils.BytesAcc(payload), 1/1000)
-// 		}
-// 		msgs[0].WildcardAddressAcc = true
-// 		msgs[0].Addr = address
-// 		fold acc((&msgs[0]).MemSend(), 1/1000)
-// 		fold acc(msgs.MemSend(), 1/1000)
-// 		package acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)) {
-// 			unfold acc(msgs.MemSend(), 1/1000)
-// 			unfold acc((&msgs[0]).MemSend(), 1/1000)
-// 			fold acc(verifyutils.BytesAcc(payload), 1/1000)
-// 		}
-// 	} else if messageCase == 1 {
-// 		if payload != nil {
-// 			unfold acc(verifyutils.BytesAcc(payload), 1/1000)
-// 		}
-// 		msgs[0].WildcardAddressAcc = false
-// 		msgs[0].Addr = address
-// 		fold acc((&msgs[0]).MemSend(), 1/1000)
-// 		fold acc(msgs.MemSend(), 1/1000)
-// 		package acc(msgs.MemSend(), 1/1000) --* (acc(address.Mem(), 1/1000) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))) {
-// 			unfold acc(msgs.MemSend(), 1/1000)
-// 			unfold acc((&msgs[0]).MemSend(), 1/1000)
-// 			fold acc(verifyutils.BytesAcc(payload), 1/1000)
-// 		}
-// 	} else if messageCase == 2 {
-// 		unfold acc(verifyutils.BytesAcc(payload), 1/1000)
-// 		msgs[0].WildcardAddressAcc = false
-// 		msgs[0].Addr = address
-// 		fold acc((&msgs[0]).MemSend(), 1/1000)
-// 		fold acc(msgs.MemSend(), 1/1000)
-// 		package acc(msgs.MemSend(), 1/1000) --* (acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(payload), 1/1000)) {
-// 			unfold acc(msgs.MemSend(), 1/1000)
-// 			unfold acc((&msgs[0]).MemSend(), 1/1000)
-// 			fold acc(verifyutils.BytesAcc(payload), 1/1000)
-// 		}
-// 	} else if messageCase == 3 {
-// 		msgs[0].WildcardAddressAcc = false
-// 		msgs[0].Addr = address
-// 		fold acc((&msgs[0]).MemSend(), 1/1000)
-// 		fold acc(msgs.MemSend(), 1/1000)
-// 		package acc(msgs.MemSend(), 1/1000) --* (address == nil && payload == nil) {
-// 			unfold acc(msgs.MemSend(), 1/1000)
-// 			unfold acc((&msgs[0]).MemSend(), 1/1000)
-// 		}
-// 	} else {
-// 		unfold acc(verifyutils.BytesAcc(payload), 1/1000)
-// 		msgs[0].WildcardAddressAcc = false
-// 		msgs[0].Addr = address
-// 		fold acc((&msgs[0]).MemSend(), 1/1000)
-// 		fold acc(msgs.MemSend(), 1/1000)
-// 		package acc(msgs.MemSend(), 1/1000) --* (acc(verifyutils.BytesAcc(payload), 1/1000)) {
-// 			unfold acc(msgs.MemSend(), 1/1000)
-// 			unfold acc((&msgs[0]).MemSend(), 1/1000)
-// 			fold acc(verifyutils.BytesAcc(payload), 1/1000)
-// 		}
-// 	}
-// }
+	ghost if messageCase == 1 {
+		msgs[0].WildcardAddressAcc = true
+		fold acc((&msgs[0]).MemSend(), 1/1000)
+		fold acc(msgs.MemSend(), 1/1000)
+		package acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)) {
+			unfold acc(msgs.MemSend(), 1/1000)
+			unfold acc((&msgs[0]).MemSend(), 1/1000)
+			fold acc(verifyutils.BytesAcc(payload), 1/1000)
+		}
+	} else if messageCase == 2 {
+		msgs[0].WildcardAddressAcc = false
+		fold acc((&msgs[0]).MemSend(), 1/1000)
+		fold acc(msgs.MemSend(), 1/1000)
+		package acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))) {
+			unfold acc(msgs.MemSend(), 1/1000)
+			unfold acc((&msgs[0]).MemSend(), 1/1000)
+			fold acc(verifyutils.BytesAcc(payload), 1/1000)
+		}
+	} else if messageCase == 3 {
+		msgs[0].WildcardAddressAcc = false
+		fold acc((&msgs[0]).MemSend(), 1/1000)
+		fold acc(msgs.MemSend(), 1/1000)
+		package acc(msgs.MemSend(), 1/1000) --* (acc(address.Mem(), 1/1000) && acc(verifyutils.BytesAcc(payload), 1/1000)) {
+			unfold acc(msgs.MemSend(), 1/1000)
+			unfold acc((&msgs[0]).MemSend(), 1/1000)
+			fold acc(verifyutils.BytesAcc(payload), 1/1000)
+		}
+	} else if messageCase == 4 {
+		msgs[0].WildcardAddressAcc = false
+		msgs[0].Addr = nil
+		fold acc((&msgs[0]).MemSend(), 1/1000)
+		fold acc(msgs.MemSend(), 1/1000)
+		package acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)) {
+			unfold acc(msgs.MemSend(), 1/1000)
+			unfold acc((&msgs[0]).MemSend(), 1/1000)
+			fold acc(verifyutils.BytesAcc(payload), 1/1000)
+		}
+	}
+}
 
 // (tlino) Verified
 // (tlino) added helper function
