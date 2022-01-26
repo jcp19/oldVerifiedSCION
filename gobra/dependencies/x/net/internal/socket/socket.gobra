@@ -75,5 +75,7 @@ type Message struct {
 	Flags int // protocol-specific information on the received message
 
 	// ghost
+	// (tlino) We need to add this ghost variable, since when we write a Message,
+	// (tlino) the Addr.Mem() predicate has either a wildcard or a concrete permission amount.
 	WildcardAddressAcc bool
 }

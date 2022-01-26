@@ -1524,7 +1524,9 @@ const (
 )
 
 // (tlino) added ghost field AddrSrc, since the OutAddr is eigher given by the router (AddrFromDataplane)
-// (tlino) or it is given by the ipv4.Message (AddrFromMessage) or it is aliased to the OutPkt.
+// (tlino) or it is given by the ipv4.Message (AddrFromMessage) or it is aliased to OutPkt.
+// (tlino) If OutAddr is aliased to OutPkt, then we have AddrSrc != AddrFromDataplane && AddrSrc != AddrFromMessage,
+// (tlino) and we cannot deduce the OutAddr.Mem() predicate directly.
 type processResult struct {
 	EgressID uint16
 	OutConn  BatchConn
