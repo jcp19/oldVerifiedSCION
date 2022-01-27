@@ -1312,7 +1312,7 @@ func processMessageHelper(d *DataPlane, result processResult) {
 
 	// (tlino) moved message creation to outlined function
 	messages := createMessages(pld, address, resultCase)
-	 _, err := result.OutConn.WriteBatch(messages)
+	_, err := result.OutConn.WriteBatch(messages)
 
 	// (tlino) ghost code to get back access to result.Mem()
 	ghost if resultCase == 1 {
@@ -3364,6 +3364,7 @@ requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
 preserves buffer.Mem()
+preserves cap(rawPkt) == bufSize
 ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
@@ -3512,6 +3513,7 @@ requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
 requires p != nil && p == s.getOHPPath() 
 preserves buffer.Mem()
+preserves cap(rawPkt) == bufSize
 ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
