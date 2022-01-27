@@ -19,21 +19,16 @@ pure func get_readBatch_msgs(t Place) (msgs seq[AbsMessage])
 
 
 // decodePkt (internal)
-pred decodePkt_p(ghost t Place, ghost m AbsMessage)
+pred decodePkt_p(ghost t Place, ghost m AbsMessage, ghost res AbsSCION)
 
 ghost
-requires decodePkt_p(t, m)
-pure func get_decodePkt_t1(t Place, m AbsMessage) (t1 Place)
-
-ghost 
-requires decodePkt_p(t, m)
-pure func  get_decodePkt_res(t Place, m AbsMessage) (res AbsSCION)
+requires decodePkt_p(t, m, res)
+pure func get_decodePkt_t1(t Place, m AbsMessage, res AbsSCION) (t1 Place)
 
 ghost
-requires token(t) && decodePkt_p(t, m)
-ensures token(t1) && t1 == old(get_decodePkt_t1(t, m)) 
-ensures res == old(get_decodePkt_res(t, m))
-func decodePkt_f(t Place, m AbsMessage) (t1 Place, res AbsSCION)
+requires token(t) && decodePkt_p(t, m, res)
+ensures token(t1) && t1 == old(get_decodePkt_t1(t, m, res))
+func decodePkt_f(t Place, m AbsMessage, res AbsSCION) (t1 Place)
 
 // processIntraBFD (internal)
 pred processIntraBFD_p(ghost t Place, ghost s AbsSCION)

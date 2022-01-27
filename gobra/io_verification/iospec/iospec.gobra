@@ -22,9 +22,9 @@ pred P_readBatch(pl Place, ghost s mset[Fact]) {
 }
 
 pred P_decodePkt(pl Place, ghost s mset[Fact]) {
-    forall m AbsMessage :: { decodePkt_p(pl, m) } (
-        (inFact(m) # s) > 0 && G_decodePkt(m, s)) ==> 
-    decodePkt_p(pl, m) && P(get_decodePkt_t1(pl, m), U(s, mset[Fact]{inFact(m)}, mset[Fact]{decodedPktFact(get_decodePkt_res(pl, m))}))
+    forall m AbsMessage, scn AbsSCION :: { decodePkt_p(pl, m, scn) } (
+        (inFact(m) # s) > 0 && G_decodePkt(m, scn)) ==> 
+    decodePkt_p(pl, m, scn) && P(get_decodePkt_t1(pl, m, scn), U(s, mset[Fact]{inFact(m)}, mset[Fact]{decodedPktFact(scn)}))
 }
 
 pred P_processIntraBFD(pl Place, ghost s mset[Fact]) {
@@ -73,7 +73,7 @@ pure func ToMset(s seq[AbsMessage]) (res mset[Fact])
 
 ghost
 ensures res == true
-pure func G_decodePkt(m AbsMessage, s mset[Fact]) (res bool)
+pure func G_decodePkt(m AbsMessage, scn AbsSCION) (res bool)
 
 ghost
 ensures res == true
@@ -115,12 +115,12 @@ func test1(ghost t Place, ghost s mset[Fact]) {
 
 requires token(t) && P_decodePkt(t, s)
 requires mset[Fact]{inFact(m)} subset s
-requires G_decodePkt(m, s)
-func test2(ghost t Place, ghost s mset[Fact], m AbsMessage) {
+requires G_decodePkt(m, scn)
+func test2(ghost t Place, ghost s mset[Fact], m AbsMessage, scn AbsSCION) {
     unfold P_decodePkt(t, s)
-    assert decodePkt_p(t, m)
-    p_end := get_decodePkt_t1(t, m)
-    set_end := (s setminus mset[Fact]{inFact(m)}) union mset[Fact]{decodedPktFact(get_decodePkt_res(t, m))}
+    assert decodePkt_p(t, m, scn)
+    p_end := get_decodePkt_t1(t, m, scn)
+    set_end := (s setminus mset[Fact]{inFact(m)}) union mset[Fact]{decodedPktFact(scn)}
     assert P(p_end, set_end)
 }
 

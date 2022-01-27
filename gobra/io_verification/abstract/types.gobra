@@ -8,7 +8,15 @@ type AbsMessage domain {}
 
 type AbsSCION domain {}
 
+type AbsBFD domain {}
+
 type AbsProcessResult domain {}
+
+type AbsBFDResult domain {}
+
+type AbsOHPResult domain {}
+
+type AbsSCIONResult domain {}
 
 // (tlino) used to abstract messages when receiving
 ghost
