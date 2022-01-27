@@ -210,6 +210,9 @@ pure func (d *DataPlane) isRunning() (res bool) {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 }
 
+// (tlino) We cannot prove termination of this function due to an issue in Gobra.
+// (tlino) The issue occurs when we try to access a map entry within a pure function.
+// (tlino) See Issue report for details: https://github.com/viperproject/gobra/issues/401
 requires acc(DataPlaneMutexInvariant(d), _)
 ensures res == unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
 decreases _
@@ -1626,6 +1629,9 @@ func (pr processResult) getOutAddrAndOutPkt() (r uint8) {
 	}
 }
 
+// (tlino) We cannot prove termination of this function due to an issue in Gobra.
+// (tlino) The issue occurs when we try to compare arrays with nil in pure functions
+// (tlino) See Issue report for details: https://github.com/viperproject/gobra/issues/402
 decreases _
 pure func isZeroSCION(s slayers.SCION) bool {
 	return s.EmbeddedBaseLayer.Contents == nil &&
