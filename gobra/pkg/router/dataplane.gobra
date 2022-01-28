@@ -510,7 +510,7 @@ func (d *DataPlane) AddExternalInterface(ifID uint16, conn BatchConn) error {
 		return emptyValue()
 	}
 	// (joao) original code:
-	// (tlino) rename exists to ex, since exists clashes with a reversed Gobra keyword
+	// (tlino) rename exists to ex, since exists clashes with a reserved Gobra keyword
 	// if _, exists := d.external[ifID]; exists {
 	// 		return serrors.WithCtx(alreadySet, "ifID", ifID)
 	unfold BatchConnsAcc(d.external)
@@ -562,7 +562,7 @@ func (d *DataPlane) AddNeighborIA(ifID uint16, remote addr.IA) error {
 		return emptyValue()
 	}
 	// (joao) original code (changed below):
-	// (tlino) rename exists to ex, since exists clashes with a reversed Gobra keyword
+	// (tlino) rename exists to ex, since exists clashes with a reserved Gobra keyword
 	// if _, exists := d.neighborIAs[ifID]; exists {
 	// 	return serrors.WithCtx(alreadySet, "ifID", ifID)
 	// }
@@ -591,7 +591,7 @@ requires DataPlaneMutexInvariant(d)
 ensures DataPlaneMutexInvariant(d)
 func (d *DataPlane) AddLinkType(ifID uint16, linkTo topology.LinkType) error {
 	// (joao) original code (changed below):
-	// (tlino) rename exists to ex, since exists clashes with a reversed Gobra keyword
+	// (tlino) rename exists to ex, since exists clashes with a reserved Gobra keyword
 	// if _, exists := d.linkTypes[ifID]; exists {
 	// 	return serrors.WithCtx(alreadySet, "ifID", ifID)
 	// }
@@ -806,7 +806,7 @@ func (d *DataPlane) AddNextHop(ifID uint16, a net.Addr) error {
 		return emptyValue()
 	}
 	// (joao) original code (changed below):
-	// (tlino) rename exists to ex, since exists clashes with a reversed Gobra keyword
+	// (tlino) rename exists to ex, since exists clashes with a reserved Gobra keyword
 	// if _, exists := d.internalNextHops[ifID]; exists {
 	//	 return serrors.WithCtx(alreadySet, "ifID", ifID)
 	// }
@@ -968,9 +968,9 @@ func (d *DataPlane) Run() error {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	go RunReadClosure(0, d.internal, d)
 	
- 	// // (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
-	// //        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
-	// //        the lock invariant.
+ 	// (joao) This unlock here is problematic: it gives back access to the lock invariant, and thus, it should not
+	//        be able to check the value of d.running. Instead, every thread running the closure should have a wildcard permission to
+	//        the lock invariant.
 	// d.mtx.Unlock()
 
 	// (tlino) use getter
@@ -1179,13 +1179,15 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// (tlino) we use this ghost variable to know which branch was taken.
 	// (tlino) this is needed to apply the correct magic wand.
 	ghost var switchCase uint8
+	ghost var errorIsNil uint8 = 1
+	ghost var errorIsSCMP uint8 = 2
 	// (tlino) added this variable to make magic wand work
 	localAddr := p.Addr
 
 	switch {
 	case err == nil:
 		assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
-		switchCase = 0
+		switchCase = errorIsNil
 	case errors.As(err, scmpErr):
 		if !scmpErr.TypeCode.InfoMsg() {
 			// (tlino) log not yet supported
@@ -1198,7 +1200,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// result.OutConn = rd
 		result = result.updateProcessResult(localAddr, rd)
 		assert result.Mem() --* acc(localAddr.Mem(), 1/1000)
-		switchCase = 1
+		switchCase = errorIsSCMP
 	default:
 		// (tlino) log not yet supported
 		// log.Debug("Error processing packet", "err", err)
@@ -1209,20 +1211,19 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 
 		// (tlino) This method used to be part of a loop. We replace continue by return.
 		// continue
-		switchCase = 2
 		unfold verifyutils.BytesAcc(localOrigPacket)
 		unfold verifyutils.BytesAcc((p.Buffers)[0])
 		fold p.Mem()
 		return
 	}
-	assert switchCase == 0 || switchCase == 1
+	assert switchCase == errorIsNil || switchCase == errorIsSCMP
 
 	// (tlino) outlined code block to its own method
 	processMessageHelper(d, result)
 
-	ghost if switchCase == 0 {
+	ghost if switchCase == errorIsNil {
 		apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
-	} else if switchCase == 1 {
+	} else if switchCase == errorIsSCMP {
 		apply result.Mem() --* acc(localAddr.Mem(), 1/1000)
 	}
 
@@ -1303,11 +1304,11 @@ func processMessageHelper(d *DataPlane, result processResult) {
 	pld := result.OutPkt
 	address := result.OutAddr
 	
-	ghost if resultCase == 1 {
+	ghost if resultCase == MsgWithDataPlaneAdd {
 		assert (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
-	} else if resultCase == 2 {
+	} else if resultCase == MsgWithMessageAdd {
 		assert ((result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000)) && (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000))) --* result.Mem()
-	} else if resultCase == 3 {
+	} else if resultCase == MsgWithBytePacketAdd {
 		assert ((result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
 	} else {
 		assert (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
@@ -1318,15 +1319,15 @@ func processMessageHelper(d *DataPlane, result processResult) {
 	_, err := result.OutConn.WriteBatch(messages)
 
 	// (tlino) ghost code to get back access to result.Mem()
-	ghost if resultCase == 1 {
+	ghost if resultCase == MsgWithDataPlaneAdd {
 		assert acc(messages.MemSend(), 1/1000) --* (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000))
 		apply acc(messages.MemSend(), 1/1000) --* (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000))
 		apply (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
-	} else if resultCase == 2 {
+	} else if resultCase == MsgWithMessageAdd {
 		assert acc(messages.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000)))
 		apply acc(messages.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (pld != nil ==> acc(verifyutils.BytesAcc(pld), 1/1000)))
 		apply ((result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000)) && (result.OutPkt != nil ==> acc(verifyutils.BytesAcc(result.OutPkt), 1/1000))) --* result.Mem()
-	} else if resultCase == 3 {
+	} else if resultCase == MsgWithBytePacketAdd {
 		assert acc(messages.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(pld), 1/1000))
 		apply acc(messages.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(pld), 1/1000))
 		apply ((result.OutAddr != nil ==> acc(result.OutAddr.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(result.OutPkt), 1/1000)) --* result.Mem()
@@ -1345,46 +1346,47 @@ func processMessageHelper(d *DataPlane, result processResult) {
 		// continue
 		return
 	}
-	// ok metric // (tlino) original scion comment
-	// (tlino) outline to own function to simplify verification
+	// ok metric
+	// (tlino) use getters to simplify verification
 	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-	updateSentPacketMetrics(d, result.GetEgressID(), result.GetOutPktLen())
-}
-
-// (tlino) Verified
-// (tlino) added helper function to simplify verification
-requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
-requires egressID >= 0
-decreases
-func updateSentPacketMetrics(d *DataPlane, egressID uint16, pldLength int) {
-	outputLabels := interfaceToMetricLabels(egressID, d.GetLocalAI(), d.GetNeighborIAs())
+	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
-	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(pldLength))
+	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
 }
+
+// (tlino) added type
+type MessageCase uint8
+
+// (tlino) The messageCase represents the four different cases we can have.
+// (tlino) case 1: address comes from the dataplane, thus it has wildcard permission. The payload may be nil.
+// (tlino) case 2: address comes from an ipv4.Message, thus it has a concrete permission amount of 1/1000. The payload may be nil.
+// (tlino) case 3: address is aliased with payload. Both have a permission amount of 1/1000. This is fine since Messages with the MemSend() predicate
+// (tlino) are read-only.
+// (tlino) case 4: address is nil. In this case we can only deduce that payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000) holds.
+const (
+	MsgWithDataPlaneAdd MessageCase = 1
+	MsgWithMessageAdd MessageCase = 2
+	MsgWithBytePacketAdd MessageCase = 3
+	MsgWithNoAdd MessageCase = 4
+)
 
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
-// (tlino) The messageCase represents the four different cases we can have.
-// (tlino) case 1: address comes from the dataplane, thus it has wildcard permission. The payload maybe nil.
-// (tlino) case 2: address comes from an ipv4.Message, thus it has a concrete permission amount of 1/1000. The payload maybe nil.
-// (tlino) case 3: address is aliased with payload. Both have a permission amount of 1/1000
-// (tlino) case 4: address is nil. In this case we can only deduce that payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000) holds.
-requires 1 <= messageCase && messageCase <= 4
-requires messageCase == 1 ==> (address != nil ==> acc(address.Mem(), _)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
-requires messageCase == 2 ==> (address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
-requires messageCase == 3 ==> (address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000)
-requires messageCase == 4 ==> address == nil && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+requires 1 <= msgCase && msgCase <= 4
+requires msgCase == MsgWithDataPlaneAdd ==> (address != nil ==> acc(address.Mem(), _)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+requires msgCase == MsgWithMessageAdd ==> (address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+requires msgCase == MsgWithBytePacketAdd ==> (address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000)
+requires msgCase == MsgWithNoAdd ==> address == nil && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
 ensures acc(msgs.MemSend(), 1/1000)
-ensures messageCase == 1 ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
-ensures messageCase == 2 ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)))
-ensures messageCase == 3 ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000))
-ensures messageCase == 4 ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+ensures msgCase == MsgWithDataPlaneAdd ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
+ensures msgCase == MsgWithMessageAdd ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)))
+ensures msgCase == MsgWithBytePacketAdd ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000))
+ensures msgCase == MsgWithNoAdd ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
 decreases
-func createMessages(payload []byte, address net.Addr, ghost messageCase uint8) (msgs underlayconn.Messages) {
+func createMessages(payload []byte, address net.Addr, ghost msgCase MessageCase) (msgs underlayconn.Messages) {
 	msgs := make(underlayconn.Messages, 1)
 	msgs[0].Buffers = make([][]byte, 1)
 	(msgs[0].Buffers)[0] = payload
@@ -1393,7 +1395,7 @@ func createMessages(payload []byte, address net.Addr, ghost messageCase uint8) (
 	}
 	msgs[0].Addr = address
 
-	ghost if messageCase == 1 {
+	ghost if msgCase == MsgWithDataPlaneAdd {
 		msgs[0].WildcardAddressAcc = true
 		fold acc((&msgs[0]).MemSend(), 1/1000)
 		fold acc(msgs.MemSend(), 1/1000)
@@ -1402,32 +1404,29 @@ func createMessages(payload []byte, address net.Addr, ghost messageCase uint8) (
 			unfold acc((&msgs[0]).MemSend(), 1/1000)
 			fold acc(verifyutils.BytesAcc(payload), 1/1000)
 		}
-	} else if messageCase == 2 {
+	} else {
 		msgs[0].WildcardAddressAcc = false
 		fold acc((&msgs[0]).MemSend(), 1/1000)
 		fold acc(msgs.MemSend(), 1/1000)
-		package acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))) {
-			unfold acc(msgs.MemSend(), 1/1000)
-			unfold acc((&msgs[0]).MemSend(), 1/1000)
-			fold acc(verifyutils.BytesAcc(payload), 1/1000)
-		}
-	} else if messageCase == 3 {
-		msgs[0].WildcardAddressAcc = false
-		fold acc((&msgs[0]).MemSend(), 1/1000)
-		fold acc(msgs.MemSend(), 1/1000)
-		package acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000)) {
-			unfold acc(msgs.MemSend(), 1/1000)
-			unfold acc((&msgs[0]).MemSend(), 1/1000)
-			fold acc(verifyutils.BytesAcc(payload), 1/1000)
-		}
-	} else if messageCase == 4 {
-		msgs[0].WildcardAddressAcc = false
-		fold acc((&msgs[0]).MemSend(), 1/1000)
-		fold acc(msgs.MemSend(), 1/1000)
-		package acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)) {
-			unfold acc(msgs.MemSend(), 1/1000)
-			unfold acc((&msgs[0]).MemSend(), 1/1000)
-			fold acc(verifyutils.BytesAcc(payload), 1/1000)
+		switch msgCase {
+			case MsgWithMessageAdd:
+				package acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))) {
+					unfold acc(msgs.MemSend(), 1/1000)
+					unfold acc((&msgs[0]).MemSend(), 1/1000)
+					fold acc(verifyutils.BytesAcc(payload), 1/1000)
+				}
+			case MsgWithBytePacketAdd:
+				package acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000)) {
+					unfold acc(msgs.MemSend(), 1/1000)
+					unfold acc((&msgs[0]).MemSend(), 1/1000)
+					fold acc(verifyutils.BytesAcc(payload), 1/1000)
+				}
+			case MsgWithNoAdd:
+				package acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)) {
+					unfold acc(msgs.MemSend(), 1/1000)
+					unfold acc((&msgs[0]).MemSend(), 1/1000)
+					fold acc(verifyutils.BytesAcc(payload), 1/1000)
+				}
 		}
 	}
 }
@@ -1520,10 +1519,16 @@ func (d *DataPlane) initMetrics() {
 // (tlino) added type
 type AddrSource uint8
 
+// (tlino) when a processResult is generated the address can have 3 different sources.
+// we need this case distinction to correctly reasen about the permission amounts that are
+// required for the OutAddr field in processResult.
+// case AddrFromDataplane: the address comes from the dataplane
+// case AddrFromMessage: the address comes from the address field in the ipv4.Message
+// case AddrFromPacketBytes: the address is aliased with the byte field (OutPkt).
 const (
 	AddrFromDataplane AddrSource = 1
 	AddrFromMessage AddrSource = 2
-	AddrAliased AddrSource = 3
+	AddrFromPacketBytes AddrSource = 3
 )
 
 // (tlino) added ghost field AddrSrc, since the OutAddr is eigher given by the router (AddrFromDataplane)
@@ -1547,8 +1552,8 @@ pred (pr processResult) Mem() {
 	(pr.OutConn != nil ==> acc(pr.OutConn.Mem(), _)) &&
 	(pr.AddrSrc == AddrFromDataplane && pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), _)) &&
 	(pr.AddrSrc == AddrFromMessage && pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) &&
-	(pr.AddrSrc == AddrAliased ==> pr.OutPkt != nil) &&
-	((pr.AddrSrc != AddrFromDataplane && pr.AddrSrc != AddrFromMessage && pr.AddrSrc != AddrAliased) ==> pr.OutAddr == nil) &&
+	(pr.AddrSrc == AddrFromPacketBytes ==> pr.OutPkt != nil) &&
+	((pr.AddrSrc != AddrFromDataplane && pr.AddrSrc != AddrFromMessage && pr.AddrSrc != AddrFromPacketBytes) ==> pr.OutAddr == nil) &&
 	(pr.OutPkt != nil ==> verifyutils.BytesAcc(pr.OutPkt))
 }
 
@@ -1575,7 +1580,7 @@ func (pr processResult) GetOutPktLen() (res int) {
 // (tlino) this method is only used when OutAddr is aliased to OutPkt
 ghost
 requires acc(pr.Mem(), 1/1000)
-requires pr.AddrSrc == AddrAliased
+requires pr.AddrSrc == AddrFromPacketBytes
 ensures pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)
 ensures (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) --* acc(pr.Mem(), 1/1000)
 decreases _
@@ -1585,47 +1590,48 @@ func (pr processResult) getOutAddr()
 // (tlino) Helper method to get access pr.OutConn.Mem(), pr.OutAddr.Mem(), pr.OutPkt.Mem()
 // (tlino) This method returns different access permissions to the OutAddr and OutPkt fields.
 // (tlino) In any case the caller musst be able to get permission to pr.Mem(). Thus, magic wands are used.
-// (tlino) case 1: OutAddr comes from the dataplane, thus it has wildcard permission. The OutPkt maybe nil
-// (tlino) case 2: OutAddr comes from an ipv4.Message, thus it has a concrete permission amount of 1/1000. The OutPkt maybe nil.
-// (tlino) case 3: OutAddr is aliased with OutPkt. Inorder to perform the WriteBatch operation later, we musst give a permission amount of 1/1000 to both OutAddr and OutPkt
-// (tlino) case 4: OutAddr is nil. In this case we can only deduce that pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) holds
+// (tlino) case MsgWithDataPlaneAdd: OutAddr comes from the dataplane, thus it has wildcard permission. The OutPkt may be nil
+// (tlino) case MsgWithMessageAdd: OutAddr comes from an ipv4.Message, thus it has a concrete permission amount of 1/1000. The OutPkt may be nil.
+// (tlino) case MsgWithBytePacketAdd: OutAddr is aliased with OutPkt. Inorder to perform the WriteBatch operation later, we musst give a permission amount of 1/1000 to both OutAddr and OutPkt.
+// (tlino) This is no problem, since WriteBatch reads only the contents of processResult.
+// (tlino) case MsgWithDataPlaneAdd: OutAddr is nil. In this case we can only deduce that pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) holds
 ghost
 requires pr.Mem()
 requires pr.OutConn != nil
 ensures acc(pr.OutConn.Mem(), _)
-ensures r == 1 ==> (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), _)) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && ((pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
-ensures r == 2 ==> (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && (((pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000))) --* pr.Mem())
-ensures r == 3 ==> (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && (((pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
-ensures r == 4 ==> pr.OutAddr == nil && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && ((pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
-ensures 1 <= r && r <= 4
+ensures r == MsgWithDataPlaneAdd ==> (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), _)) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && ((pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
+ensures r == MsgWithMessageAdd ==> (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && (((pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000))) --* pr.Mem())
+ensures r == MsgWithBytePacketAdd ==> (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000) && (((pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
+ensures r == MsgWithNoAdd ==> pr.OutAddr == nil && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) && ((pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem())
+ensures r == MsgWithDataPlaneAdd || r == MsgWithMessageAdd || r == MsgWithBytePacketAdd || r == MsgWithNoAdd
 decreases
-func (pr processResult) getOutAddrAndOutPkt() (r uint8) {
+func (pr processResult) getOutAddrAndOutPkt() (r MessageCase) {
 	if pr.AddrSrc == AddrFromDataplane {
 		unfold pr.Mem()
 		package (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
 			fold pr.Mem()
 		}
-		r = 1
+		r = MsgWithDataPlaneAdd
 	} else if pr.AddrSrc == AddrFromMessage {
 		unfold pr.Mem()
 		package ((pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000))) --* pr.Mem() {
 			fold pr.Mem()
 		}
-		r = 2
-	} else if pr.AddrSrc == AddrAliased {
+		r = MsgWithMessageAdd
+	} else if pr.AddrSrc == AddrFromPacketBytes {
 		pr.getOutAddr()
 		unfold acc(pr.Mem(), 1/1000)
 		package ((pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
 			apply (pr.OutAddr != nil ==> acc(pr.OutAddr.Mem(), 1/1000)) --* acc(pr.Mem(), 1/1000)
 			fold acc(pr.Mem(), 1/1000)
 		}
-		r = 3
+		r = MsgWithBytePacketAdd
 	} else {
 		unfold pr.Mem()
 		package (pr.OutPkt != nil ==> acc(verifyutils.BytesAcc(pr.OutPkt), 1/1000)) --* pr.Mem() {
 			fold pr.Mem()
 		}
-		r = 4
+		r = MsgWithNoAdd
 	}
 }
 
@@ -3183,7 +3189,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		ghost sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
 
-		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt, AddrSrc: AddrAliased}, nil
+		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt, AddrSrc: AddrFromPacketBytes}, nil
 		fold pr.Mem()
 		assert pr.Mem()
 
@@ -3572,7 +3578,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	ghost s.getRawPktAccWithoutPreservePath(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt)
 	unfold acc(DataPlaneMutexInvariant(d), _)
-	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt, AddrSrc: AddrAliased}, nil
+	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt, AddrSrc: AddrFromPacketBytes}, nil
 	fold pr.Mem()
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
 		unfold pr.Mem()
