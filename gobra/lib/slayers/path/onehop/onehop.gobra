@@ -71,14 +71,16 @@ pure func (p *Path) GetTimestamp() uint32 {
 }
 
 requires acc(p.Mem(), 1/1000)
+ensures res >= 0
 decreases
-pure func (p *Path) GetFristHopConsEgress() uint16 {
+pure func (p *Path) GetFristHopConsEgress() (res uint16) {
 	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetConsEgress()
 }
 
 requires acc(p.Mem(), 1/1000)
+ensures res >= 0
 decreases
-pure func (p *Path) GetFristHopConsIngress() uint16 {
+pure func (p *Path) GetFristHopConsIngress() (res uint16) {
 	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetConsIngress()
 }
 
@@ -101,14 +103,16 @@ pure func (p *Path) GetFirstHopExpTime() uint8 {
 }
 
 requires acc(p.Mem(), 1/1000)
+ensures res >= 0
 decreases
-pure func (p *Path) GetSecondHopConsEgress() uint16 {
+pure func (p *Path) GetSecondHopConsEgress() (res uint16) {
 	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetConsEgress()
 }
 
 requires acc(p.Mem(), 1/1000)
+ensures res >= 0
 decreases
-pure func (p *Path) GetSecondHopConsIngress() uint16 {
+pure func (p *Path) GetSecondHopConsIngress() (res uint16) {
 	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetConsIngress()
 }
 
@@ -144,6 +148,10 @@ func (p *Path) InfoUpdateSegID() {
 	fold p.Mem()
 }
 
+// (tlino) Gobra cannot yet deduce that uints are always non-negative
+// (tlino) Thus we need the preconditions for hop.ConsIngress and hop.ConsEgress
+requires hop.ConsIngress >= 0
+requires hop.ConsEgress >= 0
 requires len(hop.Mac) == path.MacLen
 requires forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i])
 preserves p.Mem()

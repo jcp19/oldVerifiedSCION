@@ -56,12 +56,19 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 // between ipv4.Message, ipv6.Message and socket.Message.
 type Messages []ipv4.Message
 
+// (tlino) This predicate is established right after initializing Messages 
 pred (m Messages) MemPartiallyInitialized() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemPartiallyInitialized()
 }
 
+// (tlino) This predicate is established for the Messages buffer.
 pred (m Messages) Mem() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
+}
+
+// (tlino) This predicate is established for every message sent by the SCION border router.
+pred (m Messages) MemSend() {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemSend()
 }
 
 // Conn describes the API for an underlay socket with additional metadata on

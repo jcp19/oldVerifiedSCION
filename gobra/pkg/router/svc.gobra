@@ -134,11 +134,11 @@ func (s *services) DelSvc(svc addr.HostSVC, a *net.UDPAddr) {
 	fold s.Mem()
 }
 
-requires s.Mem()
-ensures  ok  ==> s.Mem() && acc(addr.Mem(), _)
-ensures  !ok ==> s.Mem() && addr == nil
+preserves acc(s.Mem(), _)
+ensures  ok  ==> acc(addr.Mem(), _)
+ensures  !ok ==> addr == nil
 func (s *services) Any(svc addr.HostSVC) (addr *net.UDPAddr, ok bool) {
-	unfold s.Mem()
+	unfold acc(s.Mem(), _)
 	s.mtx.Lock()
 	// (joao) defer not supported
 	// defer s.mtx.Unlock()
@@ -160,7 +160,7 @@ func (s *services) Any(svc addr.HostSVC) (addr *net.UDPAddr, ok bool) {
 	fold validMapValue(addrs)
 	fold internalLockInv!<s!>()
 	s.mtx.Unlock()
-	fold s.Mem()
+	fold acc(s.Mem(), _)
 	return tmp, true
 }
 

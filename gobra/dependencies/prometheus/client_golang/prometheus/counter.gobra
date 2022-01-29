@@ -19,6 +19,7 @@ import (
 	"time"
 )
 
+// (tlino) The Prometheus reference implementaiton of Counter ensures thread-safety
 // Counter is a Metric that represents a single numerical value that only ever
 // goes up. That implies that it cannot be used to count items whose number can
 // also go down, e.g. the number of currently running goroutines. Those
@@ -36,29 +37,31 @@ type Counter interface {
 
 	// (joao) this method is from Metric because Gobra does not have good support
 	//        for composition of interfaces
-	preserves Mem()
+	preserves acc(Mem(), _)
 	ensures   d.Mem()
 	Desc() (d *Desc)
 
 	// (joao) this method is from Collector because Gobra does not have good support
 	//        for composition of interfaces
-	requires Mem() && acc(c.SendChannel(), _) && c.SendGivenPerm() == (*Desc).Mem!<_!>;
-	ensures  Mem()
+	requires acc(c.SendChannel(), _) && c.SendGivenPerm() == (*Desc).Mem!<_!>;
+	preserves acc(Mem(), _)
 	Describe(c chan<- *Desc)
 
 	// (joao) this method is from Collector because Gobra does not have good support
 	//        for composition of interfaces
 	requires Mem() && acc(c.SendChannel(), _) && c.SendGivenPerm() == Metric.Mem!<_!>;
-	ensures  Mem()
+	preserves acc(Mem(), _)
 	Collect(c chan<- Metric)
 
 	// Inc increments the counter by 1. Use Add to increment it by arbitrary
 	// non-negative values.
-	preserves Mem()
+	preserves acc(Mem(), _)
+	decreases
 	Inc()
 	// Add adds the given value to the counter. It panics if the value is <
 	// 0.
-	preserves Mem()
+	preserves acc(Mem(), _)
+	decreases
 	Add(float64)
 }
 
@@ -88,3 +91,13 @@ requires opts.ConstLabels != nil ==> acc(opts.ConstLabels)
 requires forall i int :: 0 <= i && i < len(labelNames) ==> acc(&labelNames[i], 1/1000)
 ensures  c.Mem()
 func NewCounterVec(opts CounterOpts, labelNames []string) (c *CounterVec)
+
+// (tlino) The Prometheus reference implementaiton of CounterVec and Counter ensures thread-safety
+// With works as GetMetricWith, but panics where GetMetricWithLabels would have
+// returned an error. Not returning an error allows shortcuts like
+//     myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
+preserves acc(v.Mem(), _)
+preserves acc(labels, _)
+ensures acc(c.Mem(), _)
+decreases _
+func (v *CounterVec) With(labels Labels) (c Counter)
