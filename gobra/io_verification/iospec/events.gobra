@@ -29,39 +29,53 @@ requires token(t) && decodePkt_p(t, m, res)
 ensures token(t1) && t1 == old(get_decodePkt_t1(t, m, res))
 func decodePkt_f(t Place, m AbsMessage, res AbsSCION) (t1 Place)
 
-// processIntraBFD (internal)
-pred processIntraBFD_p(ghost t Place, ghost s AbsSCION)
+// decodeIntraBFD (internal)
+pred decodeIntraBFD_p(ghost t Place, ghost s AbsSCION, ghost res AbsBFD)
 
 ghost
-requires processIntraBFD_p(t, s)
-pure func get_processIntraBFD_t1(t Place, s AbsSCION) (t1 Place)
+requires decodeIntraBFD_p(t, s, res)
+pure func get_decodeIntraBFD_t1(t Place, s AbsSCION, res AbsBFD) (t1 Place)
 
 ghost
-requires processIntraBFD_p(t, s)
-pure func get_processIntraBFD_res(t Place, s AbsSCION) (res AbsProcessResult)
+requires token(t) && decodeIntraBFD_p(t, s, res)
+ensures token(t1) && t1 == old(get_decodeIntraBFD_t1(t, s, res))
+func decodeIntraBFD_f(t Place, s AbsSCION, res AbsBFD) (t1 Place)
+
+// decodeInterBFD (internal)
+pred decodeInterBFD_p(ghost t Place, ghost s AbsSCION, ghost res AbsBFD)
 
 ghost
-requires token(t) && processIntraBFD_p(t, s)
-ensures token(t1) && t1 == old(get_processIntraBFD_t1(t, s))
-ensures res == old(get_processIntraBFD_res(t, s))
-func processIntraBFD_f(t Place, s AbsSCION) (t1 Place, res AbsProcessResult)
-
-// processInterBFD (internal)
-pred processInterBFD_p(ghost t Place, ghost s AbsSCION)
+requires decodeInterBFD_p(t, s, res)
+pure func get_decodeInterBFD_t1(t Place, s AbsSCION, res AbsBFD) (t1 Place)
 
 ghost
-requires processInterBFD_p(t, s)
-pure func get_processInterBFD_t1(t Place, s AbsSCION) (t1 Place)
+requires token(t) && decodeInterBFD_p(t, s, res)
+ensures token(t1) && t1 == old(get_decodeInterBFD_t1(t, s, res))
+func decodeInterBFD_f(t Place, s AbsSCION, res AbsBFD) (t1 Place)
+
+// sendIntraBFD (internal)
+pred sendIntraBFD_p(ghost t Place, ghost b AbsBFD)
 
 ghost
-requires processInterBFD_p(t, s)
-pure func get_processInterBFD_res(t Place, s AbsSCION) (res AbsProcessResult)
+requires sendIntraBFD_p(t, b)
+pure func get_sendIntraBFD_t1(t Place, b AbsBFD) (t1 Place)
 
 ghost
-requires token(t) && processInterBFD_p(t, s)
-ensures token(t1) && t1 == old(get_processInterBFD_t1(t, s))
-ensures res == old(get_processInterBFD_res(t, s))
-func processInterBFD_f(t Place, s AbsSCION) (t1 Place, res AbsProcessResult)
+requires token(t) && sendIntraBFD_p(t, b)
+ensures token(t1) && t1 == old(get_sendIntraBFD_t1(t, b))
+func sendIntraBFD_f(t Place, b AbsBFD) (t1 Place)
+
+// sendInterBFD (internal)
+pred sendInterBFD_p(ghost t Place, ghost b AbsBFD)
+
+ghost
+requires sendInterBFD_p(t, b)
+pure func get_sendInterBFD_t1(t Place, b AbsBFD) (t1 Place)
+
+ghost
+requires token(t) && sendInterBFD_p(t, b)
+ensures token(t1) && t1 == old(get_sendInterBFD_t1(t, b))
+func sendInterBFD_f(t Place, b AbsBFD) (t1 Place)
 
 // processOHP (internal)
 pred processOHP_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult)
