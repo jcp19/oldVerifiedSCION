@@ -69,6 +69,11 @@ import (
 	"gobra/pkg/router/control"
 
 	"gobra/verifyutils"
+
+	pl "gobra/io_verification/place"
+	io "gobra/io_verification/iospec"
+	at "gobra/io_verification/abstract"
+	ft "gobra/io_verification/fact"
 )
 
 const (
@@ -111,11 +116,15 @@ type bfdSession interface {
 type BatchConn interface {
 	pred Mem()
 
+	requires pl.token(t) && io.readBatch_p(t)
 	preserves acc(Mem(), _)
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
-	ensures err == nil ==> 0 <= n && n <= len(msgs) && n <= len(metas)
-	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta) (n int, err error)
+	ensures err == nil ==> 0 < n && n <= len(msgs) && n <= len(metas)
+	ensures err == nil ==> absMsgs == at.AbsMessages(msgs)
+	ensures err == nil ==> pl.token(t1) && t1 == old(io.get_readBatch_t1(t)) && absMsgs == old(io.get_readBatch_msgs(t))
+	ensures err != nil ==> t1 == t && pl.token(t1) && io.readBatch_p(t1) && io.get_readBatch_t1(t) == old(io.get_readBatch_t1(t)) && io.get_readBatch_msgs(t) == old(io.get_readBatch_msgs(t))
+	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t pl.Place) (n int, err error, ghost absMsgs seq[at.AbsMessage], ghost t1 pl.Place)
 
 	preserves acc(Mem(), _)
 	preserves acc(msgs.MemSend(), 1/1000)
@@ -1001,6 +1010,10 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) outlined code to separate function
 	msgs, metas := initReadClosureBuffer()
 
+	ghost var currentPlace pl.Place
+	ghost var state mset[ft.Fact]
+	inhale pl.token(currentPlace) && io.P(currentPlace, state)
+
 	// (tlino) use pointer
 	// var scmpErr scmpError
 	scmpErr := &scmpError{}
@@ -1021,8 +1034,12 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant buffer.Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 	invariant len(origPacket) == bufSize
+	invariant pl.token(currentPlace) && io.P(currentPlace, state)
 	for d.isRunning() {
-		pkts, err := rd.ReadBatch(msgs, metas)
+		unfold io.P(currentPlace, state)
+		unfold io.P_readBatch(currentPlace, state)
+		pkts, err, absMessages, t1 := rd.ReadBatch(msgs, metas, currentPlace)
+		ghost currentPlace = t1
 
 		// (tlino) continue not supported by gobra
 		// adapted code is below
@@ -1039,7 +1056,12 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			// (tlino) log not supported yet
 			// log.Debug("Failed to read batch", "err", err)
 			// error metric
+			fold io.P_readBatch(currentPlace, state)
+			fold io.P(currentPlace, state)
+			assert io.P(currentPlace, state)
 		} else if pkts > 0 {
+			state = state union io.ToMset(absMessages)
+			assert io.P(currentPlace, state)
 			// (tlino) outlined code to separate function
 			processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt)
 
