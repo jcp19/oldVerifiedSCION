@@ -33,18 +33,6 @@ type Fact domain {
     func sentInterBFDFact(AbsBFD) Fact
     func getSentInterBFDFact(Fact) AbsBFD
 
-    // processed BFD
-    func processedBFDFact(AbsBFDResult) Fact
-    func getProcessedBFDFact(Fact) AbsBFDResult
-
-    // processed OHP
-    func processedOHPFact(AbsOHPResult) Fact
-    func getProcessedOHPFact(Fact) AbsOHPResult
-
-    // processed SCION
-    func processedSCIONFact(AbsSCIONResult) Fact
-    func getProcessedSCIONFact(Fact) AbsSCIONResult
-
     // processed Pkt
     func processedPktFact(AbsProcessResult) Fact
     func getProcessedPktFact(Fact) AbsProcessResult
@@ -107,36 +95,9 @@ type Fact domain {
         forall t1, t2 AbsBFD :: t1 != t2 ==> sentInterBFDFact(t1) != sentInterBFDFact(t2)
     }
 
-    // processedBFDFact injective
-    axiom {
-        forall t AbsBFDResult :: { processedBFDFact(t) } getProcessedBFDFact(processedBFDFact(t)) == t && getType(processedBFDFact(t)) == 6
-    }
-    // processedBFDFact injective
-    axiom {
-        forall t1, t2 AbsBFDResult :: t1 != t2 ==> processedBFDFact(t1) != processedBFDFact(t2)
-    }
-
-    // processedOHPFact injective
-    axiom {
-        forall t AbsOHPResult :: { processedOHPFact(t) } getProcessedOHPFact(processedOHPFact(t)) == t && getType(processedOHPFact(t)) == 7
-    }
-    // processedOHPFact injective
-    axiom {
-        forall t1, t2 AbsOHPResult :: t1 != t2 ==> processedOHPFact(t1) != processedOHPFact(t2)
-    }
-
-    // processedSCIONFact injective
-    axiom {
-        forall t AbsSCIONResult :: { processedSCIONFact(t) } getProcessedSCIONFact(processedSCIONFact(t)) == t && getType(processedSCIONFact(t)) == 8
-    }
-    // processedSCIONFact injective
-    axiom {
-        forall t1, t2 AbsSCIONResult :: t1 != t2 ==> processedSCIONFact(t1) != processedSCIONFact(t2)
-    }
-
     // processedPktFact injective
     axiom {
-        forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t && getType(processedPktFact(t)) == 9
+        forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t && getType(processedPktFact(t)) == 6
     }
     // processedPktFact injective
     axiom {
@@ -145,7 +106,7 @@ type Fact domain {
 
     // outFact injective
     axiom {
-        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 10
+        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 7
     }
     // outFact injective
     axiom {

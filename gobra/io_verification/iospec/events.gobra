@@ -17,7 +17,6 @@ ghost
 requires readBatch_p(t)
 pure func get_readBatch_msgs(t Place) (msgs seq[AbsMessage])
 
-
 // decodePkt (internal)
 pred decodePkt_p(ghost t Place, ghost m AbsMessage, ghost res AbsSCION)
 
@@ -65,55 +64,40 @@ ensures res == old(get_processInterBFD_res(t, s))
 func processInterBFD_f(t Place, s AbsSCION) (t1 Place, res AbsProcessResult)
 
 // processOHP (internal)
-pred processOHP_p(ghost t Place, ghost s AbsSCION)
+pred processOHP_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult)
 
 ghost
-requires processOHP_p(t, s)
-pure func get_processOHP_t1(t Place, s AbsSCION) (t1 Place)
+requires processOHP_p(t, s, res)
+pure func get_processOHP_t1(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 ghost
-requires processOHP_p(t, s)
-pure func get_processOHP_res(t Place, s AbsSCION) (res AbsProcessResult)
-
-ghost
-requires token(t) && processOHP_p(t, s)
-ensures token(t1) && t1 == old(get_processOHP_t1(t, s))
-ensures res == old(get_processOHP_res(t, s))
-func processOHP_f(t Place, s AbsSCION) (t1 Place, res AbsProcessResult)
+requires token(t) && processOHP_p(t, s, res)
+ensures token(t1) && t1 == old(get_processOHP_t1(t, s, res))
+func processOHP_f(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 // processSCION (internal)
-pred processSCION_p(ghost t Place, ghost s AbsSCION)
+pred processSCION_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult)
 
 ghost
-requires processSCION_p(t, s)
-pure func get_processSCION_t1(t Place, s AbsSCION) (t1 Place)
+requires processSCION_p(t, s, res)
+pure func get_processSCION_t1(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 ghost
-requires processSCION_p(t, s)
-pure func get_processSCION_res(t Place, s AbsSCION) (res AbsProcessResult)
-
-ghost
-requires token(t) && processSCION_p(t, s)
-ensures token(t1) && t1 == old(get_processSCION_t1(t, s))
-ensures res == old(get_processSCION_res(t, s))
-func processSCION_f(t Place, s AbsSCION) (t1 Place, res AbsProcessResult)
+requires token(t) && processSCION_p(t, s, res)
+ensures token(t1) && t1 == old(get_processSCION_t1(t, s, res))
+func processSCION_f(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 // packPkt (internal)
-pred packPkt_p(ghost t Place, ghost pr AbsProcessResult)
+pred packPkt_p(ghost t Place, ghost pr AbsProcessResult, ghost res AbsMessage)
 
 ghost
-requires packPkt_p(t, pr)
-pure func get_packPkt_t1(t Place,  pr AbsProcessResult) (t1 Place)
+requires packPkt_p(t, pr, res)
+pure func get_packPkt_t1(t Place,  pr AbsProcessResult, res AbsMessage) (t1 Place)
 
 ghost
-requires packPkt_p(t, pr)
-pure func get_packPkt_res(t Place,  pr AbsProcessResult) (res AbsMessage)
-
-ghost
-requires token(t) && packPkt_p(t, pr)
-ensures token(t1) && t1 == old(get_packPkt_t1(t, pr))
-ensures res == old(get_packPkt_res(t, pr))
-func packPkt_f(t Place,  pr AbsProcessResult) (t1 Place, res AbsMessage)
+requires token(t) && packPkt_p(t, pr, res)
+ensures token(t1) && t1 == old(get_packPkt_t1(t, pr, res))
+func packPkt_f(t Place,  pr AbsProcessResult, res AbsMessage) (t1 Place)
 
 // writeBatch (BIO)
 pred writeBatch_p(ghost t Place, ghost msg AbsMessage)
