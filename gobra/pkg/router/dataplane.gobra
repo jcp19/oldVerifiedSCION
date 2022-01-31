@@ -126,11 +126,16 @@ type BatchConn interface {
 	ensures err != nil ==> t1 == t && pl.token(t1) && io.readBatch_p(t1) && io.get_readBatch_t1(t) == old(io.get_readBatch_t1(t)) && io.get_readBatch_msgs(t) == old(io.get_readBatch_msgs(t))
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t pl.Place) (n int, err error, ghost absMsgs seq[at.AbsMessage], ghost t1 pl.Place)
 
+	requires acc(msgs.MemSend(), 1/1000)
+	requires pl.token(t) && io.writeBatch_p(t, absMsgs)
+	requires absMsgs == at.AbsMessagesSend(msgs)
 	preserves acc(Mem(), _)
-	preserves acc(msgs.MemSend(), 1/1000)
-	ensures err == nil ==> 0 <= n && n <= len(msgs)
+	ensures acc(msgs.MemSend(), 1/1000)
+	ensures err == nil ==> 0 < n && n <= len(msgs)
+	ensures err == nil ==> pl.token(t1) && t1 == old(io.get_writeBatch_t1(t, absMsgs))
+	ensures err != nil ==> t1 == t && pl.token(t1) && io.writeBatch_p(t, absMsgs) && io.get_writeBatch_t1(t, absMsgs) == old(io.get_writeBatch_t1(t, absMsgs))
 	decreases
-	WriteBatch(msgs underlayconn.Messages) (n int, err error)
+	WriteBatch(msgs underlayconn.Messages, ghost t pl.Place, ghost absMsgs at.AbsMessage) (n int, err error, ghost t1 pl.Place)
 
 	requires Mem()
 	Close() error
@@ -1061,9 +1066,9 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			assert io.P(currentPlace, state)
 		} else if pkts > 0 {
 			state = state union io.ToMset(absMessages)
-			assert io.P(currentPlace, state)
 			// (tlino) outlined code to separate function
-			processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt)
+			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, currentPlace, state)
+			assert io.P(currentPlace, state)
 
 			// (tlino) outlined code to separate function
 			resetReadClosureBuffers(msgs, pkts)
@@ -1113,6 +1118,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since processMessage might not terminate
+requires pl.token(t) && io.P(t, s)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1125,9 +1131,13 @@ preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
 preserves acc(scmpErr)
 preserves buffer.Mem()
+ensures pl.token(t1) && io.P(t1, s1)
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
-	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION) {
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost t pl.Place, ghost s mset[ft.Fact]) (ghost t1 pl.Place, ghost s1 mset[ft.Fact]) {
 	unfold msgs.Mem()
+
+	ghost var currentPlace pl.Place = t
+	ghost var currentState mset[ft.Fact] = s
 
 	// (tlino) range not supported by Gobra
 	// for _, p := range msgs[:pkts] {
@@ -1142,16 +1152,19 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant acc(scmpErr)
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
+	invariant pl.token(currentPlace) && io.P(currentPlace, currentState)
 	for i := 0; i < pkts; i++ {
-		processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr)
+		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, currentPlace, currentState)
   	}
 	fold msgs.Mem()
+	return currentPlace, currentState
 }
 
 // (tlino) Verified
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since d.processPkt might not terminate
+requires pl.token(t) && io.P(t, s)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1162,8 +1175,9 @@ preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
 preserves isZeroSCION(spkt)
 preserves acc(scmpErr)
 preserves buffer.Mem()
+ensures pl.token(t1) && io.P(t1, s1)
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpErr *scmpError) {
+	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost t pl.Place, ghost s mset[ft.Fact]) (ghost t1 pl.Place, ghost s1 mset[ft.Fact]) {
 
 	unfold p.Mem()
 	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
@@ -1236,12 +1250,12 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		unfold verifyutils.BytesAcc(localOrigPacket)
 		unfold verifyutils.BytesAcc((p.Buffers)[0])
 		fold p.Mem()
-		return
+		return t, s
 	}
 	assert switchCase == errorIsNil || switchCase == errorIsSCMP
 
 	// (tlino) outlined code block to its own method
-	processMessageHelper(d, result)
+	t1, s1 := processMessageHelper(d, result, t, s)
 
 	ghost if switchCase == errorIsNil {
 		apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
@@ -1303,16 +1317,20 @@ func updateDroppedPackets(d *DataPlane, inputLabels prometheus.Labels) {
 
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
+requires pl.token(t) && io.P(t, s)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
+ensures pl.token(t1) && io.P(t1, s1)
 decreases
-func processMessageHelper(d *DataPlane, result processResult) {
+func processMessageHelper(d *DataPlane, result processResult, ghost t pl.Place, ghost s mset[ft.Fact]) (ghost t1 pl.Place, ghost s1 mset[ft.Fact]) {
+	ghost var currentState mset[ft.Fact] = s
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
 		// (tlino) This helper function used to be a part of a loop,
 		// (tlino) since the continue isn't supported we use a return statement
 		// continue
-		return
+		assert io.P(t, currentState)
+		return t, currentState
 	}
 	// (tlino) original code, adapted code is below
 	// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
@@ -1338,7 +1356,13 @@ func processMessageHelper(d *DataPlane, result processResult) {
 
 	// (tlino) moved message creation to outlined function
 	messages := createMessages(pld, address, resultCase)
-	_, err := result.OutConn.WriteBatch(messages)
+
+	unfold io.P(t,s)
+	unfold io.P_writeBatch(t,s)
+	ghost var absMsgs at.AbsMessage
+	assume absMsgs == at.AbsMessagesSend(messages)
+	assume (ft.outFact(absMsgs) # currentState) > 0
+	_, err, t1 := result.OutConn.WriteBatch(messages, t, absMsgs)
 
 	// (tlino) ghost code to get back access to result.Mem()
 	ghost if resultCase == MsgWithDataPlaneAdd {
@@ -1366,8 +1390,13 @@ func processMessageHelper(d *DataPlane, result processResult) {
 		// error metric // (tlino) original scion comment
 		// (tlino) This method used to be part of a loop. We replace continue by return.
 		// continue
-		return
+		fold io.P_writeBatch(t1, currentState)
+		fold io.P(t1, currentState)
+		assert io.P(t1, currentState)
+		return t1, currentState
 	}
+	ghost currentState = currentState setminus mset[ft.Fact]{ ft.outFact(absMsgs) }
+
 	// ok metric
 	// (tlino) use getters to simplify verification
 	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
@@ -1377,6 +1406,8 @@ func processMessageHelper(d *DataPlane, result processResult) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
 	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
+	assert io.P(t1, currentState)
+	return t1, currentState
 }
 
 // (tlino) added type
