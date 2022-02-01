@@ -1,0 +1,39 @@
+package router
+
+import (
+    "gobra/dependencies/x/net/ipv4"
+    underlayconn "gobra/lib/underlay/conn"
+)
+
+type AbsMessage domain {
+
+    func toAbsMessage(ipv4.Message) (res AbsMessage)
+
+    // injective Message
+    axiom {
+        forall m1, m2 ipv4.Message :: m1 != m2 ==> toAbsMessage(m1) != toAbsMessage(m2)
+    }
+    // identity
+    axiom {
+        forall m1, m2 ipv4.Message :: m1 == m2 ==> toAbsMessage(m1) == toAbsMessage(m2)
+    }
+}
+
+type AbsSCION domain {}
+
+type AbsBFD domain {}
+
+type AbsProcessResult domain {}
+
+// (tlino) used to abstract messages when receiving
+ghost
+requires msgs.Mem()
+ensures len(res) == len(msgs)
+ensures unfolding msgs.Mem() in (forall i int :: 0 <= i && i < len(msgs) ==> res[i] == (unfolding (&msgs[i]).Mem() in toAbsMessage(msgs[i])))
+pure func ToAbsMessages(msgs underlayconn.Messages) (res seq[AbsMessage])
+
+// (tlino) used to abstract Absmessage when sending
+// (tlino) scion only sends a single Absmessage at a time
+ghost
+requires acc(msgs.MemSend(), 1/1000)
+pure func ToAbsMessagesSend(msgs underlayconn.Messages) (res AbsMessage)
