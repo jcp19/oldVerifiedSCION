@@ -1,5 +1,11 @@
 package router
 
+import (
+    . "gobra/io_verification/place"
+    . "gobra/io_verification/abstract"
+    . "gobra/io_verification/iospec"
+)
+
 pred P(pl Place, ghost s mset[Fact]) {
     P_readBatch(pl, s) &&
     P_decodePkt(pl, s) &&

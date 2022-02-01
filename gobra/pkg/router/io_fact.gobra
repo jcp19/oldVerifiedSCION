@@ -1,5 +1,9 @@
 package router
 
+import(
+    . "gobra/io_verification/abstract"
+)
+
 type Fact domain {
 
     // each fact has a unique 'type':

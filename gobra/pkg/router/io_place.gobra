@@ -1,7 +1,0 @@
-package router
-
-type Place domain {
-	func place(int) Place
-}
-
-pred token(t Place)
