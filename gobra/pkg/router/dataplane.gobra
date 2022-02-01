@@ -116,7 +116,7 @@ type BatchConn interface {
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 < n && n <= len(msgs) && n <= len(metas)
-	ensures err == nil ==> absMsgs == ToAbsMessages(msgs)
+	ensures err == nil ==> absMsgs == ToAbsMessages(msgs, n)
 	ensures err == nil ==> token(t1) && t1 == old(get_readBatch_t1(t)) && absMsgs == old(get_readBatch_msgs(t))
 	ensures err != nil ==> t1 == t && token(t1) && readBatch_p(t1) && get_readBatch_t1(t) == old(get_readBatch_t1(t)) && get_readBatch_msgs(t) == old(get_readBatch_msgs(t))
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost absMsgs seq[AbsMessage], ghost t1 Place)
@@ -1060,7 +1060,9 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			fold P(currentPlace, state)
 			assert P(currentPlace, state)
 		} else if pkts > 0 {
+			assert absMessages == ToAbsMessages(msgs, pkts)
 			state = state union ToMset(absMessages)
+			assert forall i int :: 0 <= i && i < pkts ==> mset[Fact]{inFact(absMessages[i])} subset state
 			// (tlino) outlined code to separate function
 			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, currentPlace, state, absMessages)
 			assert P(currentPlace, state)
@@ -1115,13 +1117,14 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) We cannot prove termination of this method, since processMessage might not terminate
 requires token(t) && P(t, s)
 requires msgs.Mem()
-requires absMsgs == ToAbsMessages(msgs)
-requires forall i int :: 0 <= i && i < len(msgs) ==> mset[Fact]{inFact(absMsgs[i])} subset s
+requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
+requires absMsgs == ToAbsMessages(msgs, pkts)
+requires forall i, j int :: 0 <= i && i < pkts && 0 <= j && j < pkts && i != j ==> absMsgs[i] != absMsgs[j]
+requires forall i int :: 0 <= i && i < pkts ==> inFact(absMsgs[i]) in s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
 requires acc(rd.Mem(), _)
-requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 requires isZeroSCION(spkt)
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
@@ -1151,7 +1154,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
 	invariant token(currentPlace) && P(currentPlace, currentState)
-	invariant forall j int :: i <= j && j < pkts ==> mset[Fact]{inFact(absMsgs[j])} subset currentState
+	invariant forall j int :: i <= j && j < pkts ==> inFact(absMsgs[j]) in currentState
 	for i := 0; i < pkts; i++ {
 		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, currentPlace, currentState, absMsgs[i], absMsgs, i, pkts)
   	}
@@ -1163,10 +1166,10 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since d.processPkt might not terminate
-requires idx >= 0
+requires 0 <= idx && idx < pkts
 requires pkts <= len(absMsgs)
 requires token(t) && P(t, s)
-requires forall j int :: idx <= j && j < pkts ==> mset[Fact]{inFact(absMsgs[j])} subset s
+requires forall j int :: idx <= j && j < pkts ==> inFact(absMsgs[j]) in s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1178,7 +1181,7 @@ preserves isZeroSCION(spkt)
 preserves acc(scmpErr)
 preserves buffer.Mem()
 ensures token(t1) && P(t1, s1)
-ensures forall j int :: idx + 1 <= j && j < pkts ==> mset[Fact]{inFact(absMsgs[j])} subset s1
+ensures s1 == (s setminus mset[Fact]{inFact(absMsgs[idx])})
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
 	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost t Place, ghost s mset[Fact], ghost absMsg AbsMessage, ghost absMsgs seq[AbsMessage], ghost idx int, ghost pkts int) (ghost t1 Place, ghost s1 mset[Fact]) {
 
