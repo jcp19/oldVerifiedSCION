@@ -30,10 +30,10 @@ ghost
 requires msgs.Mem()
 ensures len(res) == len(msgs)
 ensures unfolding msgs.Mem() in (forall i int :: 0 <= i && i < len(msgs) ==> res[i] == (unfolding (&msgs[i]).Mem() in toAbsMessage(msgs[i])))
-pure func toAbsMessages(msgs underlayconn.Messages) (res seq[AbsMessage])
+pure func ToAbsMessages(msgs underlayconn.Messages) (res seq[AbsMessage])
 
 // (tlino) used to abstract Absmessage when sending
 // (tlino) scion only sends a single Absmessage at a time
 ghost
 requires acc(msgs.MemSend(), 1/1000)
-pure func toAbsMessagesSend(msgs underlayconn.Messages) (res AbsMessage)
+pure func ToAbsMessagesSend(msgs underlayconn.Messages) (res AbsMessage)

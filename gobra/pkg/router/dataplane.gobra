@@ -121,14 +121,14 @@ type BatchConn interface {
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 < n && n <= len(msgs) && n <= len(metas)
-	ensures err == nil ==> absMsgs == at.toAbsMessages(msgs)
+	ensures err == nil ==> absMsgs == at.ToAbsMessages(msgs)
 	ensures err == nil ==> pl.token(t1) && t1 == old(io.get_readBatch_t1(t)) && absMsgs == old(io.get_readBatch_msgs(t))
 	ensures err != nil ==> t1 == t && pl.token(t1) && io.readBatch_p(t1) && io.get_readBatch_t1(t) == old(io.get_readBatch_t1(t)) && io.get_readBatch_msgs(t) == old(io.get_readBatch_msgs(t))
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t pl.Place) (n int, err error, ghost absMsgs seq[at.AbsMessage], ghost t1 pl.Place)
 
 	requires acc(msgs.MemSend(), 1/1000)
 	requires pl.token(t) && io.writeBatch_p(t, absMsgs)
-	requires absMsgs == at.toAbsMessagesSend(msgs)
+	requires absMsgs == at.ToAbsMessagesSend(msgs)
 	preserves acc(Mem(), _)
 	ensures acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 < n && n <= len(msgs)
@@ -1120,7 +1120,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) We cannot prove termination of this method, since processMessage might not terminate
 requires pl.token(t) && io.P(t, s)
 requires msgs.Mem()
-requires absMsgs == at.toAbsMessages(msgs)
+requires absMsgs == at.ToAbsMessages(msgs)
 requires forall i int :: 0 <= i && i < len(msgs) ==> mset[ft.Fact]{ft.inFact(absMsgs[i])} subset s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
@@ -1369,7 +1369,7 @@ func processMessageHelper(d *DataPlane, result processResult, ghost t pl.Place, 
 	unfold io.P(t,s)
 	unfold io.P_writeBatch(t,s)
 	ghost var absMsgs at.AbsMessage
-	assume absMsgs == at.toAbsMessagesSend(messages)
+	assume absMsgs == at.ToAbsMessagesSend(messages)
 	assume (ft.outFact(absMsgs) # currentState) > 0
 	_, err, t1 := result.OutConn.WriteBatch(messages, t, absMsgs)
 
