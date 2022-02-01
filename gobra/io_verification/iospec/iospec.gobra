@@ -79,7 +79,6 @@ pred P_writeBatch(pl Place, ghost s mset[Fact]) {
 
 ghost
 ensures forall i int :: 0 <= i && i < len(s) ==> inFact(s[i]) in res
-// should not add other facts
 pure func ToMset(s seq[AbsMessage]) (res mset[Fact])
 
 

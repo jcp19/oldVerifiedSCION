@@ -121,14 +121,14 @@ type BatchConn interface {
 	preserves msgs.Mem()
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 < n && n <= len(msgs) && n <= len(metas)
-	ensures err == nil ==> absMsgs == at.AbsMessages(msgs)
+	ensures err == nil ==> absMsgs == at.toAbsMessages(msgs)
 	ensures err == nil ==> pl.token(t1) && t1 == old(io.get_readBatch_t1(t)) && absMsgs == old(io.get_readBatch_msgs(t))
 	ensures err != nil ==> t1 == t && pl.token(t1) && io.readBatch_p(t1) && io.get_readBatch_t1(t) == old(io.get_readBatch_t1(t)) && io.get_readBatch_msgs(t) == old(io.get_readBatch_msgs(t))
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t pl.Place) (n int, err error, ghost absMsgs seq[at.AbsMessage], ghost t1 pl.Place)
 
 	requires acc(msgs.MemSend(), 1/1000)
 	requires pl.token(t) && io.writeBatch_p(t, absMsgs)
-	requires absMsgs == at.AbsMessagesSend(msgs)
+	requires absMsgs == at.toAbsMessagesSend(msgs)
 	preserves acc(Mem(), _)
 	ensures acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 < n && n <= len(msgs)
@@ -1067,7 +1067,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 		} else if pkts > 0 {
 			state = state union io.ToMset(absMessages)
 			// (tlino) outlined code to separate function
-			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, currentPlace, state)
+			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, currentPlace, state, absMessages)
 			assert io.P(currentPlace, state)
 
 			// (tlino) outlined code to separate function
@@ -1119,21 +1119,24 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since processMessage might not terminate
 requires pl.token(t) && io.P(t, s)
+requires msgs.Mem()
+requires absMsgs == at.toAbsMessages(msgs)
+requires forall i int :: 0 <= i && i < len(msgs) ==> mset[ft.Fact]{ft.inFact(absMsgs[i])} subset s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
 requires acc(rd.Mem(), _)
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 requires isZeroSCION(spkt)
-preserves msgs.Mem()
 preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 preserves forall i int :: 0 <= i && i < len(origPacket) ==> acc(&origPacket[i])
 preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
 preserves acc(scmpErr)
 preserves buffer.Mem()
+ensures msgs.Mem()
 ensures pl.token(t1) && io.P(t1, s1)
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
-	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost t pl.Place, ghost s mset[ft.Fact]) (ghost t1 pl.Place, ghost s1 mset[ft.Fact]) {
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost t pl.Place, ghost s mset[ft.Fact], ghost absMsgs seq[at.AbsMessage]) (ghost t1 pl.Place, ghost s1 mset[ft.Fact]) {
 	unfold msgs.Mem()
 
 	ghost var currentPlace pl.Place = t
@@ -1153,8 +1156,9 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
 	invariant pl.token(currentPlace) && io.P(currentPlace, currentState)
+	invariant forall j int :: i <= j && j < pkts ==> mset[ft.Fact]{ft.inFact(absMsgs[j])} subset currentState
 	for i := 0; i < pkts; i++ {
-		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, currentPlace, currentState)
+		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, currentPlace, currentState, absMsgs[i], absMsgs, i, pkts)
   	}
 	fold msgs.Mem()
 	return currentPlace, currentState
@@ -1164,7 +1168,10 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since d.processPkt might not terminate
+requires idx >= 0
+requires pkts <= len(absMsgs)
 requires pl.token(t) && io.P(t, s)
+requires forall j int :: idx <= j && j < pkts ==> mset[ft.Fact]{ft.inFact(absMsgs[j])} subset s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1176,8 +1183,9 @@ preserves isZeroSCION(spkt)
 preserves acc(scmpErr)
 preserves buffer.Mem()
 ensures pl.token(t1) && io.P(t1, s1)
+ensures forall j int :: idx + 1 <= j && j < pkts ==> mset[ft.Fact]{ft.inFact(absMsgs[j])} subset s1
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost t pl.Place, ghost s mset[ft.Fact]) (ghost t1 pl.Place, ghost s1 mset[ft.Fact]) {
+	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost t pl.Place, ghost s mset[ft.Fact], ghost absMsg at.AbsMessage, ghost absMsgs seq[at.AbsMessage], ghost idx int, ghost pkts int) (ghost t1 pl.Place, ghost s1 mset[ft.Fact]) {
 
 	unfold p.Mem()
 	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
@@ -1207,8 +1215,8 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// (tlino) use local variables
 	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
 	//	buffer)
-	result, err := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
-		buffer)
+	result, err, t2, s2 := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
+		buffer, t, s)
 
 	assert result.Mem()
 
@@ -1250,12 +1258,12 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		unfold verifyutils.BytesAcc(localOrigPacket)
 		unfold verifyutils.BytesAcc((p.Buffers)[0])
 		fold p.Mem()
-		return t, s
+		return t2, s2
 	}
 	assert switchCase == errorIsNil || switchCase == errorIsSCMP
 
 	// (tlino) outlined code block to its own method
-	t1, s1 := processMessageHelper(d, result, t, s)
+	t3, s3 := processMessageHelper(d, result, t2, s2)
 
 	ghost if switchCase == errorIsNil {
 		apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
@@ -1266,6 +1274,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	unfold verifyutils.BytesAcc(localOrigPacket)
 	unfold verifyutils.BytesAcc((p.Buffers)[0])
 	fold p.Mem()
+	return t3, s3
 }
 
 // (tlino) Verified
@@ -1360,7 +1369,7 @@ func processMessageHelper(d *DataPlane, result processResult, ghost t pl.Place, 
 	unfold io.P(t,s)
 	unfold io.P_writeBatch(t,s)
 	ghost var absMsgs at.AbsMessage
-	assume absMsgs == at.AbsMessagesSend(messages)
+	assume absMsgs == at.toAbsMessagesSend(messages)
 	assume (ft.outFact(absMsgs) # currentState) > 0
 	_, err, t1 := result.OutConn.WriteBatch(messages, t, absMsgs)
 
@@ -1730,6 +1739,7 @@ func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 
 // (tlino) Verified
 // (tlino) We cannot prove termination of this method, since d.processSCION() and d.processOHP() might not terminate
+requires pl.token(t0) && io.P(t0, s0)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires ingressID >= 0
@@ -1742,8 +1752,9 @@ preserves buffer.Mem()
 ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
+ensures pl.token(t1) && io.P(t1, s1)
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer) (pr processResult, errRet error) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost t0 pl.Place, ghost s0 mset[ft.Fact]) (pr processResult, errRet error, ghost t1 pl.Place, ghost s1 mset[ft.Fact]) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
@@ -1759,6 +1770,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return processResult{}, err
 
 		pr, errRet =  processResult{}, err
+		ghost s1, t1 = s0, t0
 		fold pr.Mem()
 		return
 	}
@@ -1769,6 +1781,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
+		ghost s1, t1 = s0, t0
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
 		return
@@ -1792,6 +1805,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			} else {
 				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 			}
+			ghost s1, t1 = s0, t0
 			return 
 		}
 		// (tlino) original code, adapted code is below
@@ -1802,6 +1816,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
+		ghost s1, t1 = s0, t0
 		return 
 	case slayers.PathTypeOneHop:
 		// (tlino) use sNew instead of s and use getters
@@ -1818,6 +1833,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				pr, errRet = processResult{}, malformedPath()
 				fold pr.Mem()
 				ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
+				ghost s1, t1 = s0, t0
 				return
 			}
 			
@@ -1832,18 +1848,21 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			} else {
 				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 			}
+			ghost s1, t1 = s0, t0
 			return
 		}
 		// (tlino) original code, adapted code is below
 		// return d.processOHP(ingressID, rawPkt, s, buffer)
 
 		pr, errRet = d.processOHP(ingressID, rawPkt, sNew, buffer)
+		ghost s1, t1 = s0, t0
 		return
 	case slayers.PathTypeSCION:
 		// (tlino) original code, adapted code is below 
 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
 
 		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
+		ghost s1, t1 = s0, t0
 		return
 	default:
 		// (tlino) original code, adapted code is below 
@@ -1852,6 +1871,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
+		ghost s1, t1 = s0, t0
 		return
  	}
 }
