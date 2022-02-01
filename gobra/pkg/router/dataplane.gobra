@@ -1156,7 +1156,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant token(currentPlace) && P(currentPlace, currentState)
 	invariant forall j int :: i <= j && j < pkts ==> inFact(absMsgs[j]) in currentState
 	for i := 0; i < pkts; i++ {
-		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, currentPlace, currentState, absMsgs[i], absMsgs, i, pkts)
+		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, absMsgs[i], currentPlace, currentState)
   	}
 	fold msgs.Mem()
 	return currentPlace, currentState
@@ -1166,10 +1166,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 // (tlino) added function to simplify verification
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since d.processPkt might not terminate
-requires 0 <= idx && idx < pkts
-requires pkts <= len(absMsgs)
 requires token(t) && P(t, s)
-requires forall j int :: idx <= j && j < pkts ==> inFact(absMsgs[j]) in s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
@@ -1181,9 +1178,9 @@ preserves isZeroSCION(spkt)
 preserves acc(scmpErr)
 preserves buffer.Mem()
 ensures token(t1) && P(t1, s1)
-ensures s1 == (s setminus mset[Fact]{inFact(absMsgs[idx])})
+ensures s1 == (s setminus mset[Fact]{inFact(absMsg)})
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost t Place, ghost s mset[Fact], ghost absMsg AbsMessage, ghost absMsgs seq[AbsMessage], ghost idx int, ghost pkts int) (ghost t1 Place, ghost s1 mset[Fact]) {
+	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 
 	unfold p.Mem()
 	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
@@ -1214,7 +1211,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
 	//	buffer)
 	result, err, t2, s2 := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
-		buffer, t, s)
+		buffer, absMsg, t, s)
 
 	assert result.Mem()
 
@@ -1329,6 +1326,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 ensures token(t1) && P(t1, s1)
+ensures s1 == s
 decreases
 func processMessageHelper(d *DataPlane, result processResult, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	ghost var currentState mset[Fact] = s
@@ -1751,8 +1749,9 @@ ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 ensures token(t1) && P(t1, s1)
+ensures s1 == (s0 setminus mset[Fact]{inFact(absMsg)})
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost t1 Place, ghost s1 mset[Fact]) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
