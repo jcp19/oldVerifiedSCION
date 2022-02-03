@@ -1755,7 +1755,7 @@ ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 ensures token(t1) && P(t1, s1)
-// ensures s1 == s0 setminus mset[Fact]{inFact(absMsg)} || s1 == s0 
+ensures (s0 setminus mset[Fact]{inFact(absMsg)}) subset s1
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost t1 Place, ghost s1 mset[Fact]) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
@@ -1778,6 +1778,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		return
 	}
 
+	// (tlino) apply internal decodePkt event
 	unfold P(t0, s0)
 	unfold P_decodePkt(t0, s0)
 	ghost absSCION := ToAbsSCION(sNew)
@@ -1868,14 +1869,38 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return d.processOHP(ingressID, rawPkt, s, buffer)
 
 		pr, errRet = d.processOHP(ingressID, rawPkt, sNew, buffer)
-		ghost s1, t1 = s2, t2
+		
+		// (tlino) apply internal processOHP event
+		unfold P(t2, s2)
+		unfold P_processOHP(t2, s2)
+		ghost absPR := ToAbsProcessResult(pr)
+		assert processOHP_p(t2, absSCION, absPR)
+		ghost s3 := (s2 setminus mset[Fact]{decodedPktFact(absSCION)}) union mset[Fact]{processedPktFact(absPR)}
+		ghost t3 := get_processOHP_t1(t2, absSCION, absPR)
+		ghost processOHP_f(t2, absSCION, absPR)
+		assert token(t3)
+		assert P(t3, s3)
+
+		ghost s1, t1 = s3, t3
 		return
 	case slayers.PathTypeSCION:
 		// (tlino) original code, adapted code is below 
 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
 
 		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
-		ghost s1, t1 = s2, t2
+
+		// (tlino) apply internal processSCION event
+		unfold P(t2, s2)
+		unfold P_processSCION(t2, s2)
+		ghost absPR := ToAbsProcessResult(pr)
+		assert processSCION_p(t2, absSCION, absPR)
+		ghost s3 := (s2 setminus mset[Fact]{decodedPktFact(absSCION)}) union mset[Fact]{processedPktFact(absPR)}
+		ghost t3 := get_processSCION_t1(t2, absSCION, absPR)
+		ghost processSCION_f(t2, absSCION, absPR)
+		assert token(t3)
+		assert P(t3, s3)
+
+		ghost s1, t1 = s3, t3
 		return
 	default:
 		// (tlino) original code, adapted code is below 
