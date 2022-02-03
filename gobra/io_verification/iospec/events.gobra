@@ -33,11 +33,13 @@ pred decodeIntraBFD_p(ghost t Place, ghost s AbsSCION, ghost res AbsBFD)
 
 ghost
 requires decodeIntraBFD_p(t, s, res)
+decreases
 pure func get_decodeIntraBFD_t1(t Place, s AbsSCION, res AbsBFD) (t1 Place)
 
 ghost
 requires token(t) && decodeIntraBFD_p(t, s, res)
 ensures token(t1) && t1 == old(get_decodeIntraBFD_t1(t, s, res))
+decreases
 func decodeIntraBFD_f(t Place, s AbsSCION, res AbsBFD) (t1 Place)
 
 // decodeInterBFD (internal)

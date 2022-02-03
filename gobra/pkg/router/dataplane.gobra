@@ -1811,7 +1811,9 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			// (tlino) original code, adapted code is below
 			// return processResult{}, d.processIntraBFD(srcAddr, s.Payload)
 			unfold sNew.Mem()
-			pr, errRet = processResult{}, d.processIntraBFD(srcAddr, sNew.EmbeddedBaseLayer.Payload)
+			pr = processResult{}
+			ghost var absBFD AbsBFD
+			errRet, absBFD, t1, s1 = d.processIntraBFD(srcAddr, sNew.EmbeddedBaseLayer.Payload, absSCION, t2, s2)
 			fold sNew.Mem()
 			fold pr.Mem()
 			ghost if errRet == nil {
@@ -1819,7 +1821,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			} else {
 				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 			}
-			ghost s1, t1 = s2, t2
 			return 
 		}
 		// (tlino) original code, adapted code is below
@@ -1966,17 +1967,22 @@ func translateBFDMemPred(b *layers.BFD) {
 }
 
 // (tlino) Verified
+requires token(t) && P(t, s)
+requires decodedPktFact(absScion) in s
 requires acc(DataPlaneMutexInvariant(d), _)
 preserves acc(src.Mem(), 1/1000)
 preserves verifyutils.BytesAcc(data)
+ensures token(t1) && P(t1, s1)
+ensures err == nil ==> s1 == (s setminus mset[Fact]{decodedPktFact(absScion)}) union mset[Fact]{decodedIntraBFDFact(absBFD)}
+ensures err != nil ==> (s setminus mset[Fact]{decodedPktFact(absScion)}) subset s1
 decreases
-func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
+func (d *DataPlane) processIntraBFD(src net.Addr, data []byte, ghost absScion AbsSCION, ghost t Place, ghost s mset[Fact]) (err error, ghost absBFD AbsBFD, ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	unfold acc(BfdSessionsAcc(d.bfdSessions), _)
 	if len(d.bfdSessions) == 0 {
 		// (tlino) golbals not supported
 		// return noBFDSessionConfigured
-		return noBFDSessionConfigured()
+		return noBFDSessionConfigured(), absBFD, t, s
 	}
 	p := &layers.BFD{}
 
@@ -1991,8 +1997,20 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 	unfold verifyutils.BytesAcc(data)
 	if err := p.DecodeFromBytes(data, tmp); err != nil {
 		fold verifyutils.BytesAcc(data)
-		return err
+		return err, absBFD, t, s
 	}
+
+	// (tlino) apply internal decodeIntraBFD event
+	unfold P(t, s)
+	unfold P_decodeIntraBFD(t, s)
+	absBFD = ToAbsBFD(p)
+	assert decodeIntraBFD_p(t, absScion, absBFD)
+	ghost s2 := (s setminus mset[Fact]{decodedPktFact(absScion)}) union mset[Fact]{decodedIntraBFDFact(absBFD)}
+	ghost t2 := get_decodeIntraBFD_t1(t, absScion, absBFD)
+	ghost decodeIntraBFD_f(t, absScion, absBFD)
+	assert token(t2)
+	assert P(t2, s2)
+
 	fold verifyutils.BytesAcc(data)
 	ghost translateBFDMemPred(p)
 
@@ -2002,7 +2020,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 		// (joao) No support for fmt
 		// return serrors.New("type assertion failure", "from", fmt.Sprintf("%v(%T)", src, src),
 		//	"expected", "*net.IPAddr")
-		return serrors.New("error") // (joao) TODO: remove after adding support for fmt
+		return serrors.New("error"), absBFD, t2, s2 // (joao) TODO: remove after adding support for fmt
 	}
 
 	// (tlino) range not supported yet.
@@ -2034,7 +2052,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
 				// (tlino) No support for fmt
 				// return serrors.New("type assertion failure", "from",
 				// 	fmt.Sprintf("%v(%T)", remoteUDPAddr, remoteUDPAddr), "expected", "*net.UDPAddr")
-				return serrors.New("error")
+				return serrors.New("error"), absBFD, t2, s2
 			}
 			unfold acc(remoteUDPAddr.Mem(), _)
 			unfold acc(srcUDPAddr.Mem(), 1/1000)
@@ -2049,12 +2067,12 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte) error {
  	// if v, ok := d.bfdSessions[ifID]; ok {
 	if v, ok := (d.bfdSessions)[ifID]; ok {
 		v.Messages() <- p
-		return nil
+		return nil, absBFD, t2, s2
 	}
 
 	// (tlino) globals not supported
 	// return noBFDSessionFound
-	return noBFDSessionFound()
+	return noBFDSessionFound(), absBFD, t2, s2
 }
 
 // (tlino) Verified

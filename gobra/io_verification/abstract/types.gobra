@@ -4,6 +4,7 @@ import (
     "gobra/dependencies/x/net/ipv4"
     underlayconn "gobra/lib/underlay/conn"
     "gobra/lib/slayers"
+    "gobra/dependencies/gopacket/layers"
 )
 
 type AbsMessage domain {
@@ -26,7 +27,11 @@ type AbsSCION domain {
     
 }
 
-type AbsBFD domain {}
+type AbsBFD domain {
+
+    func ToAbsBFD(*layers.BFD) AbsBFD
+
+}
 
 // (tlino) used to abstract messages when receiving
 ghost
