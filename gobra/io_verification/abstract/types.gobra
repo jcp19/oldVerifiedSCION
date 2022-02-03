@@ -3,6 +3,7 @@ package abstract
 import (
     "gobra/dependencies/x/net/ipv4"
     underlayconn "gobra/lib/underlay/conn"
+    "gobra/lib/slayers"
 )
 
 type AbsMessage domain {
@@ -19,7 +20,11 @@ type AbsMessage domain {
     }
 }
 
-type AbsSCION domain {}
+type AbsSCION domain {
+
+    func ToAbsSCION(*slayers.SCION) AbsSCION
+    
+}
 
 type AbsBFD domain {}
 
