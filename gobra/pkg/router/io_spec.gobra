@@ -86,38 +86,47 @@ pure func ToMset(s seq[AbsMessage]) (res mset[Fact])
 
 ghost
 ensures res == true
+decreases _
 pure func G_decodePkt(m AbsMessage, scn AbsSCION) (res bool)
 
 ghost
 ensures res == true
+decreases _
 pure func G_decodeIntraBFD(scn AbsSCION, bfd AbsBFD) (res bool)
 
 ghost
 ensures res == true
+decreases _
 pure func G_decodeInterBFD(scn AbsSCION, bfd AbsBFD) (res bool)
 
 ghost
 ensures res == true
+decreases _
 pure func G_sendIntraBFD(bfd AbsBFD) (res bool)
 
 ghost
 ensures res == true
+decreases _
 pure func G_sendInterBFD(bfd AbsBFD) (res bool)
 
 ghost
 ensures res == true
+decreases _
 pure func G_processOHP(scn AbsSCION, pr AbsProcessResult) (res bool)
 
 ghost
 ensures res == true
+decreases _
 pure func G_processSCION(scn AbsSCION, pr AbsProcessResult) (res bool)
 
 ghost
 ensures res == true
+decreases _
 pure func G_packPkt(pr AbsProcessResult, m AbsMessage) (res bool)
 
 ghost
 ensures res == true
+decreases _
 pure func G_writeBatch(m AbsMessage, s mset[Fact]) (res bool)
 
 // tests

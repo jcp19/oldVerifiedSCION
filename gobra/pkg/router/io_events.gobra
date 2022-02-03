@@ -10,11 +10,13 @@ pred processOHP_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult)
 
 ghost
 requires processOHP_p(t, s, res)
+decreases _
 pure func get_processOHP_t1(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 ghost
 requires token(t) && processOHP_p(t, s, res)
 ensures token(t1) && t1 == old(get_processOHP_t1(t, s, res))
+decreases _
 func processOHP_f(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 // processSCION (internal)
@@ -22,11 +24,13 @@ pred processSCION_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult)
 
 ghost
 requires processSCION_p(t, s, res)
+decreases _
 pure func get_processSCION_t1(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 ghost
 requires token(t) && processSCION_p(t, s, res)
 ensures token(t1) && t1 == old(get_processSCION_t1(t, s, res))
+decreases _
 func processSCION_f(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 // packPkt (internal)
@@ -34,9 +38,11 @@ pred packPkt_p(ghost t Place, ghost pr AbsProcessResult, ghost res AbsMessage)
 
 ghost
 requires packPkt_p(t, pr, res)
+decreases _
 pure func get_packPkt_t1(t Place,  pr AbsProcessResult, res AbsMessage) (t1 Place)
 
 ghost
 requires token(t) && packPkt_p(t, pr, res)
 ensures token(t1) && t1 == old(get_packPkt_t1(t, pr, res))
+decreases _
 func packPkt_f(t Place,  pr AbsProcessResult, res AbsMessage) (t1 Place)

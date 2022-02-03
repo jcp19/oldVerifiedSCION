@@ -1773,7 +1773,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return processResult{}, err
 
 		pr, errRet =  processResult{}, err
-		ghost s1, t1 = s0, t0
+		ghost t1, s1 = t0, s0
 		fold pr.Mem()
 		return
 	}
@@ -1795,7 +1795,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
-		ghost s1, t1 = s2, t2
+		ghost t1, s1 = t2, s2
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
 		return
@@ -1831,7 +1831,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		ghost s1, t1 = s2, t2
+		ghost t1, s1 = t2, s2
 		return 
 	case slayers.PathTypeOneHop:
 		// (tlino) use sNew instead of s and use getters
@@ -1848,7 +1848,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				pr, errRet = processResult{}, malformedPath()
 				fold pr.Mem()
 				ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-				ghost s1, t1 = s2, t2
+				ghost t1, s1 = t2, s2
 				return
 			}
 			
@@ -1863,7 +1863,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			} else {
 				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 			}
-			ghost s1, t1 = s2, t2
+			ghost t1, s1 = t2, s2
 			return
 		}
 		// (tlino) original code, adapted code is below
@@ -1882,7 +1882,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		assert token(t3)
 		assert P(t3, s3)
 
-		ghost s1, t1 = s3, t3
+		ghost t1, s1 = t3, s3
 		return
 	case slayers.PathTypeSCION:
 		// (tlino) original code, adapted code is below 
@@ -1901,7 +1901,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		assert token(t3)
 		assert P(t3, s3)
 
-		ghost s1, t1 = s3, t3
+		ghost t1, s1 = t3, s3
 		return
 	default:
 		// (tlino) original code, adapted code is below 
@@ -1910,7 +1910,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		ghost s1, t1 = s2, t2
+		ghost t1, s1 = t2, s2
 		return
  	}
 }

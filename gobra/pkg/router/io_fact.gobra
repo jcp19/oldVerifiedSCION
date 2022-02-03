@@ -116,18 +116,21 @@ type Fact domain {
 
 ghost
 ensures res == l subset s
+decreases
 pure func G(s, l mset[Fact]) (res bool) {
     return l subset s
 }
 
 ghost
 ensures res == (s setminus l) union r
+decreases
 pure func U(s, l, r mset[Fact]) (res mset[Fact]) {
     return (s setminus l) union r
 }
 
 ghost
 ensures res == mset[Fact] {}
+decreases
 pure func EmptySet() (res mset[Fact]) {
     return mset[Fact] {}
 }
