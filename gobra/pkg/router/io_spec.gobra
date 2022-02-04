@@ -15,6 +15,7 @@ pred P(pl Place, ghost s mset[Fact]) {
     P_sendInterBFD(pl, s) &&
     P_processOHP(pl, s) &&
     P_processSCION(pl, s) &&
+    P_processOther(pl, s) &&
     P_packPkt(pl, s) &&
     P_writeBatch(pl, s)
 }
@@ -65,6 +66,12 @@ pred P_processSCION(pl Place, ghost s mset[Fact]) {
     processSCION_p(pl, scn, pr) && P(get_processSCION_t1(pl, scn, pr), U(s, mset[Fact]{decodedPktFact(scn)}, mset[Fact]{processedPktFact(pr)}))
 }
 
+pred P_processOther(pl Place, ghost s mset[Fact]) {
+    forall pr AbsProcessResult :: { processOther_p(pl, pr) } (
+        G_processOther(pr)) ==>
+    processOther_p(pl, pr) && P(get_processOther_t1(pl, pr), s union mset[Fact]{processedPktFact(pr)})
+}
+
 pred P_packPkt(pl Place, ghost s mset[Fact]) {
     forall pr AbsProcessResult, m AbsMessage :: { packPkt_p(pl, pr, m) } (
         (processedPktFact(pr) in s) && G_packPkt(pr, m)) ==>
@@ -79,6 +86,7 @@ pred P_writeBatch(pl Place, ghost s mset[Fact]) {
 
 ghost
 ensures forall i int :: 0 <= i && i < len(s) ==> inFact(s[i]) in res
+decreases _
 pure func ToMset(s seq[AbsMessage]) (res mset[Fact])
 
 
@@ -118,6 +126,11 @@ ghost
 ensures res == true
 decreases _
 pure func G_processSCION(scn AbsSCION, pr AbsProcessResult) (res bool)
+
+ghost
+ensures res == true
+decreases _
+pure func G_processOther(pr AbsProcessResult) (res bool)
 
 ghost
 ensures res == true
@@ -239,5 +252,15 @@ func test10(ghost t Place, ghost s mset[Fact], m AbsMessage) {
     assert writeBatch_p(t, m)
     p_end := get_writeBatch_t1(t, m)
     set_end := s setminus mset[Fact]{outFact(m)}
+    assert P(p_end, set_end)
+}
+
+requires token(t) && P_processOther(t, s)
+requires G_processOther(pr)
+func test11(ghost t Place, ghost s mset[Fact], pr AbsProcessResult) {
+    unfold P_processOther(t, s)
+    assert processOther_p(t, pr)
+    p_end := get_processOther_t1(t, pr)
+    set_end := s union mset[Fact]{processedPktFact(pr)}
     assert P(p_end, set_end)
 }

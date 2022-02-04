@@ -1215,7 +1215,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// (tlino) use local variables
 	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
 	//	buffer)
-	result, err, t2, s2 := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
+	result, err, absPR, t2, s2 := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
 		buffer, absMsg, t, s)
 
 	assert result.Mem()
@@ -1738,6 +1738,23 @@ func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
 }
 
+ghost
+requires token(t) && P(t, s)
+ensures token(t1) && P(t1, s1)
+ensures s1 == s union mset[Fact]{processedPktFact(absPr)}
+decreases
+func processEmptyPr(pr processResult, ghost t Place, ghost s mset[Fact]) (ghost absPr AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
+	unfold P(t, s)
+	unfold P_processOther(t, s)
+	ghost absPr = ToAbsProcessResult(pr)
+	assert processOther_p(t, absPr)
+	ghost s1 := s union mset[Fact]{processedPktFact(absPr)}
+	ghost t1 := get_processOther_t1(t, absPr)
+	ghost processOther_f(t, absPr)
+	assert token(t1)
+	assert P(t1, s1)
+}
+
 // (tlino) Verified
 // (tlino) We cannot prove termination of this method, since d.processSCION() and d.processOHP() might not terminate
 requires token(t0) && P(t0, s0)
@@ -1756,8 +1773,9 @@ ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 ensures token(t1) && P(t1, s1)
 ensures (s0 setminus mset[Fact]{inFact(absMsg)}) subset s1
+ensures processedPktFact(absPR) in s1
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
@@ -1773,7 +1791,11 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return processResult{}, err
 
 		pr, errRet =  processResult{}, err
-		ghost t1, s1 = t0, s0
+
+		// (tlino) apply internal processOther event
+		ghost absPR, t1, s1 = processEmptyPr(pr, t0 , s0)
+		assert P(t1, s1)
+
 		fold pr.Mem()
 		return
 	}
@@ -1795,7 +1817,11 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
-		ghost t1, s1 = t2, s2
+
+		// (tlino) apply internal processOther event
+		ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+		assert P(t1, s1)
+
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
 		return
@@ -1820,6 +1846,10 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			} else {
 				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 			}
+
+			// (tlino) apply internal processOther event
+			ghost absPR, t1, s1 = processEmptyPr(pr, t1 , s1)
+			assert P(t1, s1)
 			return 
 		}
 		// (tlino) original code, adapted code is below
@@ -1830,7 +1860,10 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		ghost t1, s1 = t2, s2
+
+		// (tlino) apply internal processOther event
+		ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+		assert P(t1, s1)
 		return 
 	case slayers.PathTypeOneHop:
 		// (tlino) use sNew instead of s and use getters
@@ -1847,7 +1880,10 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				pr, errRet = processResult{}, malformedPath()
 				fold pr.Mem()
 				ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-				ghost t1, s1 = t2, s2
+				
+				// (tlino) apply internal processOther event
+				ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+				assert P(t1, s1)
 				return
 			}
 			
@@ -1862,7 +1898,10 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			} else {
 				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 			}
-			ghost t1, s1 = t2, s2
+
+			// (tlino) apply internal processOther event
+			ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+			assert P(t1, s1)
 			return
 		}
 		// (tlino) original code, adapted code is below
@@ -1873,7 +1912,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// (tlino) apply internal processOHP event
 		unfold P(t2, s2)
 		unfold P_processOHP(t2, s2)
-		ghost absPR := ToAbsProcessResult(pr)
+		ghost absPR = ToAbsProcessResult(pr)
 		assert processOHP_p(t2, absSCION, absPR)
 		ghost s3 := (s2 setminus mset[Fact]{decodedPktFact(absSCION)}) union mset[Fact]{processedPktFact(absPR)}
 		ghost t3 := get_processOHP_t1(t2, absSCION, absPR)
@@ -1892,7 +1931,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// (tlino) apply internal processSCION event
 		unfold P(t2, s2)
 		unfold P_processSCION(t2, s2)
-		ghost absPR := ToAbsProcessResult(pr)
+		ghost absPR = ToAbsProcessResult(pr)
 		assert processSCION_p(t2, absSCION, absPR)
 		ghost s3 := (s2 setminus mset[Fact]{decodedPktFact(absSCION)}) union mset[Fact]{processedPktFact(absPR)}
 		ghost t3 := get_processSCION_t1(t2, absSCION, absPR)
@@ -1909,7 +1948,10 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		ghost t1, s1 = t2, s2
+		
+		// (tlino) apply internal processOther event
+		ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+		assert P(t1, s1)
 		return
  	}
 }
