@@ -1,9 +1,5 @@
 package router
 
-import(
-    . "gobra/io_verification/abstract"
-)
-
 type Fact domain {
 
     // each fact has a unique 'type':
@@ -112,13 +108,6 @@ type Fact domain {
     axiom {
         forall t1, t2 AbsMessage :: t1 != t2 ==> outFact(t1) != outFact(t2)
     }
-}
-
-ghost
-ensures res == l subset s
-decreases
-pure func G(s, l mset[Fact]) (res bool) {
-    return l subset s
 }
 
 ghost

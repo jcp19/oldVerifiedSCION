@@ -69,10 +69,6 @@ import (
 	"gobra/pkg/router/control"
 
 	"gobra/verifyutils"
-
-	. "gobra/io_verification/place"
-    . "gobra/io_verification/abstract"
-	. "gobra/io_verification/iospec"
 )
 
 const (

@@ -1,9 +1,87 @@
 package router
 
-import (
-    . "gobra/io_verification/place"
-    . "gobra/io_verification/abstract"
-)
+// readBatch (BIO)
+pred readBatch_p(ghost t Place)
+
+ghost
+requires readBatch_p(t)
+decreases _
+pure func get_readBatch_t1(t Place) (t1 Place)
+
+ghost
+requires readBatch_p(t)
+decreases _
+pure func get_readBatch_msgs(t Place) (msgs seq[AbsMessage])
+
+// decodePkt (internal)
+pred decodePkt_p(ghost t Place, ghost m AbsMessage, ghost res AbsSCION)
+
+ghost
+requires decodePkt_p(t, m, res)
+decreases _
+pure func get_decodePkt_t1(t Place, m AbsMessage, res AbsSCION) (t1 Place)
+
+ghost
+requires token(t) && decodePkt_p(t, m, res)
+ensures token(t1) && t1 == old(get_decodePkt_t1(t, m, res))
+decreases _
+func decodePkt_f(t Place, m AbsMessage, res AbsSCION) (t1 Place)
+
+// decodeIntraBFD (internal)
+pred decodeIntraBFD_p(ghost t Place, ghost s AbsSCION, ghost res AbsBFD)
+
+ghost
+requires decodeIntraBFD_p(t, s, res)
+decreases _
+pure func get_decodeIntraBFD_t1(t Place, s AbsSCION, res AbsBFD) (t1 Place)
+
+ghost
+requires token(t) && decodeIntraBFD_p(t, s, res)
+ensures token(t1) && t1 == old(get_decodeIntraBFD_t1(t, s, res))
+decreases _
+func decodeIntraBFD_f(t Place, s AbsSCION, res AbsBFD) (t1 Place)
+
+// decodeInterBFD (internal)
+pred decodeInterBFD_p(ghost t Place, ghost s AbsSCION, ghost res AbsBFD)
+
+ghost
+requires decodeInterBFD_p(t, s, res)
+decreases _
+pure func get_decodeInterBFD_t1(t Place, s AbsSCION, res AbsBFD) (t1 Place)
+
+ghost
+requires token(t) && decodeInterBFD_p(t, s, res)
+ensures token(t1) && t1 == old(get_decodeInterBFD_t1(t, s, res))
+decreases _
+func decodeInterBFD_f(t Place, s AbsSCION, res AbsBFD) (t1 Place)
+
+// sendIntraBFD (internal)
+pred sendIntraBFD_p(ghost t Place, ghost b AbsBFD)
+
+ghost
+requires sendIntraBFD_p(t, b)
+decreases _
+pure func get_sendIntraBFD_t1(t Place, b AbsBFD) (t1 Place)
+
+ghost
+requires token(t) && sendIntraBFD_p(t, b)
+ensures token(t1) && t1 == old(get_sendIntraBFD_t1(t, b))
+decreases _
+func sendIntraBFD_f(t Place, b AbsBFD) (t1 Place)
+
+// sendInterBFD (internal)
+pred sendInterBFD_p(ghost t Place, ghost b AbsBFD)
+
+ghost
+requires sendInterBFD_p(t, b)
+decreases _
+pure func get_sendInterBFD_t1(t Place, b AbsBFD) (t1 Place)
+
+ghost
+requires token(t) && sendInterBFD_p(t, b)
+ensures token(t1) && t1 == old(get_sendInterBFD_t1(t, b))
+decreases _
+func sendInterBFD_f(t Place, b AbsBFD) (t1 Place)
 
 // processOHP (internal)
 pred processOHP_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult)
@@ -60,3 +138,11 @@ requires token(t) && packPkt_p(t, pr, res)
 ensures token(t1) && t1 == old(get_packPkt_t1(t, pr, res))
 decreases _
 func packPkt_f(t Place,  pr AbsProcessResult, res AbsMessage) (t1 Place)
+
+// writeBatch (BIO)
+pred writeBatch_p(ghost t Place, ghost msg AbsMessage)
+
+ghost
+requires writeBatch_p(t, msgs)
+decreases _
+pure func get_writeBatch_t1(t Place, msgs AbsMessage) (t1 Place)

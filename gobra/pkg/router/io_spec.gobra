@@ -1,11 +1,5 @@
 package router
 
-import (
-    . "gobra/io_verification/place"
-    . "gobra/io_verification/abstract"
-    . "gobra/io_verification/iospec"
-)
-
 pred P(pl Place, ghost s mset[Fact]) {
     P_readBatch(pl, s) &&
     P_decodePkt(pl, s) &&
@@ -88,7 +82,6 @@ ghost
 ensures forall i int :: 0 <= i && i < len(s) ==> inFact(s[i]) in res
 decreases _
 pure func ToMset(s seq[AbsMessage]) (res mset[Fact])
-
 
 // guard methods
 
