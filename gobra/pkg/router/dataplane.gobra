@@ -1065,7 +1065,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			assert P(currentPlace, state)
 		} else if pkts > 0 {
 			assert absMessages == ToAbsMessages(msgs, pkts)
-			state = state union ToMset(absMessages)
+			ghost state = state union ToMset(absMessages)
 			assert forall i int :: 0 <= i && i < pkts ==> mset[Fact]{inFact(absMessages[i])} subset state
 			// (tlino) outlined code to separate function
 			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, currentPlace, state, absMessages)
@@ -1183,7 +1183,7 @@ preserves isZeroSCION(spkt)
 preserves acc(scmpErr)
 preserves buffer.Mem()
 ensures token(t1) && P(t1, s1)
-ensures s1 == s setminus mset[Fact]{inFact(absMsg)} || s1 == s
+ensures (s setminus mset[Fact]{inFact(absMsg)}) subset s1
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
 	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 
@@ -1263,7 +1263,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	assert switchCase == errorIsNil || switchCase == errorIsSCMP
 
 	// (tlino) outlined code block to its own method
-	t3, s3 := processMessageHelper(d, result, t2, s2)
+	t3, s3 := processMessageHelper(d, result, absPR, t2, s2)
 
 	ghost if switchCase == errorIsNil {
 		apply result.Mem() --* verifyutils.BytesAcc(rawPkt)
@@ -1327,20 +1327,20 @@ func updateDroppedPackets(d *DataPlane, inputLabels prometheus.Labels) {
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
 requires token(t) && P(t, s)
+requires processedPktFact(absPR) in s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 ensures token(t1) && P(t1, s1)
-ensures s1 == s
+ensures (s setminus mset[Fact]{processedPktFact(absPR)}) subset s1
 decreases
-func processMessageHelper(d *DataPlane, result processResult, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
-	ghost var currentState mset[Fact] = s
+func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsProcessResult, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
 		// (tlino) This helper function used to be a part of a loop,
 		// (tlino) since the continue isn't supported we use a return statement
 		// continue
-		assert P(t, currentState)
-		return t, currentState
+		assert P(t, s)
+		return t, s
 	}
 	// (tlino) original code, adapted code is below
 	// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
@@ -1367,12 +1367,21 @@ func processMessageHelper(d *DataPlane, result processResult, ghost t Place, gho
 	// (tlino) moved message creation to outlined function
 	messages := createMessages(pld, address, resultCase)
 
-	unfold P(t,s)
-	unfold P_writeBatch(t,s)
-	ghost var absMsgs AbsMessage
-	assume absMsgs == ToAbsMessagesSend(messages)
-	assume (outFact(absMsgs) # currentState) > 0
-	_, err, t1 := result.OutConn.WriteBatch(messages, t, absMsgs)
+	// (tlino) apply internal packPkt event
+	unfold P(t, s)
+	unfold P_packPkt(t, s)
+	ghost absMessages := ToAbsMessagesSend(messages)
+	assert packPkt_p(t, absPR, absMessages)
+	ghost s2 := (s setminus mset[Fact]{processedPktFact(absPR)}) union mset[Fact]{outFact(absMessages)}
+	ghost t2 := get_packPkt_t1(t, absPR, absMessages)
+	ghost packPkt_f(t, absPR, absMessages)
+	assert token(t2)
+	assert P(t2, s2)
+
+	unfold P(t2, s2)
+	unfold P_writeBatch(t2, s2)
+	assert outFact(absMessages) in s2
+	_, err, t1 := result.OutConn.WriteBatch(messages, t2, absMessages)
 
 	// (tlino) ghost code to get back access to result.Mem()
 	ghost if resultCase == MsgWithDataPlaneAdd {
@@ -1400,12 +1409,13 @@ func processMessageHelper(d *DataPlane, result processResult, ghost t Place, gho
 		// error metric // (tlino) original scion comment
 		// (tlino) This method used to be part of a loop. We replace continue by return.
 		// continue
-		fold P_writeBatch(t1, currentState)
-		fold P(t1, currentState)
-		assert P(t1, currentState)
-		return t1, currentState
+		fold P_writeBatch(t1, s2)
+		fold P(t1, s2)
+		assert P(t1, s2)
+		return t1, s2
 	}
-	ghost currentState = currentState setminus mset[Fact]{ outFact(absMsgs) }
+
+	ghost s1 = s2 setminus mset[Fact]{outFact(absMessages)}
 
 	// ok metric
 	// (tlino) use getters to simplify verification
@@ -1416,8 +1426,8 @@ func processMessageHelper(d *DataPlane, result processResult, ghost t Place, gho
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
 	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
-	assert P(t1, currentState)
-	return t1, currentState
+	assert P(t1, s1)
+	return t1, s1
 }
 
 // (tlino) added type
