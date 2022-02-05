@@ -1179,7 +1179,7 @@ preserves isZeroSCION(spkt)
 preserves acc(scmpErr)
 preserves buffer.Mem()
 ensures token(t1) && P(t1, s1)
-ensures (s setminus mset[Fact]{inFact(absMsg)}) subset s1
+ensures s subset s1
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
 	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 
@@ -1328,7 +1328,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
 ensures token(t1) && P(t1, s1)
-ensures (s setminus mset[Fact]{processedPktFact(absPR)}) subset s1
+ensures s subset s1
 decreases
 func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsProcessResult, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	if result.OutConn == nil { // e.g. BFD case no message is forwarded
@@ -1368,7 +1368,7 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 	unfold P_packPkt(t, s)
 	ghost absMessages := ToAbsMessagesSend(messages)
 	assert packPkt_p(t, absPR, absMessages)
-	ghost s2 := (s setminus mset[Fact]{processedPktFact(absPR)}) union mset[Fact]{outFact(absMessages)}
+	ghost s2 := s union mset[Fact]{outFact(absMessages)}
 	ghost t2 := get_packPkt_t1(t, absPR, absMessages)
 	ghost packPkt_f(t, absPR, absMessages)
 	assert token(t2)
@@ -1411,7 +1411,7 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 		return t1, s2
 	}
 
-	ghost s1 = s2 setminus mset[Fact]{outFact(absMessages)}
+	ghost s1 = s2
 
 	// ok metric
 	// (tlino) use getters to simplify verification
@@ -1744,6 +1744,8 @@ func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {}
 }
 
+// (tlino) Verified
+// (tlino) Added helper function
 ghost
 requires token(t) && P(t, s)
 ensures token(t1) && P(t1, s1)
@@ -1778,7 +1780,7 @@ ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 ensures token(t1) && P(t1, s1)
-ensures (s0 setminus mset[Fact]{inFact(absMsg)}) subset s1
+ensures s0 subset s1
 ensures processedPktFact(absPR) in s1
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
@@ -1811,7 +1813,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 	unfold P_decodePkt(t0, s0)
 	ghost absSCION := ToAbsSCION(sNew)
 	assert decodePkt_p(t0, absMsg, absSCION)
-	ghost s2 := (s0 setminus mset[Fact]{inFact(absMsg)}) union mset[Fact]{decodedPktFact(absSCION)}
+	ghost s2 := s0 union mset[Fact]{decodedPktFact(absSCION)}
 	ghost t2 := get_decodePkt_t1(t0, absMsg, absSCION)
 	ghost decodePkt_f(t0, absMsg, absSCION)
 	assert token(t2)
@@ -1920,7 +1922,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		unfold P_processOHP(t2, s2)
 		ghost absPR = ToAbsProcessResult(pr)
 		assert processOHP_p(t2, absSCION, absPR)
-		ghost s3 := (s2 setminus mset[Fact]{decodedPktFact(absSCION)}) union mset[Fact]{processedPktFact(absPR)}
+		ghost s3 := s2 union mset[Fact]{processedPktFact(absPR)}
 		ghost t3 := get_processOHP_t1(t2, absSCION, absPR)
 		ghost processOHP_f(t2, absSCION, absPR)
 		assert token(t3)
@@ -1939,7 +1941,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		unfold P_processSCION(t2, s2)
 		ghost absPR = ToAbsProcessResult(pr)
 		assert processSCION_p(t2, absSCION, absPR)
-		ghost s3 := (s2 setminus mset[Fact]{decodedPktFact(absSCION)}) union mset[Fact]{processedPktFact(absPR)}
+		ghost s3 := s2 union mset[Fact]{processedPktFact(absPR)}
 		ghost t3 := get_processSCION_t1(t2, absSCION, absPR)
 		ghost processSCION_f(t2, absSCION, absPR)
 		assert token(t3)
@@ -2020,7 +2022,7 @@ requires acc(DataPlaneMutexInvariant(d), _)
 preserves acc(src.Mem(), 1/1000)
 preserves verifyutils.BytesAcc(data)
 ensures token(t1) && P(t1, s1)
-ensures (s setminus mset[Fact]{decodedPktFact(absScion)}) subset s1
+ensures s subset s1
 decreases
 func (d *DataPlane) processIntraBFD(src net.Addr, data []byte, ghost absScion AbsSCION, ghost t Place, ghost s mset[Fact]) (err error, ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
@@ -2051,7 +2053,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte, ghost absScion Ab
 	unfold P_decodeIntraBFD(t, s)
 	ghost absBFD := ToAbsBFD(p)
 	assert decodeIntraBFD_p(t, absScion, absBFD)
-	ghost s2 := (s setminus mset[Fact]{decodedPktFact(absScion)}) union mset[Fact]{decodedIntraBFDFact(absBFD)}
+	ghost s2 := s union mset[Fact]{decodedIntraBFDFact(absBFD)}
 	ghost t2 := get_decodeIntraBFD_t1(t, absScion, absBFD)
 	ghost decodeIntraBFD_f(t, absScion, absBFD)
 	assert token(t2)
@@ -2118,7 +2120,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte, ghost absScion Ab
 		unfold P(t2, s2)
 		unfold P_sendIntraBFD(t2, s2)
 		assert sendIntraBFD_p(t2, absBFD)
-		ghost s3 := (s2 setminus mset[Fact]{decodedIntraBFDFact(absBFD)}) union mset[Fact]{sentIntraBFDFact(absBFD)}
+		ghost s3 := s2 union mset[Fact]{sentIntraBFDFact(absBFD)}
 		ghost t3 := get_sendIntraBFD_t1(t2, absBFD)
 		ghost sendIntraBFD_f(t2, absBFD)
 		assert token(t3)

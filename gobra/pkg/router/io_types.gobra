@@ -10,15 +10,7 @@ import (
 type AbsMessage domain {
 
     func toAbsMessage(ipv4.Message) (res AbsMessage)
-
-    // injective Message
-    axiom {
-        forall m1, m2 ipv4.Message :: m1 != m2 ==> toAbsMessage(m1) != toAbsMessage(m2)
-    }
-    // identity
-    axiom {
-        forall m1, m2 ipv4.Message :: m1 == m2 ==> toAbsMessage(m1) == toAbsMessage(m2)
-    }
+    
 }
 
 type AbsProcessResult domain {
