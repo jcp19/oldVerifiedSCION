@@ -1898,7 +1898,8 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			// (tlino) original code, adapted code is below
 			// return processResult{}, d.processInterBFD(ingressID, ohp, s.Payload)
 			unfold sNew.Mem()
-			pr, errRet = processResult{}, d.processInterBFD(ingressID, ohp, sNew.EmbeddedBaseLayer.Payload)
+			pr = processResult{}
+			errRet, t1, s1  = d.processInterBFD(ingressID, ohp, sNew.EmbeddedBaseLayer.Payload, absSCION, t2, s2)
 			fold sNew.Mem()
 			fold pr.Mem()
 			ghost if errRet == nil {
@@ -1908,7 +1909,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			}
 
 			// (tlino) apply internal processOther event
-			ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+			ghost absPR, t1, s1 = processEmptyPr(pr, t1 , s1)
 			assert P(t1, s1)
 			return
 		}
@@ -1966,16 +1967,20 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 // (tlino) Verified
 // (joao) `oh` is not used anywhere in the function
+requires token(t) && P(t, s)
+requires decodedPktFact(absScion) in s
 requires acc(DataPlaneMutexInvariant(d), _)
 preserves verifyutils.BytesAcc(data)
+ensures token(t1) && P(t1, s1)
+ensures s subset s1
 decreases
-func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte) error {
+func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []byte, ghost absScion AbsSCION, ghost t Place, ghost s mset[Fact]) (err error, ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	unfold acc(BfdSessionsAcc(d.bfdSessions), _)
 	if len(d.bfdSessions) == 0 {
 		// (joao) no globals
 		// return noBFDSessionConfigured
-		return noBFDSessionConfigured()
+		return noBFDSessionConfigured(), t, s
 	}
 
 	p := &layers.BFD{}
@@ -1989,21 +1994,43 @@ func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []by
 	unfold verifyutils.BytesAcc(data)
 	if err := p.DecodeFromBytes(data, tmp); err != nil {
 		fold verifyutils.BytesAcc(data)
-		return err
+		return err, t, s
 	}
-	fold verifyutils.BytesAcc(data)
 
+	// (tlino) apply internal decodeInterBFD event
+	unfold P(t, s)
+	unfold P_decodeInterBFD(t, s)
+	ghost absBFD := ToAbsBFD(p)
+	assert decodeInterBFD_p(t, absScion, absBFD)
+	ghost s2 := s union mset[Fact]{decodedInterBFDFact(absBFD)}
+	ghost t2 := get_decodeInterBFD_t1(t, absScion, absBFD)
+	ghost decodeInterBFD_f(t, absScion, absBFD)
+	assert token(t2)
+	assert P(t2, s2)
+
+	fold verifyutils.BytesAcc(data)
 	ghost translateBFDMemPred(p)
 
 	// (joao) add parentheses surrounding `d.bfdSessions`
 	if v, ok := (d.bfdSessions)[ingressID]; ok {
 		v.Messages() <- p
-		return nil
+
+		// (tlino) apply internal sendInterBFD event
+		unfold P(t2, s2)
+		unfold P_sendInterBFD(t2, s2)
+		assert sendInterBFD_p(t2, absBFD)
+		ghost s3 := s2 union mset[Fact]{sentInterBFDFact(absBFD)}
+		ghost t3 := get_sendInterBFD_t1(t2, absBFD)
+		ghost sendInterBFD_f(t2, absBFD)
+		assert token(t3)
+		assert P(t3, s3)
+
+		return nil, t3, s3
 	}
 
 	// (joao) no globals
 	// return noBFDSessionFound
-	return noBFDSessionFound()
+	return noBFDSessionFound(), t2, s2
 }
 
 ghost
