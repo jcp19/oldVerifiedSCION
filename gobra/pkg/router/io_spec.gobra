@@ -61,9 +61,9 @@ pred P_processSCION(pl Place, ghost s mset[Fact]) {
 }
 
 pred P_processOther(pl Place, ghost s mset[Fact]) {
-    forall pr AbsProcessResult :: { processOther_p(pl, pr) } (
-        G_processOther(pr)) ==>
-    processOther_p(pl, pr) && P(get_processOther_t1(pl, pr), s union mset[Fact]{processedPktFact(pr)})
+    forall m AbsMessage, pr AbsProcessResult :: { processOther_p(pl, m, pr) } (
+        (inFact(m) in s) && G_processOther(pr)) ==>
+    processOther_p(pl, m, pr) && P(get_processOther_t1(pl, m, pr), s union mset[Fact]{processedPktFact(pr)})
 }
 
 pred P_packPkt(pl Place, ghost s mset[Fact]) {
@@ -73,7 +73,7 @@ pred P_packPkt(pl Place, ghost s mset[Fact]) {
 }
 
 pred P_writeBatch(pl Place, ghost s mset[Fact]) {
-    forall m AbsMessage :: (outFact(m) # s) > 0 && G_writeBatch(m, s)  ==> writeBatch_p(pl, m) && P(get_writeBatch_t1(pl, m), s)
+    forall m AbsMessage :: (outFact(m) # s) > 0 ==> writeBatch_p(pl, m) && P(get_writeBatch_t1(pl, m), s)
 }
 
 // helper functions
@@ -129,11 +129,6 @@ ghost
 ensures res == true
 decreases _
 pure func G_packPkt(pr AbsProcessResult, m AbsMessage) (res bool)
-
-ghost
-ensures res == true
-decreases _
-pure func G_writeBatch(m AbsMessage, s mset[Fact]) (res bool)
 
 // tests
 
@@ -239,7 +234,6 @@ func test9(ghost t Place, ghost s mset[Fact], pr AbsProcessResult, res AbsMessag
 
 requires token(t) && P_writeBatch(t, s)
 requires mset[Fact]{outFact(m)} subset s
-requires G_writeBatch(m, s)
 func test10(ghost t Place, ghost s mset[Fact], m AbsMessage) {
     unfold P_writeBatch(t, s)
     assert writeBatch_p(t, m)
@@ -249,11 +243,12 @@ func test10(ghost t Place, ghost s mset[Fact], m AbsMessage) {
 }
 
 requires token(t) && P_processOther(t, s)
+requires mset[Fact]{inFact(m)} subset s
 requires G_processOther(pr)
-func test11(ghost t Place, ghost s mset[Fact], pr AbsProcessResult) {
+func test11(ghost t Place, ghost s mset[Fact], m AbsMessage, pr AbsProcessResult) {
     unfold P_processOther(t, s)
-    assert processOther_p(t, pr)
-    p_end := get_processOther_t1(t, pr)
+    assert processOther_p(t, m, pr)
+    p_end := get_processOther_t1(t, m, pr)
     set_end := s union mset[Fact]{processedPktFact(pr)}
     assert P(p_end, set_end)
 }

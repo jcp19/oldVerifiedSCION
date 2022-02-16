@@ -41,72 +41,40 @@ type Fact domain {
     axiom {
         forall t AbsMessage :: { inFact(t) } getIn(inFact(t)) == t && getType(inFact(t)) == 0
     }
-    // inFact injective
-    axiom {
-        forall t1, t2 AbsMessage :: t1 != t2 ==> inFact(t1) != inFact(t2)
-    }
 
     // decodedPktFact injective
     axiom {
         forall t AbsSCION :: { decodedPktFact(t) } getDecodedPktFact(decodedPktFact(t)) == t && getType(decodedPktFact(t)) == 1
-    }
-    // decodedPktFact injective
-    axiom {
-        forall t1, t2 AbsSCION :: t1 != t2 ==> decodedPktFact(t1) != decodedPktFact(t2)
     }
 
     // decodedIntraBFDFact injective
     axiom {
         forall t AbsBFD :: { decodedIntraBFDFact(t) } getDecodedIntraBFDFact(decodedIntraBFDFact(t)) == t && getType(decodedIntraBFDFact(t)) == 2
     }
-    // decodedIntraBFDFact injective
-    axiom {
-        forall t1, t2 AbsBFD :: t1 != t2 ==> decodedIntraBFDFact(t1) != decodedIntraBFDFact(t2)
-    }
 
     // decodedInterBFDFact injective
     axiom {
         forall t AbsBFD :: { decodedInterBFDFact(t) } getDecodedInterBFDFact(decodedInterBFDFact(t)) == t && getType(decodedInterBFDFact(t)) == 3
-    }
-    // decodedInterBFDFact injective
-    axiom {
-        forall t1, t2 AbsBFD :: t1 != t2 ==> decodedInterBFDFact(t1) != decodedInterBFDFact(t2)
     }
 
     // sentIntraBFDFact injective
     axiom {
         forall t AbsBFD :: { sentIntraBFDFact(t) } getSentIntraBFDFact(sentIntraBFDFact(t)) == t && getType(sentIntraBFDFact(t)) == 4
     }
-    // sentIntraBFDFact injective
-    axiom {
-        forall t1, t2 AbsBFD :: t1 != t2 ==> sentIntraBFDFact(t1) != sentIntraBFDFact(t2)
-    }
 
     // sentInterBFDFact injective
     axiom {
         forall t AbsBFD :: { sentInterBFDFact(t) } getSentInterBFDFact(sentInterBFDFact(t)) == t && getType(sentInterBFDFact(t)) == 5
-    }
-    // sentInterBFDFact injective
-    axiom {
-        forall t1, t2 AbsBFD :: t1 != t2 ==> sentInterBFDFact(t1) != sentInterBFDFact(t2)
     }
 
     // processedPktFact injective
     axiom {
         forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t && getType(processedPktFact(t)) == 6
     }
-    // processedPktFact injective
-    axiom {
-        forall t1, t2 AbsProcessResult :: t1 != t2 ==> processedPktFact(t1) != processedPktFact(t2)
-    }
 
     // outFact injective
     axiom {
         forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 7
-    }
-    // outFact injective
-    axiom {
-        forall t1, t2 AbsMessage :: t1 != t2 ==> outFact(t1) != outFact(t2)
     }
 }
 
@@ -115,11 +83,4 @@ ensures res == (s setminus l) union r
 decreases
 pure func U(s, l, r mset[Fact]) (res mset[Fact]) {
     return (s setminus l) union r
-}
-
-ghost
-ensures res == mset[Fact] {}
-decreases
-pure func EmptySet() (res mset[Fact]) {
-    return mset[Fact] {}
 }

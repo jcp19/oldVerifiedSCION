@@ -1010,6 +1010,8 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) outlined code to separate function
 	msgs, metas := initReadClosureBuffer()
 
+	// (tlino) Here, we initialize the state and token for the IO spec
+	// (tlino) Thus, we need to inhale these predicates
 	ghost var currentPlace Place
 	ghost var state mset[Fact]
 	inhale token(currentPlace) && P(currentPlace, state)
@@ -1119,7 +1121,6 @@ requires token(t) && P(t, s)
 requires msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 requires absMsgs == ToAbsMessages(msgs, pkts)
-requires forall i, j int :: 0 <= i && i < pkts && 0 <= j && j < pkts && i != j ==> absMsgs[i] != absMsgs[j]
 requires forall i int :: 0 <= i && i < pkts ==> inFact(absMsgs[i]) in s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
@@ -1748,17 +1749,18 @@ func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 // (tlino) Added helper function
 ghost
 requires token(t) && P(t, s)
+requires inFact(m) in s
 ensures token(t1) && P(t1, s1)
 ensures s1 == s union mset[Fact]{processedPktFact(absPr)}
 decreases
-func processEmptyPr(pr processResult, ghost t Place, ghost s mset[Fact]) (ghost absPr AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
+func processEmptyPr(pr processResult, ghost m AbsMessage, ghost t Place, ghost s mset[Fact]) (ghost absPr AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold P(t, s)
 	unfold P_processOther(t, s)
 	ghost absPr = ToAbsProcessResult(pr)
-	assert processOther_p(t, absPr)
+	assert processOther_p(t, m, absPr)
 	ghost s1 := s union mset[Fact]{processedPktFact(absPr)}
-	ghost t1 := get_processOther_t1(t, absPr)
-	ghost processOther_f(t, absPr)
+	ghost t1 := get_processOther_t1(t, m, absPr)
+	ghost processOther_f(t, m, absPr)
 	assert token(t1)
 	assert P(t1, s1)
 }
@@ -1801,7 +1803,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet =  processResult{}, err
 
 		// (tlino) apply internal processOther event
-		ghost absPR, t1, s1 = processEmptyPr(pr, t0 , s0)
+		ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t0 , s0)
 		assert P(t1, s1)
 
 		fold pr.Mem()
@@ -1827,7 +1829,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 
 		// (tlino) apply internal processOther event
-		ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+		ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t2 , s2)
 		assert P(t1, s1)
 
 		fold pr.Mem()
@@ -1856,7 +1858,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			}
 
 			// (tlino) apply internal processOther event
-			ghost absPR, t1, s1 = processEmptyPr(pr, t1 , s1)
+			ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t1 , s1)
 			assert P(t1, s1)
 			return 
 		}
@@ -1870,7 +1872,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
 
 		// (tlino) apply internal processOther event
-		ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+		ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t2 , s2)
 		assert P(t1, s1)
 		return 
 	case slayers.PathTypeOneHop:
@@ -1890,7 +1892,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
 				
 				// (tlino) apply internal processOther event
-				ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+				ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t2 , s2)
 				assert P(t1, s1)
 				return
 			}
@@ -1909,7 +1911,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 			}
 
 			// (tlino) apply internal processOther event
-			ghost absPR, t1, s1 = processEmptyPr(pr, t1 , s1)
+			ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t1 , s1)
 			assert P(t1, s1)
 			return
 		}
@@ -1959,7 +1961,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
 		
 		// (tlino) apply internal processOther event
-		ghost absPR, t1, s1 = processEmptyPr(pr, t2 , s2)
+		ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t2 , s2)
 		assert P(t1, s1)
 		return
  	}
