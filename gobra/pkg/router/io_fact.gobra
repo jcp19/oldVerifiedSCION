@@ -21,14 +21,6 @@ type Fact domain {
     func decodedInterBFDFact(AbsBFD) Fact
     func getDecodedInterBFDFact(Fact) AbsBFD
 
-    // sent Intra BFD
-    func sentIntraBFDFact(AbsBFD) Fact
-    func getSentIntraBFDFact(Fact) AbsBFD
-
-    // sent Intra BFD
-    func sentInterBFDFact(AbsBFD) Fact
-    func getSentInterBFDFact(Fact) AbsBFD
-
     // processed Pkt
     func processedPktFact(AbsProcessResult) Fact
     func getProcessedPktFact(Fact) AbsProcessResult
@@ -55,16 +47,6 @@ type Fact domain {
     // decodedInterBFDFact injective
     axiom {
         forall t AbsBFD :: { decodedInterBFDFact(t) } getDecodedInterBFDFact(decodedInterBFDFact(t)) == t && getType(decodedInterBFDFact(t)) == 3
-    }
-
-    // sentIntraBFDFact injective
-    axiom {
-        forall t AbsBFD :: { sentIntraBFDFact(t) } getSentIntraBFDFact(sentIntraBFDFact(t)) == t && getType(sentIntraBFDFact(t)) == 4
-    }
-
-    // sentInterBFDFact injective
-    axiom {
-        forall t AbsBFD :: { sentInterBFDFact(t) } getSentInterBFDFact(sentInterBFDFact(t)) == t && getType(sentInterBFDFact(t)) == 5
     }
 
     // processedPktFact injective

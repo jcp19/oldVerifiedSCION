@@ -1230,6 +1230,11 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
 		switchCase = errorIsNil
 	case errors.As(err, scmpErr):
+		// (tlino) since this is an scmp packet the OutPkt field is set
+		// (tlino) at this moment we have to use here an assume, since we cannot use 
+		// (tlino) errors.As(err, scmpErr) in the contract of the processPkt method that may 
+		// (tlino) return a scmp result.
+		assume !isEmptyPR(result)
 		if !scmpErr.TypeCode.InfoMsg() {
 			// (tlino) log not yet supported
 			// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
@@ -1324,7 +1329,7 @@ func updateDroppedPackets(d *DataPlane, inputLabels prometheus.Labels) {
 // (tlino) Verified
 // (tlino) added helper function to simplify verification
 requires token(t) && P(t, s)
-requires processedPktFact(absPR) in s
+requires !isEmptyPR(result) ==> processedPktFact(absPR) in s
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
 preserves result.Mem()
@@ -1339,6 +1344,7 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 		assert P(t, s)
 		return t, s
 	}
+	assert isEmptyPR(result) == false
 	// (tlino) original code, adapted code is below
 	// _, err = result.OutConn.WriteBatch(underlayconn.Messages([]ipv4.Message{{
 	// 	Buffers: [][]byte{result.OutPkt},
@@ -1746,23 +1752,12 @@ func processPktHelper(pr processResult, scionLayer *slayers.SCION, rawPkt []byte
 }
 
 // (tlino) Verified
-// (tlino) Added helper function
+// (tlino) added helper method
 ghost
-requires token(t) && P(t, s)
-requires inFact(m) in s
-ensures token(t1) && P(t1, s1)
-ensures s1 == s union mset[Fact]{processedPktFact(absPr)}
+ensures res == (pr.EgressID == 0 && pr.OutConn == nil && pr.OutAddr == nil && pr.OutPkt == nil && pr.AddrSrc == 0)
 decreases
-func processEmptyPr(pr processResult, ghost m AbsMessage, ghost t Place, ghost s mset[Fact]) (ghost absPr AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
-	unfold P(t, s)
-	unfold P_processOther(t, s)
-	ghost absPr = ToAbsProcessResult(pr)
-	assert processOther_p(t, m, absPr)
-	ghost s1 := s union mset[Fact]{processedPktFact(absPr)}
-	ghost t1 := get_processOther_t1(t, m, absPr)
-	ghost processOther_f(t, m, absPr)
-	assert token(t1)
-	assert P(t1, s1)
+pure func isEmptyPR(pr processResult) (res bool) {
+	return pr.EgressID == 0 && pr.OutConn == nil && pr.OutAddr == nil && pr.OutPkt == nil && pr.AddrSrc == 0
 }
 
 // (tlino) Verified
@@ -1783,7 +1778,7 @@ ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 ensures token(t1) && P(t1, s1)
 ensures s0 subset s1
-ensures processedPktFact(absPR) in s1
+ensures !isEmptyPR(pr) ==> processedPktFact(absPR) in s1
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
 	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
@@ -1801,9 +1796,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return processResult{}, err
 
 		pr, errRet =  processResult{}, err
-
-		// (tlino) apply internal processOther event
-		ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t0 , s0)
+		ghost t1, s1 = t0, s0
 		assert P(t1, s1)
 
 		fold pr.Mem()
@@ -1827,9 +1820,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// return processResult{}, serrors.WrapStr("Failed to clear buffer", err)
 
 		pr, errRet = processResult{}, serrors.WrapStr("Failed to clear buffer", err)
-
-		// (tlino) apply internal processOther event
-		ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t2 , s2)
+		ghost t1, s1 = t2, s2
 		assert P(t1, s1)
 
 		fold pr.Mem()
@@ -1857,8 +1848,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 			}
 
-			// (tlino) apply internal processOther event
-			ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t1 , s1)
 			assert P(t1, s1)
 			return 
 		}
@@ -1870,9 +1859,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		 	"type", sNew.getPathType(), "header", sNew.getNextHdr())
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-
-		// (tlino) apply internal processOther event
-		ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t2 , s2)
+		ghost t1, s1 = t2, s2
 		assert P(t1, s1)
 		return 
 	case slayers.PathTypeOneHop:
@@ -1890,9 +1877,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				pr, errRet = processResult{}, malformedPath()
 				fold pr.Mem()
 				ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-				
-				// (tlino) apply internal processOther event
-				ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t2 , s2)
+				ghost t1, s1 = t2, s2
 				assert P(t1, s1)
 				return
 			}
@@ -1910,8 +1895,6 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 				sNew.getRawPktAccWithoutPreservePath(rawPkt)
 			}
 
-			// (tlino) apply internal processOther event
-			ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t1 , s1)
 			assert P(t1, s1)
 			return
 		}
@@ -1959,9 +1942,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		pr, errRet = processResult{}, serrors.WithCtx(unsupportedPathType(), "type", sNew.getPathType())
 		fold pr.Mem()
 		ghost sNew.getRawPktAccWithoutPreservePath(rawPkt)
-		
-		// (tlino) apply internal processOther event
-		ghost absPR, t1, s1 = processEmptyPr(pr, absMsg, t2 , s2)
+		ghost t1, s1 = t2, s2
 		assert P(t1, s1)
 		return
  	}
@@ -2016,18 +1997,7 @@ func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []by
 	// (joao) add parentheses surrounding `d.bfdSessions`
 	if v, ok := (d.bfdSessions)[ingressID]; ok {
 		v.Messages() <- p
-
-		// (tlino) apply internal sendInterBFD event
-		unfold P(t2, s2)
-		unfold P_sendInterBFD(t2, s2)
-		assert sendInterBFD_p(t2, absBFD)
-		ghost s3 := s2 union mset[Fact]{sentInterBFDFact(absBFD)}
-		ghost t3 := get_sendInterBFD_t1(t2, absBFD)
-		ghost sendInterBFD_f(t2, absBFD)
-		assert token(t3)
-		assert P(t3, s3)
-
-		return nil, t3, s3
+		return nil, t2, s2
 	}
 
 	// (joao) no globals
@@ -2144,18 +2114,7 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte, ghost absScion Ab
  	// if v, ok := d.bfdSessions[ifID]; ok {
 	if v, ok := (d.bfdSessions)[ifID]; ok {
 		v.Messages() <- p
-
-		// (tlino) apply internal sendIntraBFD event
-		unfold P(t2, s2)
-		unfold P_sendIntraBFD(t2, s2)
-		assert sendIntraBFD_p(t2, absBFD)
-		ghost s3 := s2 union mset[Fact]{sentIntraBFDFact(absBFD)}
-		ghost t3 := get_sendIntraBFD_t1(t2, absBFD)
-		ghost sendIntraBFD_f(t2, absBFD)
-		assert token(t3)
-		assert P(t3, s3)
-
-		return nil, t3, s3
+		return nil, t2, s2
 	}
 
 	// (tlino) globals not supported

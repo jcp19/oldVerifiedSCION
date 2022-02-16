@@ -5,11 +5,8 @@ pred P(pl Place, ghost s mset[Fact]) {
     P_decodePkt(pl, s) &&
     P_decodeIntraBFD(pl, s) &&
     P_decodeInterBFD(pl, s) &&
-    P_sendIntraBFD(pl, s) &&
-    P_sendInterBFD(pl, s) &&
     P_processOHP(pl, s) &&
     P_processSCION(pl, s) &&
-    P_processOther(pl, s) &&
     P_packPkt(pl, s) &&
     P_writeBatch(pl, s)
 }
@@ -36,18 +33,6 @@ pred P_decodeInterBFD(pl Place, ghost s mset[Fact]) {
     decodeInterBFD_p(pl, scn, bfd) && P(get_decodeInterBFD_t1(pl, scn, bfd), s union mset[Fact]{decodedInterBFDFact(bfd)})
 }
 
-pred P_sendIntraBFD(pl Place, ghost s mset[Fact]) {
-    forall bfd AbsBFD :: { sendIntraBFD_p(pl, bfd) } (
-        (decodedIntraBFDFact(bfd) in s) && G_sendIntraBFD(bfd)) ==>
-    sendIntraBFD_p(pl, bfd) && P(get_sendIntraBFD_t1(pl, bfd), s union mset[Fact]{sentIntraBFDFact(bfd)})
-}
-
-pred P_sendInterBFD(pl Place, ghost s mset[Fact]) {
-    forall bfd AbsBFD :: { sendInterBFD_p(pl, bfd) } (
-        (decodedInterBFDFact(bfd) in s) && G_sendInterBFD(bfd)) ==>
-    sendInterBFD_p(pl, bfd) && P(get_sendInterBFD_t1(pl, bfd), s union mset[Fact]{sentInterBFDFact(bfd)})
-}
-
 pred P_processOHP(pl Place, ghost s mset[Fact]) {
     forall scn AbsSCION, pr AbsProcessResult :: { processOHP_p(pl, scn, pr) } (
         (decodedPktFact(scn) in s) && G_processOHP(scn, pr)) ==>
@@ -58,12 +43,6 @@ pred P_processSCION(pl Place, ghost s mset[Fact]) {
     forall scn AbsSCION, pr AbsProcessResult :: { processSCION_p(pl, scn, pr) } (
         (decodedPktFact(scn) in s) && G_processSCION(scn, pr)) ==>
     processSCION_p(pl, scn, pr) && P(get_processSCION_t1(pl, scn, pr), s union mset[Fact]{processedPktFact(pr)})
-}
-
-pred P_processOther(pl Place, ghost s mset[Fact]) {
-    forall m AbsMessage, pr AbsProcessResult :: { processOther_p(pl, m, pr) } (
-        (inFact(m) in s) && G_processOther(pr)) ==>
-    processOther_p(pl, m, pr) && P(get_processOther_t1(pl, m, pr), s union mset[Fact]{processedPktFact(pr)})
 }
 
 pred P_packPkt(pl Place, ghost s mset[Fact]) {
@@ -103,27 +82,12 @@ pure func G_decodeInterBFD(scn AbsSCION, bfd AbsBFD) (res bool)
 ghost
 ensures res == true
 decreases _
-pure func G_sendIntraBFD(bfd AbsBFD) (res bool)
-
-ghost
-ensures res == true
-decreases _
-pure func G_sendInterBFD(bfd AbsBFD) (res bool)
-
-ghost
-ensures res == true
-decreases _
 pure func G_processOHP(scn AbsSCION, pr AbsProcessResult) (res bool)
 
 ghost
 ensures res == true
 decreases _
 pure func G_processSCION(scn AbsSCION, pr AbsProcessResult) (res bool)
-
-ghost
-ensures res == true
-decreases _
-pure func G_processOther(pr AbsProcessResult) (res bool)
 
 ghost
 ensures res == true
@@ -177,28 +141,6 @@ func test4(ghost t Place, ghost s mset[Fact], scn AbsSCION, bfd AbsBFD) {
     assert P(p_end, set_end)
 }
 
-requires token(t) && P_sendIntraBFD(t, s)
-requires mset[Fact]{decodedIntraBFDFact(bfd)} subset s
-requires G_sendIntraBFD(bfd)
-func test5(ghost t Place, ghost s mset[Fact], bfd AbsBFD) {
-    unfold P_sendIntraBFD(t, s)
-    assert sendIntraBFD_p(t, bfd)
-    p_end := get_sendIntraBFD_t1(t, bfd)
-    set_end := s union mset[Fact]{sentIntraBFDFact(bfd)}
-    assert P(p_end, set_end)
-}
-
-requires token(t) && P_sendInterBFD(t, s)
-requires mset[Fact]{decodedInterBFDFact(bfd)} subset s
-requires G_sendInterBFD(bfd)
-func test6(ghost t Place, ghost s mset[Fact], bfd AbsBFD) {
-    unfold P_sendInterBFD(t, s)
-    assert sendInterBFD_p(t, bfd)
-    p_end := get_sendInterBFD_t1(t, bfd)
-    set_end := s union mset[Fact]{sentInterBFDFact(bfd)}
-    assert P(p_end, set_end)
-}
-
 requires token(t) && P_processOHP(t, s)
 requires mset[Fact]{decodedPktFact(scn)} subset s
 requires G_processOHP(scn, res)
@@ -239,16 +181,5 @@ func test10(ghost t Place, ghost s mset[Fact], m AbsMessage) {
     assert writeBatch_p(t, m)
     p_end := get_writeBatch_t1(t, m)
     set_end := s
-    assert P(p_end, set_end)
-}
-
-requires token(t) && P_processOther(t, s)
-requires mset[Fact]{inFact(m)} subset s
-requires G_processOther(pr)
-func test11(ghost t Place, ghost s mset[Fact], m AbsMessage, pr AbsProcessResult) {
-    unfold P_processOther(t, s)
-    assert processOther_p(t, m, pr)
-    p_end := get_processOther_t1(t, m, pr)
-    set_end := s union mset[Fact]{processedPktFact(pr)}
     assert P(p_end, set_end)
 }
