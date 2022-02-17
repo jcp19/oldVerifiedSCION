@@ -123,7 +123,8 @@ type BatchConn interface {
 
 	requires acc(msgs.MemSend(), 1/1000)
 	requires token(t) && writeBatch_p(t, absMsgs)
-	requires absMsgs == unfolding acc(msgs.MemSend(), 1/1000) in ToAbsMessage(&msgs[0])
+	requires len(msgs) == 1
+	requires absMsgs == unfolding acc(msgs.MemSend(), 1/1000) in ToAbsMessage_MemSend(&msgs[0])
 	preserves acc(Mem(), _)
 	ensures acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 < n && n <= len(msgs)
@@ -1373,7 +1374,7 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 	// (tlino) apply internal packPkt event
 	unfold P(t, s)
 	unfold P_packPkt(t, s)
-	ghost absMessages := ToAbsMessage(&messages[0])
+	ghost absMessages := unfolding acc(messages.MemSend(), 1/1000) in ToAbsMessage_MemSend(&messages[0])
 	assert packPkt_p(t, absPR, absMessages)
 	ghost s2 := s union mset[Fact]{outFact(absMessages)}
 	ghost t2 := get_packPkt_t1(t, absPR, absMessages)
@@ -1457,6 +1458,7 @@ requires msgCase == MsgWithMessageAdd ==> (address != nil ==> acc(address.Mem(),
 requires msgCase == MsgWithBytePacketAdd ==> (address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000)
 requires msgCase == MsgWithNoAdd ==> address == nil && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
 ensures acc(msgs.MemSend(), 1/1000)
+ensures len(msgs) == 1
 ensures msgCase == MsgWithDataPlaneAdd ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
 ensures msgCase == MsgWithMessageAdd ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)))
 ensures msgCase == MsgWithBytePacketAdd ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000))
@@ -1903,18 +1905,20 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = d.processOHP(ingressID, rawPkt, sNew, buffer)
 		
-		// (tlino) apply internal processOHP event
-		unfold P(t2, s2)
-		unfold P_processOHP(t2, s2)
-		ghost absPR = ToAbsProcessResult(pr)
-		assert processOHP_p(t2, absSCION, absPR)
-		ghost s3 := s2 union mset[Fact]{processedPktFact(absPR)}
-		ghost t3 := get_processOHP_t1(t2, absSCION, absPR)
-		ghost processOHP_f(t2, absSCION, absPR)
-		assert token(t3)
-		assert P(t3, s3)
-
-		ghost t1, s1 = t3, s3
+		// (tlino) apply internal processOHP event, if pr is not empty
+		ghost if (!isEmptyPR(pr)) {
+			unfold P(t2, s2)
+			unfold P_processOHP(t2, s2)
+			ghost absPR = ToAbsProcessResult(pr)
+			assert processOHP_p(t2, absSCION, absPR)
+			ghost s1 = s2 union mset[Fact]{processedPktFact(absPR)}
+			ghost t1 = get_processOHP_t1(t2, absSCION, absPR)
+			ghost processOHP_f(t2, absSCION, absPR)
+			assert token(t1)
+			assert P(t1, s1)
+		} else {
+			ghost t1, s1 = t2, s2
+		}
 		return
 	case slayers.PathTypeSCION:
 		// (tlino) original code, adapted code is below 
@@ -1922,18 +1926,20 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer)
 
-		// (tlino) apply internal processSCION event
-		unfold P(t2, s2)
-		unfold P_processSCION(t2, s2)
-		ghost absPR = ToAbsProcessResult(pr)
-		assert processSCION_p(t2, absSCION, absPR)
-		ghost s3 := s2 union mset[Fact]{processedPktFact(absPR)}
-		ghost t3 := get_processSCION_t1(t2, absSCION, absPR)
-		ghost processSCION_f(t2, absSCION, absPR)
-		assert token(t3)
-		assert P(t3, s3)
-
-		ghost t1, s1 = t3, s3
+		// (tlino) apply internal processSCION event, if pr is not empty
+		ghost if (!isEmptyPR(pr)) {
+			unfold P(t2, s2)
+			unfold P_processSCION(t2, s2)
+			ghost absPR = ToAbsProcessResult(pr)
+			assert processSCION_p(t2, absSCION, absPR)
+			ghost s1 = s2 union mset[Fact]{processedPktFact(absPR)}
+			ghost t1 = get_processSCION_t1(t2, absSCION, absPR)
+			ghost processSCION_f(t2, absSCION, absPR)
+			assert token(t1)
+			assert P(t1, s1)
+		} else {
+			ghost t1, s1 = t2, s2
+		}
 		return
 	default:
 		// (tlino) original code, adapted code is below 
