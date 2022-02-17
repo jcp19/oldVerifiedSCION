@@ -7,6 +7,8 @@ import (
     "gobra/dependencies/gopacket/layers"
 )
 
+// abstract types
+
 type AbsMessage domain {}
 
 type AbsProcessResult domain {}
@@ -15,8 +17,9 @@ type AbsSCION domain {}
 
 type AbsBFD domain {}
 
+// abstraction functions
+
 ghost
-requires acc(m.Mem(), _)
 decreases _
 pure func ToAbsMessage(m *ipv4.Message) (res AbsMessage)
 
@@ -25,27 +28,17 @@ decreases _
 pure func ToAbsProcessResult(pr processResult) AbsProcessResult
 
 ghost
-requires acc(s.Mem(), _)
 decreases _
 pure func ToAbsSCION(s *slayers.SCION) AbsSCION
 
 ghost
-requires acc(bfd.MemWithOutSlices(), _)
 decreases _
 pure func ToAbsBFD(bfd *layers.BFD) AbsBFD
 
 // (tlino) used to abstract messages when receiving
 ghost
 requires 0 <= pkts && pkts <= len(msgs)
-requires msgs.Mem()
 ensures len(res) == pkts
-ensures unfolding msgs.Mem() in (forall i int :: 0 <= i && i < pkts ==> res[i] == ToAbsMessage(&msgs[i]))
+ensures (forall i int :: 0 <= i && i < pkts ==> res[i] == ToAbsMessage(&msgs[i]))
 decreases _
 pure func ToAbsMessages(msgs underlayconn.Messages, pkts int) (res seq[AbsMessage])
-
-// (tlino) used to abstract Absmessage when sending
-// (tlino) scion only sends a single Absmessage at a time
-ghost
-requires acc(msgs.MemSend(), 1/1000)
-decreases _
-pure func ToAbsMessagesSend(msgs underlayconn.Messages) (res AbsMessage)

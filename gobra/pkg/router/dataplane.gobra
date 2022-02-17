@@ -123,7 +123,7 @@ type BatchConn interface {
 
 	requires acc(msgs.MemSend(), 1/1000)
 	requires token(t) && writeBatch_p(t, absMsgs)
-	requires absMsgs == ToAbsMessagesSend(msgs)
+	requires absMsgs == unfolding acc(msgs.MemSend(), 1/1000) in ToAbsMessage(&msgs[0])
 	preserves acc(Mem(), _)
 	ensures acc(msgs.MemSend(), 1/1000)
 	ensures err == nil ==> 0 < n && n <= len(msgs)
@@ -1228,7 +1228,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	switch {
 	case err == nil:
 		assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
-		switchCase = errorIsNil
+		ghost switchCase = errorIsNil
 	case errors.As(err, scmpErr):
 		// (tlino) since this is an scmp packet the OutPkt field is set
 		// (tlino) at this moment we have to use here an assume, since we cannot use 
@@ -1246,7 +1246,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// result.OutConn = rd
 		result = result.updateProcessResult(localAddr, rd)
 		assert result.Mem() --* acc(localAddr.Mem(), 1/1000)
-		switchCase = errorIsSCMP
+		ghost switchCase = errorIsSCMP
 	default:
 		// (tlino) log not yet supported
 		// log.Debug("Error processing packet", "err", err)
@@ -1373,7 +1373,7 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 	// (tlino) apply internal packPkt event
 	unfold P(t, s)
 	unfold P_packPkt(t, s)
-	ghost absMessages := ToAbsMessagesSend(messages)
+	ghost absMessages := ToAbsMessage(&messages[0])
 	assert packPkt_p(t, absPR, absMessages)
 	ghost s2 := s union mset[Fact]{outFact(absMessages)}
 	ghost t2 := get_packPkt_t1(t, absPR, absMessages)
