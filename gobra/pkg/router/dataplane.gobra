@@ -1232,11 +1232,10 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
 		ghost switchCase = errorIsNil
 	case errors.As(err, scmpErr):
-		// (tlino) since this is an scmp packet the OutPkt field is set
-		// (tlino) at this moment we have to use here an assume, since we cannot use 
-		// (tlino) errors.As(err, scmpErr) in the contract of the processPkt method that may 
-		// (tlino) return a scmp result.
-		assume !isEmptyPR(result)
+		// (tlino) since this is an scmp packet, we know that result is not empty (i.e. isEmptyPR(result) == false).
+		// (tlino) At this moment we have to use here an assume,
+		// (tlino) since we cannot use a postconditon like: errors.As(err, scmpErr) ==> !isEmptyPR(result)
+		assume isEmptyPR(result) == false
 		if !scmpErr.TypeCode.InfoMsg() {
 			// (tlino) log not yet supported
 			// log.Debug("SCMP", "err", scmpErr, "dst_addr", p.Addr)
@@ -1764,7 +1763,10 @@ pure func isEmptyPR(pr processResult) (res bool) {
 }
 
 // (tlino) Verified
-// (tlino) We cannot prove termination of this method, since d.processSCION() and d.processOHP() might not terminate
+// (tlino) We cannot prove termination of this method, since d.processSCION() and d.processOHP() might not terminate.
+// (tliio) We would also like to have a postcondition like: errors.As(err, scmpErr) ==> !isEmptyPR(result)
+// (tliio) this could then be used by the caller of processPkt to imply that an SCMP error never returns an empty processResult
+// (tlino) See Issue report: https://github.com/jcp19/VerifiedSCION/issues/63
 requires token(t0) && P(t0, s0)
 requires inFact(absMsg) in s0
 requires acc(DataPlaneMutexInvariant(d), _)
@@ -1956,6 +1958,20 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 }
 
 // (tlino) Verified
+// (tlino) added method
+requires b.MemWithOutSlices()
+requires absBFD == ToAbsBFD(b)
+requires token(t) && sendInterBFD_p(t, absBFD)
+requires acc(sess.Mem(), _)
+ensures token(t1) && t1 == old(get_sendInterBFD_t1(t, absBFD))
+decreases
+func sendInterBFD(sess bfdSession, b *layers.BFD, ghost absBFD AbsBFD, ghost t Place) (ghost t1 Place) {
+	ghost translateBFDMemPred(b)
+	sess.Messages() <- b
+	ghost t1 = sendInterBFD_f(t, absBFD)
+}
+
+// (tlino) Verified
 // (joao) `oh` is not used anywhere in the function
 requires token(t) && P(t, s)
 requires decodedPktFact(absScion) in s
@@ -1999,12 +2015,20 @@ func (d *DataPlane) processInterBFD(ingressID uint16, oh *onehop.Path, data []by
 	assert P(t2, s2)
 
 	fold verifyutils.BytesAcc(data)
-	ghost translateBFDMemPred(p)
 
 	// (joao) add parentheses surrounding `d.bfdSessions`
 	if v, ok := (d.bfdSessions)[ingressID]; ok {
-		v.Messages() <- p
-		return nil, t2, s2
+		// (tlino) original code
+		// v.Messages() <- p
+		// return nil, t2, s2
+
+		// (tlino) perform sendInterBFD event
+		unfold P(t2, s2)
+		unfold P_sendInterBFD(t2, s2)
+		t3 := sendInterBFD(v, p, absBFD, t2)
+		assert token(t3)
+		assert P(t3, s2)
+		return nil, t3, s2
 	}
 
 	// (joao) no globals
@@ -2019,6 +2043,20 @@ decreases
 func translateBFDMemPred(b *layers.BFD) {
 	unfold (*layers.BFD).MemWithOutSlices(b)
 	fold (*layers.BFD).MemWithOutSlices!<_!>(b)
+}
+
+// (tlino) Verified
+// (tlino) added method
+requires b.MemWithOutSlices()
+requires absBFD == ToAbsBFD(b)
+requires token(t) && sendIntraBFD_p(t, absBFD)
+requires acc(sess.Mem(), _)
+ensures token(t1) && t1 == old(get_sendIntraBFD_t1(t, absBFD))
+decreases
+func sendIntraBFD(sess bfdSession, b *layers.BFD, ghost absBFD AbsBFD, ghost t Place) (ghost t1 Place) {
+	ghost translateBFDMemPred(b)
+	sess.Messages() <- b
+	ghost t1 = sendIntraBFD_f(t, absBFD)
 }
 
 // (tlino) Verified
@@ -2066,7 +2104,6 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte, ghost absScion Ab
 	assert P(t2, s2)
 
 	fold verifyutils.BytesAcc(data)
-	ghost translateBFDMemPred(p)
 
 	ifID := uint16(0)
 	srcUDPAddr, ok := src.(*net.UDPAddr)
@@ -2120,8 +2157,17 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte, ghost absScion Ab
  	// (tlino) added parantheses to make it parse
  	// if v, ok := d.bfdSessions[ifID]; ok {
 	if v, ok := (d.bfdSessions)[ifID]; ok {
-		v.Messages() <- p
-		return nil, t2, s2
+		// (tlino) original code
+		// v.Messages() <- p
+		// return nil
+
+		// (tlino) perform sendIntraBFD event
+		unfold P(t2, s2)
+		unfold P_sendIntraBFD(t2, s2)
+		t3 := sendIntraBFD(v, p, absBFD, t2)
+		assert token(t3)
+		assert P(t3, s2)
+		return nil, t3, s2
 	}
 
 	// (tlino) globals not supported

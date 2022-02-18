@@ -5,6 +5,8 @@ pred P(pl Place, ghost s mset[Fact]) {
     P_decodePkt(pl, s) &&
     P_decodeIntraBFD(pl, s) &&
     P_decodeInterBFD(pl, s) &&
+    P_sendIntraBFD(pl, s) &&
+    P_sendInterBFD(pl, s) &&
     P_processOHP(pl, s) &&
     P_processSCION(pl, s) &&
     P_packPkt(pl, s) &&
