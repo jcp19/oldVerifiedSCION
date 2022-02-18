@@ -32,6 +32,17 @@ pred P_decodeInterBFD(pl Place, ghost s mset[Fact]) {
         (decodedPktFact(scn) in s) && G_decodeInterBFD(scn, bfd)) ==>
     decodeInterBFD_p(pl, scn, bfd) && P(get_decodeInterBFD_t1(pl, scn, bfd), s union mset[Fact]{decodedInterBFDFact(bfd)})
 }
+pred P_sendIntraBFD(pl Place, ghost s mset[Fact]) {
+    forall bfd AbsBFD :: { sendIntraBFD_p(pl, bfd) } (
+        (decodedIntraBFDFact(bfd) in s)) ==>
+    sendIntraBFD_p(pl, bfd) && P(get_sendIntraBFD_t1(pl, bfd), s)
+}
+
+pred P_sendInterBFD(pl Place, ghost s mset[Fact]) {
+    forall bfd AbsBFD :: { sendInterBFD_p(pl, bfd) } (
+        (decodedInterBFDFact(bfd) in s)) ==>
+    sendInterBFD_p(pl, bfd) && P(get_sendInterBFD_t1(pl, bfd), s)
+}
 
 pred P_processOHP(pl Place, ghost s mset[Fact]) {
     forall scn AbsSCION, pr AbsProcessResult :: { processOHP_p(pl, scn, pr) } (
@@ -138,6 +149,26 @@ func test4(ghost t Place, ghost s mset[Fact], scn AbsSCION, bfd AbsBFD) {
     assert decodeInterBFD_p(t, scn, bfd)
     p_end := get_decodeInterBFD_t1(t, scn, bfd)
     set_end := s union mset[Fact]{decodedInterBFDFact(bfd)}
+    assert P(p_end, set_end)
+}
+
+requires token(t) && P_sendIntraBFD(t, s)
+requires mset[Fact]{decodedIntraBFDFact(bfd)} subset s
+func test5(ghost t Place, ghost s mset[Fact], bfd AbsBFD) {
+    unfold P_sendIntraBFD(t, s)
+    assert sendIntraBFD_p(t, bfd)
+    p_end := get_sendIntraBFD_t1(t, bfd)
+    set_end := s
+    assert P(p_end, set_end)
+}
+
+requires token(t) && P_sendInterBFD(t, s)
+requires mset[Fact]{decodedInterBFDFact(bfd)} subset s
+func test6(ghost t Place, ghost s mset[Fact], bfd AbsBFD) {
+    unfold P_sendInterBFD(t, s)
+    assert sendInterBFD_p(t, bfd)
+    p_end := get_sendInterBFD_t1(t, bfd)
+    set_end := s
     assert P(p_end, set_end)
 }
 

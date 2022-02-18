@@ -117,6 +117,7 @@ type BatchConn interface {
 	preserves forall i int :: 0 <= i && i < len(metas) ==> (&metas[i]).Mem()
 	ensures err == nil ==> 0 < n && n <= len(msgs) && n <= len(metas)
 	ensures err == nil ==> absMsgs == ToAbsMessages(msgs, n)
+	ensures err == nil ==> unfolding msgs.Mem() in (forall i int :: { GetAbsMessagePayload(absMsgs[i]) } (0 <= i && i < n) ==> GetAbsMessagePayload(absMsgs[i]) == unfolding (&msgs[i]).Mem() in ToAbsBytesBounded((msgs[i].Buffers)[0], msgs[i].N))
 	ensures err == nil ==> token(t1) && t1 == old(get_readBatch_t1(t)) && absMsgs == old(get_readBatch_msgs(t))
 	ensures err != nil ==> t1 == t && token(t1) && readBatch_p(t1) && get_readBatch_t1(t) == old(get_readBatch_t1(t)) && get_readBatch_msgs(t) == old(get_readBatch_msgs(t))
 	ReadBatch(msgs underlayconn.Messages, metas []underlayconn.ReadMeta, ghost t Place) (n int, err error, ghost absMsgs seq[AbsMessage], ghost t1 Place)

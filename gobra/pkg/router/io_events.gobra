@@ -55,6 +55,34 @@ ensures token(t1) && t1 == old(get_decodeInterBFD_t1(t, s, res))
 decreases _
 func decodeInterBFD_f(t Place, s AbsSCION, res AbsBFD) (t1 Place)
 
+// sendIntraBFD (internal)
+pred sendIntraBFD_p(ghost t Place, ghost b AbsBFD)
+
+ghost
+requires sendIntraBFD_p(t, b)
+decreases _
+pure func get_sendIntraBFD_t1(t Place, b AbsBFD) (t1 Place)
+
+ghost
+requires token(t) && sendIntraBFD_p(t, b)
+ensures token(t1) && t1 == old(get_sendIntraBFD_t1(t, b))
+decreases _
+func sendIntraBFD_f(t Place, b AbsBFD) (t1 Place)
+
+// sendInterBFD (internal)
+pred sendInterBFD_p(ghost t Place, ghost b AbsBFD)
+
+ghost
+requires sendInterBFD_p(t, b)
+decreases _
+pure func get_sendInterBFD_t1(t Place, b AbsBFD) (t1 Place)
+
+ghost
+requires token(t) && sendInterBFD_p(t, b)
+ensures token(t1) && t1 == old(get_sendInterBFD_t1(t, b))
+decreases _
+func sendInterBFD_f(t Place, b AbsBFD) (t1 Place)
+
 // processOHP (internal)
 pred processOHP_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult)
 
