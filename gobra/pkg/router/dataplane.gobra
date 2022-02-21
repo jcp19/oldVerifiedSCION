@@ -1232,9 +1232,10 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		assert result.Mem() --* verifyutils.BytesAcc(rawPkt)
 		ghost switchCase = errorIsNil
 	case errors.As(err, scmpErr):
-		// (tlino) since this is an scmp packet, we know that result is not empty (i.e. isEmptyPR(result) == false).
+		// (tlino) Since this is an SCMP packet, we know that result is not empty (i.e. isEmptyPR(result) == false).
+		// (Each SCMP packet that is returned by processPkt contains an OutPkt field that is not nil)
 		// (tlino) At this moment we have to use here an assume,
-		// (tlino) since we cannot use a postconditon like: errors.As(err, scmpErr) ==> !isEmptyPR(result)
+		// (tlino) since in the processPkt method we cannot use a postconditon like: errors.As(err, scmpErr) ==> !isEmptyPR(result)
 		assume isEmptyPR(result) == false
 		if !scmpErr.TypeCode.InfoMsg() {
 			// (tlino) log not yet supported
