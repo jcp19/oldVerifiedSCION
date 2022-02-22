@@ -1,0 +1,68 @@
+package router
+
+type Fact domain {
+
+    // each fact has a unique 'type':
+    func getType(Fact) int
+
+    // incoming Message
+    func inFact(AbsMessage) Fact
+    func getIn(Fact) AbsMessage
+
+    // decoded Pkt
+    func decodedPktFact(AbsSCION) Fact
+    func getDecodedPktFact(Fact) AbsSCION
+
+    // decoded Intra BFD
+    func decodedIntraBFDFact(AbsBFD) Fact
+    func getDecodedIntraBFDFact(Fact) AbsBFD
+
+    // decoded Inter BFD
+    func decodedInterBFDFact(AbsBFD) Fact
+    func getDecodedInterBFDFact(Fact) AbsBFD
+
+    // processed Pkt
+    func processedPktFact(AbsProcessResult) Fact
+    func getProcessedPktFact(Fact) AbsProcessResult
+
+    // outgoing Message
+    func outFact(AbsMessage) Fact
+    func getOut(Fact) AbsMessage
+
+    // inFact injective
+    axiom {
+        forall t AbsMessage :: { inFact(t) } getIn(inFact(t)) == t && getType(inFact(t)) == 0
+    }
+
+    // decodedPktFact injective
+    axiom {
+        forall t AbsSCION :: { decodedPktFact(t) } getDecodedPktFact(decodedPktFact(t)) == t && getType(decodedPktFact(t)) == 1
+    }
+
+    // decodedIntraBFDFact injective
+    axiom {
+        forall t AbsBFD :: { decodedIntraBFDFact(t) } getDecodedIntraBFDFact(decodedIntraBFDFact(t)) == t && getType(decodedIntraBFDFact(t)) == 2
+    }
+
+    // decodedInterBFDFact injective
+    axiom {
+        forall t AbsBFD :: { decodedInterBFDFact(t) } getDecodedInterBFDFact(decodedInterBFDFact(t)) == t && getType(decodedInterBFDFact(t)) == 3
+    }
+
+    // processedPktFact injective
+    axiom {
+        forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t && getType(processedPktFact(t)) == 6
+    }
+
+    // outFact injective
+    axiom {
+        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 7
+    }
+}
+
+ghost
+ensures res == (s setminus l) union r
+decreases
+pure func U(s, l, r mset[Fact]) (res mset[Fact]) {
+    return (s setminus l) union r
+}
