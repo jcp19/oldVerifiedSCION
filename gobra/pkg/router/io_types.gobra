@@ -32,7 +32,7 @@ pure func ToAbsBytes(b []byte) AbsBytes
 
 ghost
 requires msg.Mem()
-ensures res == unfolding msg.Mem() in ToAbsBytes(msg.Buffers[0][0:msg.N])
+ensures res == unfolding msg.Mem() in ToAbsBytes(((msg.Buffers)[0])[0:(msg.N)])
 decreases _
 pure func MessageToAbsBytesBounded(msg *ipv4.Message) (res AbsBytes)
 
