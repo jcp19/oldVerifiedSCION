@@ -1159,6 +1159,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant isZeroSCION(spkt)
 	invariant token(currentPlace) && P(currentPlace, currentState)
 	invariant forall j int :: i <= j && j < pkts ==> inFact(absMsgs[j]) in currentState
+	invariant forall j int :: { GetAbsMessagePayload(absMsgs[j]) } (i <= j && j < pkts) ==> (GetAbsMessagePayload(absMsgs[j]) == MessageToAbsBytesBounded(&msgs[j]))
 	for i := 0; i < pkts; i++ {
 		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, absMsgs[i], currentPlace, currentState)
   	}
@@ -1172,21 +1173,22 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 // (tlino) We cannot prove termination of this method, since d.processPkt might not terminate
 requires token(t) && P(t, s)
 requires inFact(absMsg) in s
+requires p.Mem()
+requires GetAbsMessagePayload(absMsg) == MessageToAbsBytesBounded(p)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
 requires ingressID >= 0
 preserves acc(rd.Mem(), _)
-preserves p.Mem()
 preserves forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 preserves cap(origPacket) == bufSize && len(origPacket) == bufSize
 preserves isZeroSCION(spkt)
 preserves acc(scmpErr)
 preserves buffer.Mem()
+ensures p.Mem()
 ensures token(t1) && P(t1, s1)
 ensures s subset s1
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
 	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
-
 	unfold p.Mem()
 	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
 	// (tlino) use local originPacket subslice
@@ -1202,6 +1204,8 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// copy(origPacket[:p.N], p.Buffers[0])
 	verifyutils.OutlineMemorySafeCopy(localOrigPacket, (p.Buffers)[0])
 	rawPkt := (p.Buffers)[0]
+	ghost absRawPkt := ToAbsBytes(rawPkt)
+	assert absRawPkt == GetAbsMessagePayload(absMsg)
 
 	// input metric
 	// (tlino) use getters to avoid unfolding
@@ -1211,6 +1215,10 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 
 	fold verifyutils.BytesAcc((p.Buffers)[0])
 	fold verifyutils.BytesAcc(localOrigPacket)
+
+	// (tlino) use lemma to relate BytesAcc and quantified AbsBytes abstraction functions
+	ghost _ := relateByteAccess(rawPkt, absRawPkt) 
+	assert ToAbsBytes2(rawPkt) == GetAbsMessagePayload(absMsg)
 
 	// (tlino) use local variables
 	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
@@ -1771,10 +1779,11 @@ pure func isEmptyPR(pr processResult) (res bool) {
 // (tlino) See Issue report: https://github.com/jcp19/VerifiedSCION/issues/63
 requires token(t0) && P(t0, s0)
 requires inFact(absMsg) in s0
+requires verifyutils.BytesAcc(rawPkt)
+requires ToAbsBytes2(rawPkt) == GetAbsMessagePayload(absMsg)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires ingressID >= 0
-requires verifyutils.BytesAcc(rawPkt)
 requires isZeroSCION(s)
 preserves verifyutils.BytesAcc(origPacket)
 preserves cap(rawPkt) == bufSize
@@ -1796,6 +1805,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 
 	df := gopacket.NilDecodeFeedback{}
 	fold df.Mem()
+	ghost absData := ToAbsBytes2(rawPkt)
 	// (joao) Adapted to conform to changes in gopacket and sNew
 	// if err := s.DecodeFromBytes(rawPkt, gopacket.NilDecodeFeedback); err != nil {
 	if err := sNew.DecodeFromBytes(rawPkt, df); err != nil {
@@ -1809,6 +1819,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		fold pr.Mem()
 		return
 	}
+	ghost _ := relateDataToSCION(rawPkt, sNew, absData)
 
 	// (tlino) apply internal decodePkt event
 	unfold P(t0, s0)

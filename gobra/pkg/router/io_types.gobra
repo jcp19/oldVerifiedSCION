@@ -19,7 +19,9 @@ type AbsMessage domain {
 
 type AbsProcessResult domain {}
 
-type AbsSCION domain {}
+type AbsSCION domain {
+    func GetAbsSCIONRawPkt(AbsSCION) AbsBytes
+}
 
 type AbsBFD domain {}
 
@@ -29,6 +31,11 @@ ghost
 requires forall i int :: { b[i] } 0 <= i && i < len(b) ==> acc(&b[i], _)
 decreases _
 pure func ToAbsBytes(b []byte) AbsBytes
+
+ghost
+requires verifyutils.BytesAcc(b)
+decreases _
+pure func ToAbsBytes2(b []byte) (res AbsBytes)
 
 ghost
 requires msg.Mem()
@@ -68,3 +75,11 @@ ensures len(res) == pkts
 ensures unfolding msgs.Mem() in (forall i int :: 0 <= i && i < pkts ==> res[i] == ToAbsMessage(&msgs[i]))
 decreases _
 pure func ToAbsMessages(msgs underlayconn.Messages, pkts int) (res seq[AbsMessage])
+
+// lemmas
+ghost
+requires acc(verifyutils.BytesAcc(b), _)
+requires absBytes == unfolding acc(verifyutils.BytesAcc(b), _) in ToAbsBytes(b)
+ensures absBytes == ToAbsBytes2(b)
+decreases _
+pure func relateByteAccess(b []byte, absBytes AbsBytes) bool

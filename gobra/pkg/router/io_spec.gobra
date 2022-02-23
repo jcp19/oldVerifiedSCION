@@ -1,5 +1,9 @@
 package router
 
+import (
+    "gobra/lib/slayers"
+)
+
 pred P(pl Place, ghost s mset[Fact]) {
     P_readBatch(pl, s) &&
     P_decodePkt(pl, s) &&
@@ -78,9 +82,11 @@ pure func ToMset(s seq[AbsMessage]) (res mset[Fact])
 // guard methods
 
 ghost
-ensures res == true
+ensures res == (GetAbsMessagePayload(m) == GetAbsSCIONRawPkt(scn))
 decreases _
-pure func G_decodePkt(m AbsMessage, scn AbsSCION) (res bool)
+pure func G_decodePkt(m AbsMessage, scn AbsSCION) (res bool) {
+    return GetAbsMessagePayload(m) == GetAbsSCIONRawPkt(scn)
+}
 
 ghost
 ensures res == true
@@ -106,6 +112,14 @@ ghost
 ensures res == true
 decreases _
 pure func G_packPkt(pr AbsProcessResult, m AbsMessage) (res bool)
+
+// lemmas
+ghost
+requires scn.Mem()
+requires data == unfolding scn.Mem() in scn.RawPkt
+ensures  absBytes == GetAbsSCIONRawPkt(ToAbsSCION(scn))
+decreases _
+pure func relateDataToSCION(data []byte, scn *slayers.SCION, absBytes AbsBytes) bool
 
 // tests
 
