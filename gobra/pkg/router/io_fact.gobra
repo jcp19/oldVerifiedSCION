@@ -2,6 +2,10 @@ package router
 
 type Fact domain {
 
+    // properties of the BR
+    func localIAFact(AbsIA) Fact
+    func getLocalIAFact(Fact) AbsIA
+
     // each fact has a unique 'type':
     func getType(Fact) int
 
@@ -57,6 +61,11 @@ type Fact domain {
     // outFact injective
     axiom {
         forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 7
+    }
+
+    // localIAFact injective
+    axiom {
+        forall ia AbsIA :: { localIAFact(ia) } getLocalIAFact(localIAFact(ia)) == ia && getType(localIAFact(ia)) == 8
     }
 }
 

@@ -348,7 +348,7 @@ func (ia IA) IsZero() bool {
 }
 
 decreases
-func (ia IA) Equal(other IA) bool {
+pure func (ia IA) Equal(other IA) bool {
 	return ia.I == other.I && ia.A == other.A
 }
 

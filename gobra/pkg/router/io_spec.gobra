@@ -2,6 +2,7 @@ package router
 
 import (
     "gobra/lib/slayers"
+    "gobra/lib/addr"
 )
 
 pred P(pl Place, ghost s mset[Fact]) {
@@ -57,9 +58,9 @@ pred P_processOHP(pl Place, ghost s mset[Fact]) {
 }
 
 pred P_processSCION(pl Place, ghost s mset[Fact]) {
-    forall scn AbsSCION, pr AbsProcessResult :: { processSCION_p(pl, scn, pr) } (
-        (decodedPktFact(scn) in s) && G_processSCION(scn, pr)) ==>
-    processSCION_p(pl, scn, pr) && P(get_processSCION_t1(pl, scn, pr), s union mset[Fact]{processedPktFact(pr)})
+    forall scn AbsSCION, pr AbsProcessResult, ia AbsIA :: { processSCION_p(pl, scn, pr, ia) } (
+        (decodedPktFact(scn) in s) && G_processSCION(scn, pr, s, ia)) ==>
+    processSCION_p(pl, scn, pr, ia) && P(get_processSCION_t1(pl, scn, pr, ia), s union mset[Fact]{processedPktFact(pr)})
 }
 
 pred P_packPkt(pl Place, ghost s mset[Fact]) {
@@ -104,9 +105,11 @@ decreases _
 pure func G_processOHP(scn AbsSCION, pr AbsProcessResult) (res bool)
 
 ghost
-ensures res == true
+ensures res == ( (localIAFact(ia) in s) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn))) ) ==> (GetAbsProcessResult(pr) == 0)
 decreases _
-pure func G_processSCION(scn AbsSCION, pr AbsProcessResult) (res bool)
+pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, s mset[Fact], ia AbsIA) (res bool) {
+    return ( (localIAFact(ia) in s) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn))) ) ==> GetAbsProcessResult(pr) == 0
+}
 
 ghost
 ensures res == true
@@ -120,6 +123,25 @@ requires data == unfolding scn.Mem() in scn.RawPkt
 ensures  absBytes == GetAbsSCIONRawPkt(ToAbsSCION(scn))
 decreases _
 pure func relateDataToSCION(data []byte, scn *slayers.SCION, absBytes AbsBytes) bool
+
+// processSCION
+ghost
+requires dst.Equal(local)
+ensures localIA == GetAbsSCIONDstIA(absSCION)
+decreases _
+pure func relateDstIAToLocalIA(dst addr.IA, local addr.IA, localIA AbsIA, absSCION AbsSCION) bool
+
+ghost
+requires int(currHF) + 1 == numHop
+ensures (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))
+decreases _
+pure func relateLastHopToNumHops(currHF uint8, numHop int, absSCION AbsSCION) bool
+
+ghost
+requires pr.Mem() && pr.EgressID == 0
+ensures 0 == GetAbsProcessResult(ToAbsProcessResult(pr))
+decreases _
+pure func relateEgressID(pr processResult) bool
 
 // tests
 
@@ -199,16 +221,16 @@ func test7(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult
     assert P(p_end, set_end)
 }
 
-requires token(t) && P_processSCION(t, s)
-requires mset[Fact]{decodedPktFact(scn)} subset s
-requires G_processSCION(scn, res)
-func test8(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult) {
-    unfold P_processSCION(t, s)
-    assert processSCION_p(t, scn, res)
-    p_end := get_processSCION_t1(t, scn, res)
-    set_end := s union mset[Fact]{processedPktFact(res)}
-    assert P(p_end, set_end)
-}
+// requires token(t) && P_processSCION(t, s)
+// requires mset[Fact]{decodedPktFact(scn)} subset s
+// requires G_processSCION(scn, res)
+// func test8(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult) {
+//     unfold P_processSCION(t, s)
+//     assert processSCION_p(t, scn, res)
+//     p_end := get_processSCION_t1(t, scn, res)
+//     set_end := s union mset[Fact]{processedPktFact(res)}
+//     assert P(p_end, set_end)
+// }
 
 requires token(t) && P_packPkt(t, s)
 requires mset[Fact]{processedPktFact(pr)} subset s
