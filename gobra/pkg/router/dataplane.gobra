@@ -1016,6 +1016,8 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) Thus, we need to inhale these predicates
 	ghost var currentPlace Place
 	ghost var state mset[Fact]
+	ghost localIA := ToAbsIA(d.GetLocalAI())
+	state = state union mset[Fact]{localIAFact(localIA)}
 	inhale token(currentPlace) && P(currentPlace, state)
 
 	// (tlino) use pointer
@@ -1039,6 +1041,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
 	invariant len(origPacket) == bufSize
 	invariant token(currentPlace) && P(currentPlace, state)
+	invariant localIAFact(localIA) in state
 	for d.isRunning() {
 		unfold P(currentPlace, state)
 		unfold P_readBatch(currentPlace, state)
@@ -1068,7 +1071,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			ghost state = state union ToMset(absMessages)
 			assert forall i int :: 0 <= i && i < pkts ==> mset[Fact]{inFact(absMessages[i])} subset state
 			// (tlino) outlined code to separate function
-			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, currentPlace, state, absMessages)
+			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, localIA ,currentPlace, state, absMessages)
 			assert P(currentPlace, state)
 
 			// (tlino) outlined code to separate function
@@ -1120,6 +1123,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since processMessage might not terminate
 requires token(t) && P(t, s)
+requires localIAFact(localIA) in s
 requires msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 requires absMsgs == ToAbsMessages(msgs, pkts)
@@ -1137,8 +1141,9 @@ preserves acc(scmpErr)
 preserves buffer.Mem()
 ensures msgs.Mem()
 ensures token(t1) && P(t1, s1)
+ensures localIAFact(localIA) in s1
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
-	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost t Place, ghost s mset[Fact], ghost absMsgs seq[AbsMessage]) (ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost localIA AbsIA, ghost t Place, ghost s mset[Fact], ghost absMsgs seq[AbsMessage]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold msgs.Mem()
 
 	ghost var currentPlace Place = t
@@ -1158,10 +1163,11 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant buffer.Mem()
 	invariant isZeroSCION(spkt)
 	invariant token(currentPlace) && P(currentPlace, currentState)
+	invariant localIAFact(localIA) in currentState
 	invariant forall j int :: i <= j && j < pkts ==> inFact(absMsgs[j]) in currentState
 	invariant forall j int :: { GetAbsMessagePayload(absMsgs[j]) } (i <= j && j < pkts) ==> (GetAbsMessagePayload(absMsgs[j]) == MessageToAbsBytesBounded(&msgs[j]))
 	for i := 0; i < pkts; i++ {
-		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, absMsgs[i], currentPlace, currentState)
+		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, absMsgs[i], localIA, currentPlace, currentState)
   	}
 	fold msgs.Mem()
 	return currentPlace, currentState
@@ -1172,6 +1178,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 // (tlino) used to be part of the read closure
 // (tlino) We cannot prove termination of this method, since d.processPkt might not terminate
 requires token(t) && P(t, s)
+requires localIAFact(localIA) in s
 requires inFact(absMsg) in s
 requires p.Mem()
 requires GetAbsMessagePayload(absMsg) == MessageToAbsBytesBounded(p)
@@ -1188,7 +1195,7 @@ ensures p.Mem()
 ensures token(t1) && P(t1, s1)
 ensures s subset s1
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
+	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold p.Mem()
 	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
 	// (tlino) use local originPacket subslice
@@ -1223,9 +1230,8 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// (tlino) use local variables
 	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
 	//	buffer)
-	var foo AbsIA
 	result, err, absPR, t2, s2 := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
-		buffer, absMsg, foo, t, s)
+		buffer, absMsg, localIA, t, s)
 
 	assert result.Mem()
 
@@ -2206,7 +2212,7 @@ ensures ( (GetProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound) && (lo
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost localIA AbsIA ,ghost s0 mset[Fact]) (pr processResult, err error) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost localIA AbsIA, ghost s0 mset[Fact]) (pr processResult, err error) {
 
 	// (joao) added `&` before `scionPacketProcessor` to make this type check
 	p := &scionPacketProcessor{
