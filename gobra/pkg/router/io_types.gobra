@@ -19,7 +19,7 @@ type AbsMessage domain {
 }
 
 type AbsProcessResult domain {
-    func GetAbsProcessResult(AbsProcessResult) uint16
+    func GetAbsProcessResultEgressID(AbsProcessResult) uint16
     func GetProcessResultResultCase(AbsProcessResult) ResultCase
 }
 
@@ -42,6 +42,11 @@ type AbsBFD domain {}
 
 // other types
 
+// This type represents the result cases for the processSCION and processOHP methods.
+// ErrorCase: an error occured during processing, packet is dropped or SCMP packet is sent back to sender.
+// Inbound: the packet is destined to the AS of the border router.
+// Transit: the border router forwards to packet to the next AS.
+// TransitFromOtherBR: the packet needs to be forwarded by another border router.
 type ResultCase uint
 
 const (
