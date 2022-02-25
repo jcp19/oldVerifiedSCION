@@ -105,10 +105,10 @@ decreases _
 pure func G_processOHP(scn AbsSCION, pr AbsProcessResult) (res bool)
 
 ghost
-ensures res == ( (localIAFact(ia) in s) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn))) ) ==> (GetAbsProcessResult(pr) == 0)
+ensures res == ( (localIAFact(ia) in s) && (GetProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn))) ) ==> (GetAbsProcessResult(pr) == 0)
 decreases _
 pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, s mset[Fact], ia AbsIA) (res bool) {
-    return ( (localIAFact(ia) in s) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn))) ) ==> GetAbsProcessResult(pr) == 0
+    return ( (localIAFact(ia) in s) && (GetProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn))) ) ==> GetAbsProcessResult(pr) == 0
 }
 
 ghost
@@ -142,6 +142,23 @@ requires pr.Mem() && pr.EgressID == 0
 ensures 0 == GetAbsProcessResult(ToAbsProcessResult(pr))
 decreases _
 pure func relateEgressID(pr processResult) bool
+
+ghost
+requires pr.Mem()
+// requires err != nil
+ensures GetProcessResultResultCase(ToAbsProcessResult(pr)) == ErrorCase
+decreases _
+pure func releteResultCaseError(pr processResult, err error) bool
+
+ghost
+requires pr.Mem()
+requires err == nil
+requires localIA == GetAbsSCIONDstIA(absSCION)
+requires (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))
+requires (GetAbsProcessResult(ToAbsProcessResult(pr)) == 0)
+ensures GetProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound
+decreases _
+pure func releteResultCaseInbound(absSCION AbsSCION, localIA AbsIA, pr processResult, err error) bool
 
 // tests
 

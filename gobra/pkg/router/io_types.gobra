@@ -20,6 +20,7 @@ type AbsMessage domain {
 
 type AbsProcessResult domain {
     func GetAbsProcessResult(AbsProcessResult) uint16
+    func GetProcessResultResultCase(AbsProcessResult) ResultCase
 }
 
 type AbsSCION domain {
@@ -38,6 +39,17 @@ type AbsRawPath domain {
 }
 
 type AbsBFD domain {}
+
+// other types
+
+type ResultCase uint
+
+const (
+    ErrorCase ResultCase = 0
+	Inbound ResultCase = 1
+	Transit ResultCase = 2
+	TransitFromOtherBR ResultCase = 3
+)
 
 // abstraction functions
 
