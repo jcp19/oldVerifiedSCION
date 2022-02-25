@@ -98,18 +98,18 @@ decreases _
 func processOHP_f(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
 
 // processSCION (internal)
-pred processSCION_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult, ghost ia AbsIA)
+pred processSCION_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult, ghost ia AbsIA, ghost egressIDs dict[uint16]AbsConn)
 
 ghost
-requires processSCION_p(t, s, res, ia)
+requires processSCION_p(t, s, res, ia, egressIDs)
 decreases _
-pure func get_processSCION_t1(t Place, s AbsSCION, res AbsProcessResult, ia AbsIA) (t1 Place)
+pure func get_processSCION_t1(t Place, s AbsSCION, res AbsProcessResult, ia AbsIA, egressIDs dict[uint16]AbsConn) (t1 Place)
 
 ghost
-requires token(t) && processSCION_p(t, s, res, ia)
-ensures token(t1) && t1 == old(get_processSCION_t1(t, s, res, ia))
+requires token(t) && processSCION_p(t, s, res, ia, egressIDs)
+ensures token(t1) && t1 == old(get_processSCION_t1(t, s, res, ia, egressIDs))
 decreases _
-func processSCION_f(t Place, s AbsSCION, res AbsProcessResult, ia AbsIA) (t1 Place)
+func processSCION_f(t Place, s AbsSCION, res AbsProcessResult, ia AbsIA, egressIDs dict[uint16]AbsConn) (t1 Place)
 
 // packPkt (internal)
 pred packPkt_p(ghost t Place, ghost pr AbsProcessResult, ghost res AbsMessage)

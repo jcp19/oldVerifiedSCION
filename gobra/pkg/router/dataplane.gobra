@@ -199,6 +199,8 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
+pred IsValidBatchConnIntf(idx uint16, bc BatchConn)
+
 // (tlino) start of added getters and setters for DataPlane to simplify verification
 requires acc(DataPlaneMutexInvariant(d), _)
 decreases
@@ -249,12 +251,15 @@ func (d *DataPlane) GetInternalNextHop(intf uint16) (add net.Addr, ok bool) {
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
-ensures ok ==> acc(btc.Mem(), _)
+ensures ok ==> acc(btc.Mem(), _) && IsValidBatchConnIntf(intf, btc)
 decreases
 func (d *DataPlane) GetExternalBatchConn(intf uint16) (btc BatchConn, ok bool) {
     unfold acc(DataPlaneMutexInvariant(d), _)
 	unfold acc(BatchConnsAcc(d.external), _)
     btc, ok = (d.external)[intf]
+	ghost if ok {
+		inhale IsValidBatchConnIntf(intf, btc)
+	}
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
@@ -1016,8 +1021,10 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) Thus, we need to inhale these predicates
 	ghost var currentPlace Place
 	ghost var state mset[Fact]
+	ghost var supportedEgressIDs dict[uint16]AbsConn
 	ghost localIA := ToAbsIA(d.GetLocalAI())
 	state = state union mset[Fact]{localIAFact(localIA)}
+	state = state union mset[Fact]{supportedEgressIDsFact(supportedEgressIDs)}
 	inhale token(currentPlace) && P(currentPlace, state)
 
 	// (tlino) use pointer
@@ -1042,6 +1049,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant len(origPacket) == bufSize
 	invariant token(currentPlace) && P(currentPlace, state)
 	invariant localIAFact(localIA) in state
+	invariant supportedEgressIDsFact(supportedEgressIDs) in state 
 	for d.isRunning() {
 		unfold P(currentPlace, state)
 		unfold P_readBatch(currentPlace, state)
@@ -1071,7 +1079,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			ghost state = state union ToMset(absMessages)
 			assert forall i int :: 0 <= i && i < pkts ==> mset[Fact]{inFact(absMessages[i])} subset state
 			// (tlino) outlined code to separate function
-			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, localIA ,currentPlace, state, absMessages)
+			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, localIA, supportedEgressIDs ,currentPlace, state, absMessages)
 			assert P(currentPlace, state)
 
 			// (tlino) outlined code to separate function
@@ -1124,6 +1132,7 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 // (tlino) We cannot prove termination of this method, since processMessage might not terminate
 requires token(t) && P(t, s)
 requires localIAFact(localIA) in s
+requires supportedEgressIDsFact(supportedEgressIDs) in s
 requires msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 requires absMsgs == ToAbsMessages(msgs, pkts)
@@ -1142,8 +1151,9 @@ preserves buffer.Mem()
 ensures msgs.Mem()
 ensures token(t1) && P(t1, s1)
 ensures localIAFact(localIA) in s1
+ensures supportedEgressIDsFact(supportedEgressIDs) in s1
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
-	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost localIA AbsIA, ghost t Place, ghost s mset[Fact], ghost absMsgs seq[AbsMessage]) (ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost t Place, ghost s mset[Fact], ghost absMsgs seq[AbsMessage]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold msgs.Mem()
 
 	ghost var currentPlace Place = t
@@ -1164,10 +1174,11 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant isZeroSCION(spkt)
 	invariant token(currentPlace) && P(currentPlace, currentState)
 	invariant localIAFact(localIA) in currentState
+	invariant supportedEgressIDsFact(supportedEgressIDs) in currentState
 	invariant forall j int :: i <= j && j < pkts ==> inFact(absMsgs[j]) in currentState
 	invariant forall j int :: { GetAbsMessagePayload(absMsgs[j]) } (i <= j && j < pkts) ==> (GetAbsMessagePayload(absMsgs[j]) == MessageToAbsBytesBounded(&msgs[j]))
 	for i := 0; i < pkts; i++ {
-		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, absMsgs[i], localIA, currentPlace, currentState)
+		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, absMsgs[i], localIA, supportedEgressIDs, currentPlace, currentState)
   	}
 	fold msgs.Mem()
 	return currentPlace, currentState
@@ -1180,6 +1191,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 requires token(t) && P(t, s)
 requires localIAFact(localIA) in s
 requires inFact(absMsg) in s
+requires supportedEgressIDsFact(supportedEgressIDs) in s
 requires p.Mem()
 requires GetAbsMessagePayload(absMsg) == MessageToAbsBytesBounded(p)
 requires acc(DataPlaneMutexInvariant(d), _)
@@ -1195,7 +1207,7 @@ ensures p.Mem()
 ensures token(t1) && P(t1, s1)
 ensures s subset s1
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
+	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold p.Mem()
 	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
 	// (tlino) use local originPacket subslice
@@ -1231,7 +1243,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
 	//	buffer)
 	result, err, absPR, t2, s2 := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
-		buffer, absMsg, localIA, t, s)
+		buffer, absMsg, localIA, supportedEgressIDs, t, s)
 
 	assert result.Mem()
 
@@ -1790,6 +1802,7 @@ requires verifyutils.BytesAcc(rawPkt)
 requires ToAbsBytes2(rawPkt) == GetAbsMessagePayload(absMsg)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires localIAFact(localIA) in s0
+requires supportedEgressIDsFact(supportedEgressIDs) in s0
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires ingressID >= 0
 requires isZeroSCION(s)
@@ -1804,7 +1817,7 @@ ensures token(t1) && P(t1, s1)
 ensures s0 subset s1
 ensures !isEmptyPR(pr) ==> processedPktFact(absPR) in s1
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
@@ -1948,17 +1961,17 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// (tlino) original code, adapted code is below 
 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
 
-		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer, absSCION, localIA, s2)
+		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer, absSCION, localIA, supportedEgressIDs, s2)
 
 		// (tlino) apply internal processSCION event, if pr is not empty
 		ghost if (!isEmptyPR(pr)) {
 			unfold P(t2, s2)
 			unfold P_processSCION(t2, s2)
 			ghost absPR = ToAbsProcessResult(pr)
-			assert processSCION_p(t2, absSCION, absPR, localIA)
+			assert processSCION_p(t2, absSCION, absPR, localIA, supportedEgressIDs)
 			ghost s1 = s2 union mset[Fact]{processedPktFact(absPR)}
-			ghost t1 = get_processSCION_t1(t2, absSCION, absPR, localIA)
-			ghost processSCION_f(t2, absSCION, absPR, localIA)
+			ghost t1 = get_processSCION_t1(t2, absSCION, absPR, localIA, supportedEgressIDs)
+			ghost processSCION_f(t2, absSCION, absPR, localIA, supportedEgressIDs)
 			assert token(t1)
 			assert P(t1, s1)
 		} else {
@@ -2202,17 +2215,19 @@ requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 requires s != nil && s.Mem() && s.getRawPkt() == rawPkt
 requires localIAFact(localIA) in s0
+requires supportedEgressIDsFact(supportedEgressIDs) in s0
 preserves verifyutils.BytesAcc(origPacket)
 preserves cap(rawPkt) == bufSize
 preserves buffer.Mem()
 ensures pr.Mem()
 ensures err == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures err != nil ==> verifyutils.BytesAcc(rawPkt)
-ensures ( (GetProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))))
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost localIA AbsIA, ghost s0 mset[Fact]) (pr processResult, err error) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost s0 mset[Fact]) (pr processResult, err error) {
 
 	// (joao) added `&` before `scionPacketProcessor` to make this type check
 	p := &scionPacketProcessor{
@@ -2225,7 +2240,7 @@ func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCI
 	}
 	// (tlino) use ghost argument to relate the argument of processSCION to process
 	// return p.process()
-	pr, err = p.process(rawPkt, absSCION, localIA, s0)
+	pr, err = p.process(rawPkt, absSCION, localIA, supportedEgressIDs, s0)
 	return
 }
 
@@ -3331,6 +3346,7 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 // (tlino) pr.Mem() --* verifyutils.BytesAcc(rawPktAlias) to pr.Mem() --* verifyutils.BytesAcc(p.rawPkt)
 // (tlino) We cannot prove termination of this method, since p.resolveInbound() might not terminate
 requires localIAFact(locIA) in s
+requires supportedEgressIDsFact(supportedEgressIDs) in s
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 requires acc(&p.infoField) && acc(&p.segmentChange)
@@ -3349,9 +3365,9 @@ ensures (p.buffer).Mem()
 ensures pr.Mem()
 ensures errProcess == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 ensures errProcess != nil ==> verifyutils.BytesAcc(rawPktAlias)
-// MyLocalIA(localIA) in state && GetCurrentHop(absPackage)+1 == GetLastHop(absPackage) && localIA == GetDstIA(absPackage)
-ensures ( (GetProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
-func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost s mset[Fact]) (pr processResult, errProcess error) {
+ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
+ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))))
+func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost s mset[Fact]) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
 		pr, errProcess := r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
@@ -3411,6 +3427,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		ghost _ := releteResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
+	// assert (unfolding acc(p.Mem(), _) in GetAbsRawPathCurrHop(GetAbsSCIONRawPath(ToAbsSCION(p.scionLayer))) == ToAbsHop(p.hopField))
 	
 	// (tlino) added code, get some values
 	unfold p.Mem()
@@ -3543,6 +3560,9 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 	// (tlino) use getter to simplify verification
 	// if c, ok := p.d.external[egressID]; ok {
 	if c, ok := p.d.GetExternalBatchConn(egressID); ok {
+		// (tlino) use lemma methods to relate abstract types
+		ghost _ := relateBatchConn(egressID, c, supportedEgressIDs)
+		
 		if err := p.processEgress(); err != nil {
 			// (tlino) original code,  adapted code below
 			// return processResult{}, err
@@ -3579,7 +3599,8 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 
 		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
 		// (tlino) use lemma methods to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateEgressIDTransitCase(absSCION, pr)
+		ghost _ := relateResultCaseTransit(absSCION, pr, errProcess)
 		return pr, errProcess
 	}
 	

@@ -58,9 +58,9 @@ pred P_processOHP(pl Place, ghost s mset[Fact]) {
 }
 
 pred P_processSCION(pl Place, ghost s mset[Fact]) {
-    forall scn AbsSCION, pr AbsProcessResult, ia AbsIA :: { processSCION_p(pl, scn, pr, ia) } (
-        (decodedPktFact(scn) in s) && G_processSCION(scn, pr, s, ia)) ==>
-    processSCION_p(pl, scn, pr, ia) && P(get_processSCION_t1(pl, scn, pr, ia), s union mset[Fact]{processedPktFact(pr)})
+    forall scn AbsSCION, pr AbsProcessResult, ia AbsIA, egressIDs dict[uint16]AbsConn :: { processSCION_p(pl, scn, pr, ia, egressIDs) } (
+        (decodedPktFact(scn) in s) && G_processSCION(scn, pr, s, ia, egressIDs)) ==>
+    processSCION_p(pl, scn, pr, ia, egressIDs) && P(get_processSCION_t1(pl, scn, pr, ia, egressIDs), s union mset[Fact]{processedPktFact(pr)})
 }
 
 pred P_packPkt(pl Place, ghost s mset[Fact]) {
@@ -105,10 +105,10 @@ decreases _
 pure func G_processOHP(scn AbsSCION, pr AbsProcessResult) (res bool)
 
 ghost
-ensures res == ( (localIAFact(ia) in s) && (GetProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn))) ) ==> (GetAbsProcessResultEgressID(pr) == 0)
 decreases _
-pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, s mset[Fact], ia AbsIA) (res bool) {
-    return ( (localIAFact(ia) in s) && (GetProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn))) ) ==> GetAbsProcessResultEgressID(pr) == 0
+pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, s mset[Fact], ia AbsIA, supportedEgressIDs dict[uint16]AbsConn) (res bool) {
+    return (((localIAFact(ia) in s) && (GetAbsProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0) &&
+    ((( (supportedEgressIDsFact(supportedEgressIDs) in s) && GetAbsProcessResultResultCase(pr) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))))))
 }
 
 ghost
@@ -146,7 +146,7 @@ pure func relateEgressID(pr processResult) bool
 ghost
 requires pr.Mem()
 // requires err != nil
-ensures GetProcessResultResultCase(ToAbsProcessResult(pr)) == ErrorCase
+ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == ErrorCase
 decreases _
 pure func releteResultCaseError(pr processResult, err error) bool
 
@@ -156,9 +156,36 @@ requires err == nil
 requires localIA == GetAbsSCIONDstIA(absSCION)
 requires (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))
 requires (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
-ensures GetProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound
+ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound
 decreases _
 pure func releteResultCaseInbound(absSCION AbsSCION, localIA AbsIA, pr processResult, err error) bool
+
+ghost
+requires acc(spp.Mem(), _)
+ensures GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)) == (unfolding acc(spp.Mem(), _) in ToAbsHop(spp.hopField))
+decreases _
+pure func relateCurrentHop(absSCION AbsSCION, spp *scionPacketProcessor) bool
+
+ghost
+requires pr.Mem()
+// requires  pr.EgressID == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))))
+ensures GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
+decreases _
+pure func relateEgressIDTransitCase(absSCION AbsSCION, pr processResult) bool
+
+ghost
+requires acc(bc.Mem(), _)
+requires IsValidBatchConnIntf(intf, bc)
+ensures intf in domain(cons) && cons[intf] == ToAbsConn(bc)
+decreases _
+pure func relateBatchConn(intf uint16, bc BatchConn, cons dict[uint16]AbsConn) bool
+
+ghost
+requires pr.Mem()
+requires GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
+ensures  GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit
+decreases _
+pure func relateResultCaseTransit(absSCION AbsSCION, pr processResult, err error) bool
 
 // tests
 

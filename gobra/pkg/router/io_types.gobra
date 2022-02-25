@@ -6,6 +6,7 @@ import (
     "gobra/lib/slayers"
     "gobra/dependencies/gopacket/layers"
     "gobra/lib/addr"
+    "gobra/lib/slayers/path"
 
     "gobra/verifyutils"
 )
@@ -20,7 +21,8 @@ type AbsMessage domain {
 
 type AbsProcessResult domain {
     func GetAbsProcessResultEgressID(AbsProcessResult) uint16
-    func GetProcessResultResultCase(AbsProcessResult) ResultCase
+    func GetAbsProcessResultResultCase(AbsProcessResult) ResultCase
+    func GetAbsProcessResultBatchConn(AbsProcessResult) AbsConn
 }
 
 type AbsSCION domain {
@@ -36,7 +38,14 @@ type AbsIA domain {
 type AbsRawPath domain {
     func GetAbsRawPathCurrHF(AbsRawPath) int
     func GetAbsRawPathNumHops(AbsRawPath) int
+    func GetAbsRawPathCurrHop(AbsRawPath) AbsHop
 }
+
+type AbsHop domain {
+    func GetAbsHopEgressId(AbsHop) uint16
+}
+
+type AbsConn domain {}
 
 type AbsBFD domain {}
 
@@ -110,6 +119,16 @@ pure func ToAbsMessages(msgs underlayconn.Messages, pkts int) (res seq[AbsMessag
 ghost
 decreases _
 pure func ToAbsIA(ia addr.IA) AbsIA
+
+ghost
+requires acc(path.HopFieldInv(hop), _)
+decreases _
+pure func ToAbsHop(hop *path.HopField) AbsHop
+
+ghost
+requires acc(bc.Mem(), _)
+decreases _
+pure func ToAbsConn(bc BatchConn) AbsConn
 
 // lemmas
 ghost
