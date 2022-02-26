@@ -107,8 +107,9 @@ pure func G_processOHP(scn AbsSCION, pr AbsProcessResult) (res bool)
 ghost
 decreases _
 pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, s mset[Fact], ia AbsIA, supportedEgressIDs dict[uint16]AbsConn) (res bool) {
-    return (((localIAFact(ia) in s) && (GetAbsProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0) &&
-    ((( (supportedEgressIDsFact(supportedEgressIDs) in s) && GetAbsProcessResultResultCase(pr) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))))))
+    return ((((localIAFact(ia) in s) && (GetAbsProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0)) &&
+    ((( (supportedEgressIDsFact(supportedEgressIDs) in s) && GetAbsProcessResultResultCase(pr) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))))) &&
+    (((GetAbsProcessResultResultCase(pr) == TransitFromOtherBR)) ==> (GetAbsProcessResultEgressID(pr) == 0)))
 }
 
 ghost
@@ -186,6 +187,14 @@ requires GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressI
 ensures  GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit
 decreases _
 pure func relateResultCaseTransit(absSCION AbsSCION, pr processResult, err error) bool
+
+ghost
+requires pr.Mem()
+requires pr.EgressID == 0
+ensures GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == TransitFromOtherBR)
+decreases _
+pure func relateResultCaseTransitFromOtherBR(pr processResult) bool
 
 // tests
 
