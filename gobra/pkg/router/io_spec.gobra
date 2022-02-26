@@ -3,6 +3,8 @@ package router
 import (
     "gobra/lib/slayers"
     "gobra/lib/addr"
+    "gobra/lib/slayers/path"
+    "gobra/lib/slayers/path/scion"
 )
 
 pred P(pl Place, ghost s mset[Fact]) {
@@ -127,29 +129,30 @@ pure func relateDataToSCION(data []byte, scn *slayers.SCION, absBytes AbsBytes) 
 
 // processSCION
 ghost
-requires dst.Equal(local)
-ensures localIA == GetAbsSCIONDstIA(absSCION)
-decreases _
-pure func relateDstIAToLocalIA(dst addr.IA, local addr.IA, localIA AbsIA, absSCION AbsSCION) bool
-
-ghost
-requires int(currHF) + 1 == numHop
-ensures (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))
-decreases _
-pure func relateLastHopToNumHops(currHF uint8, numHop int, absSCION AbsSCION) bool
-
-ghost
-requires pr.Mem() && pr.EgressID == 0
-ensures 0 == GetAbsProcessResultEgressID(ToAbsProcessResult(pr))
-decreases _
-pure func relateEgressID(pr processResult) bool
-
-ghost
 requires pr.Mem()
-// requires err != nil
+requires err != nil
 ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == ErrorCase
 decreases _
 pure func releteResultCaseError(pr processResult, err error) bool
+
+ghost
+requires acc(s.Mem(), _)
+requires acc(DataPlaneMutexInvariant(d), _)
+ensures (s.getDstIA()).Equal(d.GetLocalAI()) ==> localIA == GetAbsSCIONDstIA(absSCION)
+decreases _
+pure func relateDstIAToLocalIA(s *slayers.SCION, d *DataPlane, localIA AbsIA, absSCION AbsSCION) bool
+
+ghost
+requires acc(p.Mem(), _)
+ensures (int(p.GetCurrHF()) + 1 == p.GetNumHops()) ==> (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))
+decreases _
+pure func relateLastHopToNumHops(p *scion.Raw, absSCION AbsSCION) bool
+
+ghost
+requires pr.Mem()
+ensures  pr.EgressID == GetAbsProcessResultEgressID(ToAbsProcessResult(pr))
+decreases _
+pure func relateProcessResultEgressID(pr processResult) bool
 
 ghost
 requires pr.Mem()
@@ -159,7 +162,7 @@ requires (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPat
 requires (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
 ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound
 decreases _
-pure func releteResultCaseInbound(absSCION AbsSCION, localIA AbsIA, pr processResult, err error) bool
+pure func relateResultCaseInbound(absSCION AbsSCION, localIA AbsIA, pr processResult, err error) bool
 
 ghost
 requires acc(spp.Mem(), _)
@@ -168,11 +171,11 @@ decreases _
 pure func relateCurrentHop(absSCION AbsSCION, spp *scionPacketProcessor) bool
 
 ghost
-requires pr.Mem()
-// requires  pr.EgressID == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))))
-ensures GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
+requires acc(spp.Mem(), _)
+requires (unfolding acc(spp.Mem(), _) in unfolding acc(path.HopFieldInv(spp.hopField), _) in egressID == spp.hopField.ConsEgress || egressID == spp.hopField.ConsIngress)
+ensures egressID == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
 decreases _
-pure func relateEgressIDTransitCase(absSCION AbsSCION, pr processResult) bool
+pure func relateHopEgressID(absSCION AbsSCION, egressID uint16, spp *scionPacketProcessor) bool
 
 ghost
 requires acc(bc.Mem(), _)
@@ -190,8 +193,7 @@ pure func relateResultCaseTransit(absSCION AbsSCION, pr processResult, err error
 
 ghost
 requires pr.Mem()
-requires pr.EgressID == 0
-ensures GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+requires GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
 ensures (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == TransitFromOtherBR)
 decreases _
 pure func relateResultCaseTransitFromOtherBR(pr processResult) bool
