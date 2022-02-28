@@ -279,16 +279,16 @@ func test7(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult
     assert P(p_end, set_end)
 }
 
-// requires token(t) && P_processSCION(t, s)
-// requires mset[Fact]{decodedPktFact(scn)} subset s
-// requires G_processSCION(scn, res)
-// func test8(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult) {
-//     unfold P_processSCION(t, s)
-//     assert processSCION_p(t, scn, res)
-//     p_end := get_processSCION_t1(t, scn, res)
-//     set_end := s union mset[Fact]{processedPktFact(res)}
-//     assert P(p_end, set_end)
-// }
+requires token(t) && P_processSCION(t, s)
+requires mset[Fact]{decodedPktFact(scn)} subset s
+requires G_processSCION(scn, res, s, ia, supportedEgressIDs)
+func test8(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult, ia AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn) {
+    unfold P_processSCION(t, s)
+    assert processSCION_p(t, scn, res, ia, supportedEgressIDs)
+    p_end := get_processSCION_t1(t, scn, res, ia, supportedEgressIDs)
+    set_end := s union mset[Fact]{processedPktFact(res)}
+    assert P(p_end, set_end)
+}
 
 requires token(t) && P_packPkt(t, s)
 requires mset[Fact]{processedPktFact(pr)} subset s
