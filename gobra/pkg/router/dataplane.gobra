@@ -199,6 +199,7 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
+// (tlino) we need this predicate to relate input arguments of the 'GetExternalBatchConn' method to its outputs.
 pred IsValidBatchConnIntf(idx uint16, bc BatchConn)
 
 // (tlino) start of added getters and setters for DataPlane to simplify verification
