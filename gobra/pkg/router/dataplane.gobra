@@ -210,7 +210,8 @@ pure func (d *DataPlane) GetLocalAI() addr.IA {
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
-ensures res != nil ==> acc(res.Mem(), _)
+preserves unfolding acc(DataPlaneMutexInvariant(d), _) in d.internal != nil
+ensures acc(res.Mem(), _)
 decreases
 func (d *DataPlane) getInternal() (res BatchConn) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
@@ -967,7 +968,7 @@ func (d *DataPlane) Run() error {
 	// }
 	invariant 0 <= k && k <= mapKeyUpperBound
 	invariant acc(DataPlaneMutexInvariant(d), _)
-	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 	decreases mapKeyUpperBound - k
 	for k := 0; k < mapKeyUpperBound; k++ {
 		key := uint16(k)
@@ -1012,7 +1013,7 @@ func bfdLauncher(bfdSess bfdSession) {
 // (joao) Closure extracted from the body of the Run function
 requires acc(rd.Mem(), _)
 requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires ingressID >= 0
 func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	// (tlino) outlined code to separate function
@@ -1024,8 +1025,10 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	ghost var state mset[Fact]
 	ghost var supportedEgressIDs dict[uint16]AbsConn
 	ghost localIA := ToAbsIA(d.GetLocalAI())
+	ghost internalConn := ToAbsConn(d.getInternal())
 	state = state union mset[Fact]{localIAFact(localIA)}
 	state = state union mset[Fact]{supportedEgressIDsFact(supportedEgressIDs)}
+	state = state union mset[Fact]{internalConnFact(internalConn)}
 	inhale token(currentPlace) && P(currentPlace, state)
 
 	// (tlino) use pointer
@@ -1040,7 +1043,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 
 	invariant forall j int :: 0 <= j && j < len(metas) ==> (&metas[j]).Mem()
 	invariant acc(DataPlaneMutexInvariant(d), _)
-	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 	invariant acc(rd.Mem(), _)
 	invariant msgs.Mem()
 	invariant acc(scmpErr)
@@ -1050,7 +1053,8 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	invariant len(origPacket) == bufSize
 	invariant token(currentPlace) && P(currentPlace, state)
 	invariant localIAFact(localIA) in state
-	invariant supportedEgressIDsFact(supportedEgressIDs) in state 
+	invariant supportedEgressIDsFact(supportedEgressIDs) in state
+	invariant internalConnFact(internalConn) in state
 	for d.isRunning() {
 		unfold P(currentPlace, state)
 		unfold P_readBatch(currentPlace, state)
@@ -1080,7 +1084,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 			ghost state = state union ToMset(absMessages)
 			assert forall i int :: 0 <= i && i < pkts ==> mset[Fact]{inFact(absMessages[i])} subset state
 			// (tlino) outlined code to separate function
-			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, localIA, supportedEgressIDs ,currentPlace, state, absMessages)
+			currentPlace, state = processBatch(ingressID, rd, d, msgs, metas, pkts, origPacket, scmpErr, buffer, spkt, localIA, supportedEgressIDs, internalConn, currentPlace, state, absMessages)
 			assert P(currentPlace, state)
 
 			// (tlino) outlined code to separate function
@@ -1134,13 +1138,14 @@ func initReadClosureBuffer() (msgs underlayconn.Messages, metas []conn.ReadMeta)
 requires token(t) && P(t, s)
 requires localIAFact(localIA) in s
 requires supportedEgressIDsFact(supportedEgressIDs) in s
+requires internalConnFact(internalConn) in s
 requires msgs.Mem()
 requires 0 <= pkts && pkts <= len(msgs) && pkts <= len(metas)
 requires absMsgs == ToAbsMessages(msgs, pkts)
 requires forall i int :: 0 <= i && i < pkts ==> inFact(absMsgs[i]) in s
 requires forall i int :: { GetAbsMessagePayload(absMsgs[i]) } (0 <= i && i < pkts) ==> (GetAbsMessagePayload(absMsgs[i]) == (unfolding msgs.Mem() in MessageToAbsBytesBounded(&msgs[i])))
 requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires ingressID >= 0
 requires acc(rd.Mem(), _)
 requires isZeroSCION(spkt)
@@ -1153,8 +1158,9 @@ ensures msgs.Mem()
 ensures token(t1) && P(t1, s1)
 ensures localIAFact(localIA) in s1
 ensures supportedEgressIDsFact(supportedEgressIDs) in s1
+ensures internalConnFact(internalConn) in s1
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
-	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost t Place, ghost s mset[Fact], ghost absMsgs seq[AbsMessage]) (ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t Place, ghost s mset[Fact], ghost absMsgs seq[AbsMessage]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold msgs.Mem()
 
 	ghost var currentPlace Place = t
@@ -1165,7 +1171,7 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant 0 <= i && i <= pkts
 	invariant 0 <= pkts && pkts <= len(msgs)
 	invariant acc(DataPlaneMutexInvariant(d), _)
-	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+	invariant unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 	invariant acc(rd.Mem(), _)
 	invariant forall j int :: 0 <= j && j < len(msgs) ==> (&msgs[j]).Mem()
 	invariant forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
@@ -1176,10 +1182,11 @@ func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlaycon
 	invariant token(currentPlace) && P(currentPlace, currentState)
 	invariant localIAFact(localIA) in currentState
 	invariant supportedEgressIDsFact(supportedEgressIDs) in currentState
+	invariant internalConnFact(internalConn) in currentState
 	invariant forall j int :: i <= j && j < pkts ==> inFact(absMsgs[j]) in currentState
 	invariant forall j int :: { GetAbsMessagePayload(absMsgs[j]) } (i <= j && j < pkts) ==> (GetAbsMessagePayload(absMsgs[j]) == MessageToAbsBytesBounded(&msgs[j]))
 	for i := 0; i < pkts; i++ {
-		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, absMsgs[i], localIA, supportedEgressIDs, currentPlace, currentState)
+		currentPlace, currentState = processMessage(ingressID, rd, d, &msgs[i] , origPacket, spkt, buffer, scmpErr, absMsgs[i], localIA, supportedEgressIDs, internalConn, currentPlace, currentState)
   	}
 	fold msgs.Mem()
 	return currentPlace, currentState
@@ -1193,10 +1200,11 @@ requires token(t) && P(t, s)
 requires localIAFact(localIA) in s
 requires inFact(absMsg) in s
 requires supportedEgressIDsFact(supportedEgressIDs) in s
+requires internalConnFact(internalConn) in s
 requires p.Mem()
 requires GetAbsMessagePayload(absMsg) == MessageToAbsBytesBounded(p)
 requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires ingressID >= 0
 preserves acc(rd.Mem(), _)
 preserves forall j int :: 0 <= j && j < len(origPacket) ==> acc(&origPacket[j])
@@ -1208,7 +1216,7 @@ ensures p.Mem()
 ensures token(t1) && P(t1, s1)
 ensures s subset s1
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
+	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold p.Mem()
 	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
 	// (tlino) use local originPacket subslice
@@ -1244,7 +1252,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// result, err := d.processPkt(ingressID, p.Buffers[0], p.Addr, spkt, origPacket,
 	//	buffer)
 	result, err, absPR, t2, s2 := d.processPkt(ingressID, rawPkt, p.Addr, spkt, localOrigPacket,
-		buffer, absMsg, localIA, supportedEgressIDs, t, s)
+		buffer, absMsg, localIA, supportedEgressIDs, internalConn, t, s)
 
 	assert result.Mem()
 
@@ -1804,7 +1812,8 @@ requires ToAbsBytes2(rawPkt) == GetAbsMessagePayload(absMsg)
 requires acc(DataPlaneMutexInvariant(d), _)
 requires localIAFact(localIA) in s0
 requires supportedEgressIDsFact(supportedEgressIDs) in s0
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
+requires internalConnFact(internalConn) in s0
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires ingressID >= 0
 requires isZeroSCION(s)
 preserves verifyutils.BytesAcc(origPacket)
@@ -1818,7 +1827,7 @@ ensures token(t1) && P(t1, s1)
 ensures s0 subset s1
 ensures !isEmptyPR(pr) ==> processedPktFact(absPR) in s1
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
@@ -1962,7 +1971,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// (tlino) original code, adapted code is below 
 		// return d.processSCION(ingressID, rawPkt, s, origPacket, buffer)
 
-		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer, absSCION, localIA, supportedEgressIDs, s2)
+		pr, errRet = d.processSCION(ingressID, rawPkt, sNew, origPacket, buffer, absSCION, localIA, supportedEgressIDs, internalConn, s2)
 
 		// (tlino) apply internal processSCION event, if pr is not empty
 		ghost if (!isEmptyPR(pr)) {
@@ -2213,10 +2222,11 @@ func (d *DataPlane) processIntraBFD(src net.Addr, data []byte, ghost absScion Ab
 // (tlino) Verified
 // (tlino) We cannot prove termination of this method, since p.process() might not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires s != nil && s.Mem() && s.getRawPkt() == rawPkt
 requires localIAFact(localIA) in s0
 requires supportedEgressIDsFact(supportedEgressIDs) in s0
+requires internalConnFact(internalConn) in s0
 preserves verifyutils.BytesAcc(origPacket)
 preserves cap(rawPkt) == bufSize
 preserves buffer.Mem()
@@ -2229,7 +2239,7 @@ ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == TransitFromO
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost s0 mset[Fact]) (pr processResult, err error) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, err error) {
 
 	// (joao) added `&` before `scionPacketProcessor` to make this type check
 	p := &scionPacketProcessor{
@@ -2242,7 +2252,7 @@ func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCI
 	}
 	// (tlino) use ghost argument to relate the argument of processSCION to process
 	// return p.process()
-	pr, err = p.process(rawPkt, absSCION, localIA, supportedEgressIDs, s0)
+	pr, err = p.process(rawPkt, absSCION, localIA, supportedEgressIDs, internalConn, s0)
 	return
 }
 
@@ -3349,11 +3359,12 @@ func (p *scionPacketProcessor) validatePktLen() (pr processResult, errRet error)
 // (tlino) We cannot prove termination of this method, since p.resolveInbound() might not terminate
 requires localIAFact(locIA) in s
 requires supportedEgressIDsFact(supportedEgressIDs) in s
+requires internalConnFact(internalConn) in s
 requires acc(&p.d, _) && acc(&p.ingressID, 1/2) && acc(&p.rawPkt, 1/2) && acc(&p.scionLayer, 1/2)
 requires acc(&p.origPacket, 1/2) && acc(&p.buffer, 1/2) && acc(&p.path) && acc(&p.hopField)
 requires acc(&p.infoField) && acc(&p.segmentChange)
 requires acc(DataPlaneMutexInvariant(p.d), _)
-requires unfolding acc(DataPlaneMutexInvariant(p.d), _) in p.d.svc != nil
+requires unfolding acc(DataPlaneMutexInvariant(p.d), _) in p.d.Metrics != nil && p.d.svc != nil && p.d.internal != nil
 requires verifyutils.BytesAcc(p.origPacket)
 requires cap(p.rawPkt) == bufSize
 requires (p.buffer).Mem()
@@ -3370,7 +3381,7 @@ ensures errProcess != nil ==> verifyutils.BytesAcc(rawPktAlias)
 ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
 ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) &&  GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))])
 ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == TransitFromOtherBR) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
-func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost s mset[Fact]) (pr processResult, errProcess error) {
+func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s mset[Fact]) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
 		pr, errProcess := r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
@@ -3611,7 +3622,6 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		ghost _ := relateResultCaseTransit(absSCION, pr, supportedEgressIDs)
 		return pr, errProcess
 	}
-	
 	// ASTransit: pkts leaving from another AS BR.
 
 	// (tlino) use getter to simplify verification
@@ -3692,7 +3702,7 @@ func (d *DataPlane) getDummyMac(p *onehop.Path) (res []byte)
 // (tlino) Verified
 // (tlino) we cannot prove termination of this method, since processOHP2 might not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
 preserves buffer.Mem()
@@ -3840,7 +3850,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 // (tlino) added method to simplify verification
 // (tlino) we cannot prove termination of this method, since d.resolveLocalDst() might not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
-requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires ingressID >= 0
 requires s.Mem() && s.getRawPkt() == rawPkt
 requires p != nil && p == s.getOHPPath() 

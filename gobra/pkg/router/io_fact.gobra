@@ -7,6 +7,8 @@ type Fact domain {
     func getLocalIAFact(Fact) AbsIA
     func supportedEgressIDsFact(dict[uint16]AbsConn) Fact
     func getSupportedEgressIDs(Fact) dict[uint16]AbsConn
+    func internalConnFact(AbsConn) Fact
+    func getInternalConnFact(Fact) AbsConn
 
     // each fact has a unique 'type':
     func getType(Fact) int
@@ -73,6 +75,11 @@ type Fact domain {
     // supportedEgressIDs injective
     axiom {
         forall cons dict[uint16]AbsConn :: { supportedEgressIDsFact(cons) } getSupportedEgressIDs(supportedEgressIDsFact(cons)) == cons && getType(supportedEgressIDsFact(cons)) == 9
+    }
+
+    // internalConn injective
+    axiom {
+        forall conn AbsConn :: { internalConnFact(conn) } getInternalConnFact(internalConnFact(conn)) == conn && getType(internalConnFact(conn)) == 10
     }
 }
 
