@@ -163,7 +163,7 @@ type DataPlane struct {
 
 pred BatchConnsAcc(batchConns map[uint16]BatchConn) {
 	batchConns != nil ==> acc(batchConns) &&
-	forall btc BatchConn :: btc in range(batchConns) ==> btc.Mem()
+	forall btc BatchConn :: btc in range(batchConns) ==> (btc != nil && btc.Mem())
 }
 
 pred AddrsAcc(addrs map[uint16]net.Addr) {
@@ -251,7 +251,7 @@ func (d *DataPlane) GetInternalNextHop(intf uint16) (add net.Addr, ok bool) {
 }
 
 preserves acc(DataPlaneMutexInvariant(d), _)
-ensures ok ==> acc(btc.Mem(), _) && IsValidBatchConnIntf(intf, btc)
+ensures ok ==> (btc != nil && acc(btc.Mem(), _) && IsValidBatchConnIntf(intf, btc))
 decreases
 func (d *DataPlane) GetExternalBatchConn(intf uint16) (btc BatchConn, ok bool) {
     unfold acc(DataPlaneMutexInvariant(d), _)
@@ -2223,7 +2223,7 @@ ensures pr.Mem()
 ensures err == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures err != nil ==> verifyutils.BytesAcc(rawPkt)
 ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
-ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))))
+ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))  &&  GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))])
 ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == TransitFromOtherBR) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
@@ -3367,7 +3367,7 @@ ensures pr.Mem()
 ensures errProcess == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 ensures errProcess != nil ==> verifyutils.BytesAcc(rawPktAlias)
 ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
-ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))))
+ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) &&  GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))])
 ensures ( (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == TransitFromOtherBR) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
 func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost s mset[Fact]) (pr processResult, errProcess error) {
 	if r, err := p.parsePath(); err != nil {
@@ -3599,6 +3599,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		assert pr.Mem()
 		// (tlino) use lemma method to relate abstract types
 		ghost _ := relateProcessResultEgressID(pr)
+		ghost _ := relateProcessResultOutConn(pr)
 
 		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
 			unfold pr.Mem()
@@ -3606,7 +3607,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 
 		assert pr.Mem() --* (verifyutils.BytesAcc(rp))
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := relateResultCaseTransit(absSCION, pr, errProcess)
+		ghost _ := relateResultCaseTransit(absSCION, pr, supportedEgressIDs)
 		return pr, errProcess
 	}
 	

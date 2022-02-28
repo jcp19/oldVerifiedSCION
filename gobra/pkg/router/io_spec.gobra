@@ -110,7 +110,7 @@ ghost
 decreases _
 pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, s mset[Fact], ia AbsIA, supportedEgressIDs dict[uint16]AbsConn) (res bool) {
     return ((((localIAFact(ia) in s) && (GetAbsProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0)) &&
-    ((( (supportedEgressIDsFact(supportedEgressIDs) in s) && GetAbsProcessResultResultCase(pr) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))))) &&
+    ((( (supportedEgressIDsFact(supportedEgressIDs) in s) && GetAbsProcessResultResultCase(pr) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))))  &&  GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)]) &&
     (((GetAbsProcessResultResultCase(pr) == TransitFromOtherBR)) ==> (GetAbsProcessResultEgressID(pr) == 0)))
 }
 
@@ -128,7 +128,6 @@ ensures  absBytes == GetAbsSCIONRawPkt(ToAbsSCION(scn))
 decreases _
 pure func relateDataToSCION(data []byte, scn *slayers.SCION, absBytes AbsBytes) bool
 
-// processSCION
 ghost
 requires pr.Mem()
 requires err != nil
@@ -157,6 +156,13 @@ pure func relateProcessResultEgressID(pr processResult) bool
 
 ghost
 requires pr.Mem()
+requires pr.OutConn != nil
+ensures GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == unfolding acc(pr.Mem(), _) in ToAbsConn(pr.OutConn)
+decreases _
+pure func relateProcessResultOutConn(pr processResult) bool
+
+ghost
+requires pr.Mem()
 requires err == nil
 requires localIA == GetAbsSCIONDstIA(absSCION)
 requires (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))
@@ -182,9 +188,11 @@ pure func relateBatchConn(intf uint16, bc BatchConn, cons dict[uint16]AbsConn) b
 ghost
 requires pr.Mem()
 requires GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
-ensures  GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit
+requires GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) in domain(cons)
+requires GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == cons[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
+ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit
 decreases _
-pure func relateResultCaseTransit(absSCION AbsSCION, pr processResult, err error) bool
+pure func relateResultCaseTransit(absSCION AbsSCION, pr processResult, cons dict[uint16]AbsConn) bool
 
 ghost
 requires pr.Mem()
