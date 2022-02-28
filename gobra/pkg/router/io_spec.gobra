@@ -60,9 +60,10 @@ pred P_processOHP(pl Place, ghost s mset[Fact]) {
 }
 
 pred P_processSCION(pl Place, ghost s mset[Fact]) {
-    forall scn AbsSCION, pr AbsProcessResult, ia AbsIA, egressIDs dict[uint16]AbsConn :: { processSCION_p(pl, scn, pr, ia, egressIDs) } (
-        (decodedPktFact(scn) in s) && G_processSCION(scn, pr, s, ia, egressIDs)) ==>
-    processSCION_p(pl, scn, pr, ia, egressIDs) && P(get_processSCION_t1(pl, scn, pr, ia, egressIDs), s union mset[Fact]{processedPktFact(pr)})
+    forall scn AbsSCION, pr AbsProcessResult, ia AbsIA, egressIDs dict[uint16]AbsConn, ic AbsConn :: { processSCION_p(pl, scn, pr, ia, egressIDs, ic) } (
+        (decodedPktFact(scn) in s) && (localIAFact(ia) in s) && (internalConnFact(ic) in s) && 
+        (supportedEgressIDsFact(egressIDs) in s) && G_processSCION(scn, pr, s, ia, egressIDs, ic)) ==>
+    processSCION_p(pl, scn, pr, ia, egressIDs, ic) && P(get_processSCION_t1(pl, scn, pr, ia, egressIDs, ic), s union mset[Fact]{processedPktFact(pr)})
 }
 
 pred P_packPkt(pl Place, ghost s mset[Fact]) {
@@ -108,10 +109,10 @@ pure func G_processOHP(scn AbsSCION, pr AbsProcessResult) (res bool)
 
 ghost
 decreases _
-pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, s mset[Fact], ia AbsIA, supportedEgressIDs dict[uint16]AbsConn) (res bool) {
-    return ((((localIAFact(ia) in s) && (GetAbsProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0)) &&
-    ((( (supportedEgressIDsFact(supportedEgressIDs) in s) && GetAbsProcessResultResultCase(pr) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))))  &&  GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)]) &&
-    (((GetAbsProcessResultResultCase(pr) == TransitFromOtherBR)) ==> (GetAbsProcessResultEgressID(pr) == 0)))
+pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, s mset[Fact], ia AbsIA, supportedEgressIDs dict[uint16]AbsConn, internalConn AbsConn) (res bool) {
+    return ((( (GetAbsProcessResultResultCase(pr) == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0 && GetAbsProcessResultBatchConn(pr) == internalConn)) &&
+    (( (GetAbsProcessResultResultCase(pr) == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))))  &&  GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)]) &&
+    (( (GetAbsProcessResultResultCase(pr) == TransitFromOtherBR)) ==> (GetAbsProcessResultEgressID(pr) == 0 && GetAbsProcessResultBatchConn(pr) == internalConn)))
 }
 
 ghost
@@ -177,6 +178,13 @@ requires (unfolding acc(spp.Mem(), _) in unfolding acc(path.HopFieldInv(spp.hopF
 ensures egressID == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
 decreases _
 pure func relateHopEgressID(absSCION AbsSCION, egressID uint16, spp *scionPacketProcessor) bool
+
+ghost
+requires acc(bc.Mem(), _)
+requires IsInternalConn(bc)
+ensures internalBatchConn == ToAbsConn(bc)
+decreases _
+pure func relateInternalBatchConn(bc BatchConn, internalBatchConn AbsConn) bool
 
 ghost
 requires acc(bc.Mem(), _)
@@ -281,11 +289,11 @@ func test7(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult
 
 requires token(t) && P_processSCION(t, s)
 requires mset[Fact]{decodedPktFact(scn)} subset s
-requires G_processSCION(scn, res, s, ia, supportedEgressIDs)
-func test8(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult, ia AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn) {
+requires G_processSCION(scn, res, s, ia, supportedEgressIDs, internalConn)
+func test8(ghost t Place, ghost s mset[Fact], scn AbsSCION, res AbsProcessResult, ia AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn) {
     unfold P_processSCION(t, s)
-    assert processSCION_p(t, scn, res, ia, supportedEgressIDs)
-    p_end := get_processSCION_t1(t, scn, res, ia, supportedEgressIDs)
+    assert processSCION_p(t, scn, res, ia, supportedEgressIDs, internalConn)
+    p_end := get_processSCION_t1(t, scn, res, ia, supportedEgressIDs, internalConn)
     set_end := s union mset[Fact]{processedPktFact(res)}
     assert P(p_end, set_end)
 }
