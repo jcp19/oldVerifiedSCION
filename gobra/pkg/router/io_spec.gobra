@@ -120,6 +120,7 @@ decreases _
 pure func G_packPkt(pr AbsProcessResult, m AbsMessage) (res bool)
 
 // lemmas
+
 ghost
 requires scn.Mem()
 requires data == unfolding scn.Mem() in scn.RawPkt
@@ -133,7 +134,7 @@ requires pr.Mem()
 requires err != nil
 ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == ErrorCase
 decreases _
-pure func releteResultCaseError(pr processResult, err error) bool
+pure func relateResultCaseError(pr processResult, err error) bool
 
 ghost
 requires acc(s.Mem(), _)
@@ -163,12 +164,6 @@ requires (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0)
 ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Inbound
 decreases _
 pure func relateResultCaseInbound(absSCION AbsSCION, localIA AbsIA, pr processResult, err error) bool
-
-ghost
-requires acc(spp.Mem(), _)
-ensures GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)) == (unfolding acc(spp.Mem(), _) in ToAbsHop(spp.hopField))
-decreases _
-pure func relateCurrentHop(absSCION AbsSCION, spp *scionPacketProcessor) bool
 
 ghost
 requires acc(spp.Mem(), _)

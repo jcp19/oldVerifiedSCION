@@ -3374,7 +3374,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		pr, errProcess := r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
 
@@ -3389,7 +3389,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		pr, errProcess = r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
 
@@ -3402,7 +3402,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		fold pr.Mem()
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
 	
@@ -3414,7 +3414,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		pr, errProcess = r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
 	
@@ -3426,10 +3426,9 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		pr, errProcess = r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
-	// assert (unfolding acc(p.Mem(), _) in GetAbsRawPathCurrHop(GetAbsSCIONRawPath(ToAbsSCION(p.scionLayer))) == ToAbsHop(p.hopField))
 	
 	// (tlino) added code, get some values
 	unfold p.Mem()
@@ -3465,7 +3464,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 			pr, errProcess = r, err
 			ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 			// (tlino) use lemma method to relate abstract types
-			ghost _ := releteResultCaseError(pr, errProcess)
+			ghost _ := relateResultCaseError(pr, errProcess)
 			return pr, errProcess
 		}
 		// (tlino) original code, adapted code below
@@ -3516,7 +3515,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 			pr, errProcess = r, err
 			ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 			// (tlino) use lemma method to relate abstract types
-			ghost _ := releteResultCaseError(pr, errProcess)
+			ghost _ := relateResultCaseError(pr, errProcess)
 			return pr, errProcess
 		}
 	}
@@ -3530,7 +3529,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		assert pr.Mem()
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
 	
@@ -3545,7 +3544,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		pr, errProcess = r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
 	if r, err := p.validateEgressUp(); err != nil {
@@ -3556,7 +3555,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		pr, errProcess = r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := releteResultCaseError(pr, errProcess)
+		ghost _ := relateResultCaseError(pr, errProcess)
 		return pr, errProcess
 	}
 	egressID := p.egressInterface()
@@ -3578,7 +3577,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 			fold pr.Mem()
 			ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 			// (tlino) use lemma method to relate abstract types
-			ghost _ := releteResultCaseError(pr, errProcess)
+			ghost _ := relateResultCaseError(pr, errProcess)
 			return pr, errProcess
 		}
 		// (tlino) original code, adapted code is below
@@ -3675,7 +3674,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 	unfold p.Mem()
 	ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 	// (tlino) use lemma method to relate abstract types
-	ghost _ := releteResultCaseError(pr, errProcess)
+	ghost _ := relateResultCaseError(pr, errProcess)
 	return pr, errProcess
 }
 
