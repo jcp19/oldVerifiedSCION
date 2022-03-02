@@ -210,12 +210,9 @@ pure func (d *DataPlane) isRunning() (res bool) {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 }
 
-// (tlino) We cannot prove termination of this function due to an issue in Gobra.
-// (tlino) The issue occurs when we try to access a map entry within a pure function.
-// (tlino) See Issue report for details: https://github.com/viperproject/gobra/issues/401
 requires acc(DataPlaneMutexInvariant(d), _)
 ensures res == unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
-decreases _
+decreases
 pure func (d *DataPlane) GetLinkType(intf uint16) (res topology.LinkType) {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
 }
@@ -2027,6 +2024,23 @@ pred (p *scionPacketProcessor) Mem() {
  	p.rawPkt == p.scionLayer.getRawPkt()
 }
 
+// (tlino) start of added getters and setters for scionPacketProcessor to simplify verification
+preserves p.Mem()
+ensures acc(DataPlaneMutexInvariant(res), _)
+decreases
+func (p *scionPacketProcessor) GetDataPlane() (res *DataPlane) {
+	unfold p.Mem()
+	res = p.d
+	fold p.Mem()
+}
+
+requires acc(p.Mem(), _)
+decreases
+pure func (p *scionPacketProcessor) GetIngressID() (res uint16) {
+	return unfolding acc(p.Mem(), _) in p.ingressID
+}
+// (tlino) enf of added getters and setters for scionPacketProcessor
+
 // (tlino) Verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 requires scmpH.Mem() && scmpP.Mem()
@@ -2486,6 +2500,17 @@ func (p *scionPacketProcessor) validateEgressID() (pr processResult, errRet erro
 }
 
 // (tlino) Verified
+// (tlino) added helper function
+preserves path.HopFieldInv(hf)
+preserves acc(inf)
+decreases
+func updateSegID(hf *path.HopField, inf *path.InfoField) {
+	unfold path.HopFieldInv(hf)
+	inf.UpdateSegID(hf.Mac)
+	fold path.HopFieldInv(hf)
+}
+
+// (tlino) Verified
 preserves p.Mem()
 decreases
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
@@ -2495,10 +2520,10 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 	// be updated.
 	unfold p.Mem()
 	if !p.infoField.ConsDir && p.ingressID != 0 {
-		unfold path.HopFieldInv(p.hopField)
-		p.infoField.UpdateSegID(p.hopField.Mac)
-		fold path.HopFieldInv(p.hopField)
-
+		// (tlino) use helper function to reduce verification time
+		// p.infoField.UpdateSegID(p.hopField.Mac)
+		updateSegID(p.hopField, p.infoField)
+		
 		// get access to path, use new variables to make Gobra work
 		assert p.scionLayer != nil
 		assert p.path != nil
@@ -2656,9 +2681,9 @@ func (p *scionPacketProcessor) processEgress() error {
 	assert pp.Mem()
 
 	if p.infoField.ConsDir {
-		unfold path.HopFieldInv(p.hopField)
-		p.infoField.UpdateSegID(p.hopField.Mac)
-		fold path.HopFieldInv(p.hopField)
+		// (tlino) use helper function to reduce verification time
+		// p.infoField.UpdateSegID(p.hopField.Mac)
+		updateSegID(p.hopField, p.infoField)
 
 		// (tlino) use helper function to access CurrINF
 		// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
@@ -2777,11 +2802,9 @@ ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet error) {
 	egressID := p.egressInterface()
-	unfold p.Mem()
-	// (tlino) use getter function to avoid unfold
+	// (tlino) use getter functions to avoid unfold
 	// if v, ok := p.d.bfdSessions[egressID]; ok {
-	if v, ok := p.d.GetBfdSession(egressID); ok {
-		assert acc(v.Mem(), _)
+	if v, ok := p.GetDataPlane().GetBfdSession(egressID); ok {
 		if !v.IsUp() {
 			scmpH := &slayers.SCMP{
 				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeExternalInterfaceDown, 0),
@@ -2789,30 +2812,29 @@ func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet erro
 			var scmpP gopacket.SerializableLayer = &slayers.SCMPExternalInterfaceDown{
 				// (tlino) use getter function to avoid unfold
 				// IA:   p.d.localIA,
-				IA:   p.d.GetLocalAI(),
+				IA:   p.GetDataPlane().GetLocalAI(),
 				IfID: uint64(egressID),
 			}
 			// (tlino) use getter function to avoid unfold
 			// if _, external := p.d.external[egressID]; !external {
-			if _, external := p.d.GetExternalBatchConn(egressID); !external {
+			if _, external := p.GetDataPlane().GetExternalBatchConn(egressID); !external {
 				scmpH.TypeCode =
 					slayers.CreateSCMPTypeCode(slayers.SCMPTypeInternalConnectivityDown, 0)
 				scmpP = &slayers.SCMPInternalConnectivityDown{
-					// (tlino) use getter function to avoid unfold
+					// (tlino) use getter functions to avoid unfold
 					// IA:      p.d.localIA,
-					IA:      p.d.GetLocalAI(),
-					Ingress: uint64(p.ingressID),
+					// Ingress: uint64(p.ingressID)
+					IA:      p.GetDataPlane().GetLocalAI(),
+					Ingress: uint64(p.GetIngressID()),
 					Egress:  uint64(egressID),
 				}
 			}
 			fold scmpH.Mem()
 			fold scmpP.Mem()
-			fold p.Mem()
 			pr, errRet =  p.packSCMP(scmpH, scmpP, serrors.New("bfd session down"))
 			return
 		}
 	}
-	fold p.Mem()
 	pr, errRet = processResult{}, nil
 	fold pr.Mem()
 	return 
