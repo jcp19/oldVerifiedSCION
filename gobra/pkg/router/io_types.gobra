@@ -64,7 +64,7 @@ type AbsBFD domain {}
 // Inbound: the packet is destined to the AS of the border router.
 // Transit: the border router forwards to packet to the next AS.
 // TransitFromOtherBR: the packet needs to be forwarded by another border router.
-type ResultCase uint
+type ResultCase uint8
 
 const (
     ErrorCase ResultCase = 0
