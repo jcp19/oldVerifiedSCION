@@ -2602,10 +2602,11 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // (tlino) we cannot prove termination of this method since p.d.resolveLocalDst() might not terminate
 preserves p.Mem()
 ensures pr.Mem()
-func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error) {
+ensures !addrFromSCIONPkt ==> (address != nil ==> acc(address.Mem(), _))
+func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error, ghost addrFromSCIONPkt bool) {
 	unfold p.Mem()
 	sl := p.scionLayer
-	a, err := p.d.resolveLocalDst(sl)
+	a, err, isFromSCIONLayer := p.d.resolveLocalDst(sl)
 	switch {
 	// (tlino) globals not supported
 	// case errors.Is(err, noSVCBackend):
@@ -2633,7 +2634,7 @@ func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processRes
 		// (tlino) original code, adpated code is below
 		// return a, processResult{}, nil
 		fold p.Mem()
-		address, pr, errRet = a, processResult{}, nil
+		address, pr, errRet, addrFromSCIONPkt = a, processResult{}, nil, isFromSCIONLayer
 		fold pr.Mem()
 	}
 }
@@ -3168,7 +3169,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 	if dstIA.Equal(localIA) && int(currHF)+1 == numHops {
 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 		fold p.Mem()
-		a, r, err := p.resolveInbound()
+		a, r, err, addrFromSCIONPkt := p.resolveInbound()
 		if err != nil {
 			// (tlino) original code, adapted code below
 			// return r, err
@@ -3189,7 +3190,15 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		ghost sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
 
-		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt, AddrSrc: AddrFromPacketBytes}, nil
+		// (tlino) handle both possible address sources
+		var addrSrc AddrSource
+		ghost if addrFromSCIONPkt {
+			addrSrc = AddrFromPacketBytes
+		} else {
+			addrSrc = AddrFromDataplane
+		}
+
+		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt, AddrSrc: addrSrc}, nil
 		fold pr.Mem()
 		assert pr.Mem()
 
@@ -3563,7 +3572,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		return 
 	}
 	
-	a, err := d.resolveLocalDst(s)
+	a, err, addrFromSCIONPkt := d.resolveLocalDst(s)
 	if err != nil {
 		// (tlino) original code, adapted code is below
 		// return processResult{}, err
@@ -3578,7 +3587,16 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	ghost s.getRawPktAccWithoutPreservePath(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt)
 	unfold acc(DataPlaneMutexInvariant(d), _)
-	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt, AddrSrc: AddrFromPacketBytes}, nil
+
+	// (tlino) handle both possible address sources
+	var addrSrc AddrSource
+	ghost if addrFromSCIONPkt {
+		addrSrc = AddrFromPacketBytes
+	} else {
+		addrSrc = AddrFromDataplane
+	}
+
+	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt, AddrSrc: addrSrc}, nil
 	fold pr.Mem()
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
 		unfold pr.Mem()
@@ -3587,21 +3605,22 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 }
 
 // (tlino) Verified
-// (tlino) res contains a subslice of s.rawPkt
-// (tlino) This method doesn't establish res.Mem(), since the caller embedds res
-// (tlino) in a processResult together with the rawPkt.
+// (tlino) res contains a subslice of s.rawPkt if addrFromSCIONPkt is true
+// (tlino) This method doesn't establish res.Mem() if addrFromSCIONPkt is true, since the caller embedds res
+// (tlino) in a processResult together with the rawPkt slice.
 // (tlino) we cannot prove termination of this method, since  d.svc.Any() might not terminate
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 preserves acc(s.Mem(), 1/100)
+ensures !addrFromSCIONPkt ==> (res != nil ==> acc(res.Mem(), _))
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error)
-func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet error) {
+func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet error, ghost addrFromSCIONPkt bool) {
 	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 	dst, err := s.DstAddr()
 	if err != nil {
 		// TODO parameter problem. // (joao) this is an original comment from SCION
-		return nil, invalidDstAddr()
+		return nil, invalidDstAddr(), false
 	}
 	assert acc(dst.Mem(), 1/200)
 	if v, ok := dst.(addr.HostSVC); ok {
@@ -3613,13 +3632,13 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet erro
 		if !ok {
 			// (tlino) globals are not supported
 			// return nil, noSVCBackend
-			return nil, noSVCBackend()
+			return nil, noSVCBackend(), false
 		}
-		return a, nil
+		return a, nil, false
 	}
 	res = addEndhostPort(dst)
 	ghost s.AddReadDstAddr(dst)
-	return res, nil
+	return res, nil, true
 }
 
 // (tlino) Verified
