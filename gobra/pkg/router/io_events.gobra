@@ -84,18 +84,18 @@ decreases _
 func sendInterBFD_f(t Place, b AbsBFD) (t1 Place)
 
 // processOHP (internal)
-pred processOHP_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult)
+pred processOHP_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult, ghost rc ResultCase, ghost ia AbsIA, ghost egressIDs dict[uint16]AbsConn, ghost internalConn AbsConn)
 
 ghost
-requires processOHP_p(t, s, res)
+requires processOHP_p(t, s, res, rc, ia, egressIDs, ic)
 decreases _
-pure func get_processOHP_t1(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
+pure func get_processOHP_t1(t Place, s AbsSCION, res AbsProcessResult, rc ResultCase, ia AbsIA, egressIDs dict[uint16]AbsConn, ic AbsConn) (t1 Place)
 
 ghost
-requires token(t) && processOHP_p(t, s, res)
-ensures token(t1) && t1 == old(get_processOHP_t1(t, s, res))
+requires token(t) && processOHP_p(t, s, res, rc, ia, egressIDs, ic)
+ensures token(t1) && t1 == old(get_processOHP_t1(t, s, res, rc, ia, egressIDs, ic))
 decreases _
-func processOHP_f(t Place, s AbsSCION, res AbsProcessResult) (t1 Place)
+func processOHP_f(t Place, s AbsSCION, res AbsProcessResult, rc ResultCase, ia AbsIA, egressIDs dict[uint16]AbsConn, ic AbsConn) (t1 Place)
 
 // processSCION (internal)
 pred processSCION_p(ghost t Place, ghost s AbsSCION, ghost res AbsProcessResult, ghost rc ResultCase, ghost ia AbsIA, ghost egressIDs dict[uint16]AbsConn, ghost internalConn AbsConn)
