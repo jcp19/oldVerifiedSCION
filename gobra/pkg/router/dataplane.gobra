@@ -3543,7 +3543,6 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 
 	// (tlino) get access to p.Mem()
 	unfold s.Mem()
-	assert p.Mem()
 
 	// (tlino) use setter function to avoid unfolding p
 	// (tlino) macFactory isn't supported, usse dummy MAC instead
@@ -3581,12 +3580,6 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		ghost s.getRawPktAccWithoutPreservePath(rawPkt)
 		return
 	}
-	// (tlino) original code, adapted code is below
-	// return processResult{OutConn: d.internal, OutAddr: a, OutPkt: rawPkt}, nil
-	// (tlino) get access to rawPkt
-	ghost s.getRawPktAccWithoutPreservePath(rawPkt)
-	assert verifyutils.BytesAcc(rawPkt)
-	unfold acc(DataPlaneMutexInvariant(d), _)
 
 	// (tlino) handle both possible address sources
 	var addrSrc AddrSource
@@ -3595,6 +3588,12 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	} else {
 		addrSrc = AddrFromDataplane
 	}
+
+	// (tlino) original code, adapted code is below
+	// return processResult{OutConn: d.internal, OutAddr: a, OutPkt: rawPkt}, nil
+	// (tlino) get access to rawPkt
+	ghost s.getRawPktAccWithoutPreservePath(rawPkt)
+	assert verifyutils.BytesAcc(rawPkt)
 
 	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt, AddrSrc: addrSrc}, nil
 	fold pr.Mem()
