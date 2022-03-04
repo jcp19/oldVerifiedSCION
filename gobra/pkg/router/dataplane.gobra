@@ -1955,7 +1955,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		// (tlino) original code, adapted code is below
 		// return d.processOHP(ingressID, rawPkt, s, buffer)
 
-		pr, errRet = d.processOHP(ingressID, rawPkt, sNew, buffer)
+		pr, errRet = d.processOHP(ingressID, rawPkt, sNew, buffer, absSCION, localIA, supportedEgressIDs, internalConn, s2)
 		
 		// (tlino) apply internal processOHP event, if pr is not empty
 		ghost if (!isEmptyPR(pr)) {
@@ -3712,6 +3712,9 @@ func (d *DataPlane) getDummyMac(p *onehop.Path) (res []byte)
 
 // (tlino) Verified
 // (tlino) we cannot prove termination of this method, since processOHP2 might not terminate
+requires localIAFact(locIA) in s0
+requires supportedEgressIDsFact(supportedEgressIDs) in s0
+requires internalConnFact(internalConn) in s0
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires ingressID >= 0
@@ -3721,11 +3724,12 @@ preserves cap(rawPkt) == bufSize
 ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
+ensures ((GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit) && (GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION))) && GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))])
 // (tlino) s is now a *slayers.SCION
 // func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
 func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	buffer gopacket.SerializeBuffer) (pr processResult, errRet error) {
+	buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, errRet error) {
 		
 	// (tlino) add path variable
 	unfold s.Mem()
@@ -3738,6 +3742,8 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fold pr.Mem()
 		fold s.Mem()
 		ghost s.getRawPktAccWithoutPreservePath(rawPkt)
+		// (tlino) use lemma method to relate abstract types
+		ghost _ := relateResultCaseError(pr, errRet)
 		return 
 	}
 	// (tlino) the deserializer enforces that p != nil holds
@@ -3762,6 +3768,8 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fold pr.Mem()
 		fold s.Mem()
 		ghost s.getRawPktAccWithoutPreservePath(rawPkt)
+		// (tlino) use lemma method to relate abstract types
+		ghost _ := relateResultCaseError(pr, errRet)
 		return 
 	}
 	
@@ -3780,6 +3788,8 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fold pr.Mem()
 		fold s.Mem()
 		ghost s.getRawPktAccWithoutPreservePath(rawPkt)
+		// (tlino) use lemma method to relate abstract types
+		ghost _ := relateResultCaseError(pr, errRet)
 		return 
 	}
 
@@ -3799,18 +3809,18 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		p.InfoUpdateSegID()
 
 		fold s.Mem()
-		assert p == s.getOHPPath()
 		if err := updateSCIONLayer(rawPkt, s, buffer); err != nil {
 			// (tlino) original code, adapted code is below
 			// return processResult{}, err
 			pr, errRet = processResult{}, err
 			fold pr.Mem()
 			ghost s.getRawPktAccWithoutPreservePath(rawPkt)
+			// (tlino) use lemma method to relate abstract types
+			ghost _ := relateResultCaseError(pr, errRet)
 			return 
 		}
 
 		// (tlino) added code to get back relation between p and s.Path
-		assert p != nil && p == s.getOHPPath()
 		unfold s.Mem()
 		assert p.Mem()
 
@@ -3818,7 +3828,11 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		// (tlino) use getter to simplify verification
 		// if c, ok := d.external[p.FirstHop.ConsEgress]; ok {
 		fristHopConsEgress := p.GetFristHopConsEgress()
+		// (tlino) use lemma method to relate abstract types
+		ghost _ := relateOHPEgressID(s, p, absSCION)
 		if c, ok := d.GetExternalBatchConn(fristHopConsEgress); ok {
+			// (tlino) use lemma methods to relate abstract types
+			ghost _ := relateBatchConn(fristHopConsEgress, c, supportedEgressIDs)
 			// buffer should already be correct // (tlino) original scion comment
 
 			// (tlino) get access to rawPkt
@@ -3834,6 +3848,10 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 			package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
 				unfold pr.Mem()
 			}
+			// (tlino) use lemma method to relate abstract types
+			ghost _ := relateProcessResultEgressID(pr)
+			ghost _ := relateProcessResultOutConn(pr)
+			ghost _ := relateResultCaseTransitOHP(absSCION, pr, supportedEgressIDs)
 			return 
 		}
 		
@@ -3848,18 +3866,23 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fold pr.Mem()
 		fold s.Mem()
 		ghost s.getRawPktAccWithoutPreservePath(rawPkt)
+		// (tlino) use lemma method to relate abstract types
+		ghost _ := relateResultCaseError(pr, errRet)
 		return 
 	}
 
 	// (tlino) outlined the rest of the method
 	fold s.Mem()
-	pr, errRet = d.processOHP2(ingressID, rawPkt, s, buffer, p)
+	pr, errRet = d.processOHP2(ingressID, rawPkt, s, buffer, p, locIA, supportedEgressIDs, internalConn, s0)
 	return
 }
 
 // (tlino) Verified
 // (tlino) added method to simplify verification
 // (tlino) we cannot prove termination of this method, since d.resolveLocalDst() might not terminate
+requires localIAFact(locIA) in s0
+requires supportedEgressIDsFact(supportedEgressIDs) in s0
+requires internalConnFact(internalConn) in s0
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil && d.svc != nil && d.internal != nil
 requires ingressID >= 0
@@ -3870,8 +3893,9 @@ preserves cap(rawPkt) == bufSize
 ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
+ensures (GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) != Transit)
 func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	buffer gopacket.SerializeBuffer, p *onehop.Path) (pr processResult, errRet error) {
+	buffer gopacket.SerializeBuffer, p *onehop.Path, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, errRet error) {
 
 	// (tlino) get access to p.Mem()
 	unfold s.Mem()
@@ -3901,6 +3925,8 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
 		ghost s.getRawPktAccWithoutPreservePath(rawPkt)
+		// (tlino) use lemma method to relate abstract types
+		ghost _ := relateResultCaseError(pr, errRet)
 		return 
 	}
 	
@@ -3911,6 +3937,8 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		pr, errRet = processResult{}, err
 		fold pr.Mem()
 		ghost s.getRawPktAccWithoutPreservePath(rawPkt)
+		// (tlino) use lemma method to relate abstract types
+		ghost _ := relateResultCaseError(pr, errRet)
 		return
 	}
 	// (tlino) original code, adapted code is below

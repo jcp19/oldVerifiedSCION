@@ -7,6 +7,7 @@ import (
     "gobra/dependencies/gopacket/layers"
     "gobra/lib/addr"
     "gobra/lib/slayers/path"
+    "gobra/lib/slayers/path/onehop"
 
     "gobra/verifyutils"
 )
@@ -28,6 +29,7 @@ type AbsProcessResult domain {
 type AbsSCION domain {
     func GetAbsSCIONRawPkt(AbsSCION) AbsBytes
     func GetAbsSCIONRawPath(AbsSCION) AbsRawPath
+    func GetAbsSCIONOHPPath(AbsSCION) AbsOHPPath
     func GetAbsSCIONDstIA(AbsSCION) AbsIA
 }
 
@@ -41,8 +43,14 @@ type AbsRawPath domain {
     func GetAbsRawPathCurrHop(AbsRawPath) AbsHop
 }
 
+type AbsOHPPath domain {
+    func GetAbsOHPPathFirstHop(AbsOHPPath) AbsHop
+    func GetAbsOHPPathSecondHop(AbsOHPPath) AbsHop
+}
+
 type AbsHop domain {
     func GetAbsHopEgressId(AbsHop) uint16
+    func GetAbsHopConsEgress(AbsHop) uint16
 }
 
 type AbsConn domain {}
@@ -129,6 +137,11 @@ ghost
 requires acc(bc.Mem(), _)
 decreases _
 pure func ToAbsConn(bc BatchConn) AbsConn
+
+ghost
+requires acc(p.Mem(), _)
+decreases _
+pure func ToAbsOHPPath(p *onehop.Path) AbsOHPPath
 
 // lemmas
 ghost

@@ -5,6 +5,7 @@ import (
     "gobra/lib/addr"
     "gobra/lib/slayers/path"
     "gobra/lib/slayers/path/scion"
+    "gobra/lib/slayers/path/onehop"
 )
 
 pred P(pl Place, ghost s mset[Fact]) {
@@ -150,6 +151,14 @@ decreases _
 pure func relateLastHopToNumHops(p *scion.Raw, absSCION AbsSCION) bool
 
 ghost
+requires acc(scn, _)
+requires acc(p.Mem(), _)
+requires p == scn.Path
+ensures GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION))) ==  p.GetFristHopConsEgress()
+decreases _
+pure func relateOHPEgressID(scn *slayers.SCION, p *onehop.Path, absSCION AbsSCION) bool
+
+ghost
 requires pr.Mem()
 ensures  pr.EgressID == GetAbsProcessResultEgressID(ToAbsProcessResult(pr))
 decreases _
@@ -201,6 +210,15 @@ requires GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == cons[GetAbsProc
 ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit
 decreases _
 pure func relateResultCaseTransit(absSCION AbsSCION, pr processResult, cons dict[uint16]AbsConn) bool
+
+ghost
+requires pr.Mem()
+requires GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION)))
+requires GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) in domain(cons)
+requires GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == cons[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
+ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == Transit
+decreases _
+pure func relateResultCaseTransitOHP(absSCION AbsSCION, pr processResult, cons dict[uint16]AbsConn) bool
 
 ghost
 requires pr.Mem()
