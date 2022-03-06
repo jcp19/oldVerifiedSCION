@@ -2600,10 +2600,12 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
 // (tlino) we cannot prove termination of this method since p.d.resolveLocalDst() might not terminate
+// (tlino) Added addrFromSCIONPkt to describe if the address is from the SCION packet.
+// (tlino) addrFromSCIONPkt cannot be defined as ghost since it is later used in a non ghost assignment.
 preserves p.Mem()
 ensures pr.Mem()
 ensures !addrFromSCIONPkt ==> (address != nil ==> acc(address.Mem(), _))
-func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error, ghost addrFromSCIONPkt bool) {
+func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error, addrFromSCIONPkt bool) {
 	unfold p.Mem()
 	sl := p.scionLayer
 	a, err, isFromSCIONLayer := p.d.resolveLocalDst(sl)
@@ -3192,7 +3194,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 
 		// (tlino) handle both possible address sources
 		var addrSrc AddrSource
-		ghost if addrFromSCIONPkt {
+		if addrFromSCIONPkt {
 			addrSrc = AddrFromPacketBytes
 		} else {
 			addrSrc = AddrFromDataplane
@@ -3583,7 +3585,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 
 	// (tlino) handle both possible address sources
 	var addrSrc AddrSource
-	ghost if addrFromSCIONPkt {
+	if addrFromSCIONPkt {
 		addrSrc = AddrFromPacketBytes
 	} else {
 		addrSrc = AddrFromDataplane
@@ -3608,13 +3610,15 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 // (tlino) This method doesn't establish res.Mem() if addrFromSCIONPkt is true, since the caller embedds res
 // (tlino) in a processResult together with the rawPkt slice.
 // (tlino) we cannot prove termination of this method, since  d.svc.Any() might not terminate
+// (tlino) Added addrFromSCIONPkt to describe if the address is from the SCION packet.
+// (tlino) addrFromSCIONPkt cannot be defined as ghost since it is later used in a non ghost assignment.
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 preserves acc(s.Mem(), 1/100)
 ensures !addrFromSCIONPkt ==> (res != nil ==> acc(res.Mem(), _))
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error)
-func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet error, ghost addrFromSCIONPkt bool) {
+func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet error, addrFromSCIONPkt bool) {
 	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 	dst, err := s.DstAddr()
 	if err != nil {
