@@ -1160,7 +1160,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// (tlino) use getters to avoid unfolding
 	// inputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 	inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
-	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
+	// (tlino) outlined to method to simplify verification
 	// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
 	// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 	updateInputMetrics(d, inputLabels, p.N)
@@ -1205,7 +1205,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// (tlino) log not yet supported
 		// log.Debug("Error processing packet", "err", err)
 
-		// (tlino) outline metric update to function
+		// (tlino) outlined to method to simplify verification
 		// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
 		updateDroppedPackets(d, inputLabels)
 
@@ -1261,6 +1261,7 @@ preserves acc(inputLabels, _)
 decreases
 func updateInputMetrics(d *DataPlane, inputLabels prometheus.Labels, totalInputBytes int) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
+	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
 	((d.Metrics.GetInputPacketsTotal()).With(inputLabels)).Inc()
 	((d.Metrics.GetInputBytesTotal()).With(inputLabels)).Add(float64(totalInputBytes))
 }
@@ -1273,6 +1274,7 @@ preserves acc(outputLabels, _)
 decreases
 func updateOutputMetrics(d *DataPlane, outputLabels prometheus.Labels, pktLen int) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
+	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
 	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
 	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(pktLen))
 }
@@ -1285,6 +1287,7 @@ preserves acc(inputLabels, _)
 decreases
 func updateDroppedPackets(d *DataPlane, inputLabels prometheus.Labels) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
+	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
 	((d.Metrics.GetDroppedPacketsTotal()).With(inputLabels)).Inc()
 }
 
