@@ -33,14 +33,13 @@ type AbsSCION domain {
     func GetAbsSCIONDstIA(AbsSCION) AbsIA
 }
 
-type AbsIA domain {
-    func EqualAbsIA(AbsIA, AbsIA) bool
-}
+type AbsIA domain {}
 
 type AbsRawPath domain {
     func GetAbsRawPathCurrHF(AbsRawPath) int
     func GetAbsRawPathNumHops(AbsRawPath) int
     func GetAbsRawPathCurrHop(AbsRawPath) AbsHop
+    func GetAbsRawPathCurrInfo(AbsRawPath) AbsInfo
 }
 
 type AbsOHPPath domain {
@@ -49,8 +48,12 @@ type AbsOHPPath domain {
 }
 
 type AbsHop domain {
-    func GetAbsHopEgressId(AbsHop) uint16
     func GetAbsHopConsEgress(AbsHop) uint16
+    func GetAbsHopConsIngress(AbsHop) uint16
+}
+
+type AbsInfo domain {
+    func GetAbsInfoConsDir(AbsInfo) bool
 }
 
 type AbsConn domain {}

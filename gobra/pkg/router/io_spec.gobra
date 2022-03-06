@@ -114,9 +114,14 @@ pure func G_processOHP(scn AbsSCION, pr AbsProcessResult, rc ResultCase, s mset[
 ghost
 decreases
 pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, rc ResultCase,s mset[Fact], ia AbsIA, supportedEgressIDs dict[uint16]AbsConn, internalConn AbsConn) (res bool) {
-    return ((( (rc == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0 && GetAbsProcessResultBatchConn(pr) == internalConn)) &&
-    (( (rc == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))))  &&  GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)]) &&
-    (( (rc == TransitFromOtherBR)) ==> (GetAbsProcessResultEgressID(pr) == 0 && GetAbsProcessResultBatchConn(pr) == internalConn)))
+    return ((( (rc == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0) ) &&
+    ( ((rc == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultBatchConn(pr) == internalConn) ) &&
+    ( ((rc == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(scn))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn)))) ) &&
+    ( ((rc == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(scn))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn)))) ) &&
+    ( ((rc == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(scn))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)]) ) &&
+    ( ((rc == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(scn))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)]) ) &&
+    ( ((rc == TransitFromOtherBR)) ==> (GetAbsProcessResultEgressID(pr) == 0 && GetAbsProcessResultBatchConn(pr) == internalConn) ) &&
+    ( ((rc == TransitFromOtherBR)) ==> (GetAbsProcessResultBatchConn(pr) == internalConn) ))
 }
 
 ghost
@@ -176,10 +181,15 @@ pure func relateProcessResultOutConn(pr processResult) bool
 
 ghost
 requires acc(spp.Mem(), _)
-requires (unfolding acc(spp.Mem(), _) in unfolding acc(path.HopFieldInv(spp.hopField), _) in egressID == spp.hopField.ConsEgress || egressID == spp.hopField.ConsIngress)
-ensures egressID == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
+ensures GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) == unfolding acc(spp.Mem(), _) in unfolding acc(path.HopFieldInv(spp.hopField), _) in spp.hopField.ConsEgress
+ensures GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) == unfolding acc(spp.Mem(), _) in unfolding acc(path.HopFieldInv(spp.hopField), _) in spp.hopField.ConsIngress
 decreases _
-pure func relateHopEgressID(absSCION AbsSCION, egressID uint16, spp *scionPacketProcessor) bool
+pure func relateCurrHop(absSCION AbsSCION, spp *scionPacketProcessor) bool
+
+ghost
+requires acc(spp.Mem(), _)
+ensures GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) == unfolding acc(spp.Mem(), _) in spp.infoField.ConsDir
+pure func relateCurrInfo(absSCION AbsSCION, spp *scionPacketProcessor) bool
 
 ghost
 requires acc(bc.Mem(), _)

@@ -2242,9 +2242,14 @@ preserves buffer.Mem()
 ensures pr.Mem()
 ensures err == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures err != nil ==> verifyutils.BytesAcc(rawPkt)
-ensures ( (resultCase == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0 && GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn)
-ensures ( (resultCase == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) &&  GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))])
-ensures ( (resultCase == TransitFromOtherBR) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0 && GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn)
+ensures ( (resultCase == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( (resultCase == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
+ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
+ensures ( (resultCase == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
+ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
+ensures ( (resultCase == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
+ensures ( resultCase == TransitFromOtherBR ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( resultCase == TransitFromOtherBR ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
@@ -3046,7 +3051,8 @@ func (p *scionPacketProcessor) doXover() (pr processResult, errRet error) {
 
 // (tlino) Verified
 preserves acc(p.Mem(), 1/10)
-ensures (unfolding acc(p.Mem(), 1/10) in unfolding acc(path.HopFieldInv(p.hopField), _) in res == p.hopField.ConsEgress || res == p.hopField.ConsIngress)
+ensures (unfolding acc(p.Mem(), 1/10) in unfolding acc(path.HopFieldInv(p.hopField), _) in p.infoField.ConsDir ==> res == p.hopField.ConsEgress)
+ensures (unfolding acc(p.Mem(), 1/10) in unfolding acc(path.HopFieldInv(p.hopField), _) in !p.infoField.ConsDir ==> res == p.hopField.ConsIngress)
 decreases
 func (p *scionPacketProcessor) egressInterface() (res uint16) {
 	unfold acc(p.Mem(), 1/10)
@@ -3387,9 +3393,14 @@ ensures (p.buffer).Mem()
 ensures pr.Mem()
 ensures errProcess == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 ensures errProcess != nil ==> verifyutils.BytesAcc(rawPktAlias)
-ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0 && GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn)
-ensures ( (resultCase == Transit) && (GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopEgressId(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) &&  GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))])
-ensures ( resultCase == TransitFromOtherBR ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0 && GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn)
+ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
+ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
+ensures ( (resultCase == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
+ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
+ensures ( (resultCase == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
+ensures ( resultCase == TransitFromOtherBR ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( resultCase == TransitFromOtherBR ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
 func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s mset[Fact]) (pr processResult, errProcess error, ghost resultCase ResultCase) {
 	if r, err := p.parsePath(); err != nil {
 		pr, errProcess := r, err
@@ -3458,6 +3469,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 
 	currHF := pp.GetCurrHF()
 	numHops := pp.GetNumHops()
+	// (tlino) use lemma method to relate abstract types
 	ghost _ := relateLastHopToNumHops(pp, absSCION)
 
 	// Inbound: pkts destined to the local IA.
@@ -3560,9 +3572,11 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
 		return pr, errProcess, ErrorCase
 	}
-	egressID := p.egressInterface()
 	// (tlino) use lemma method to relate abstract types
-	ghost _ := relateHopEgressID(absSCION, egressID, p)
+	ghost _ := relateCurrHop(absSCION, p)
+	ghost _ := relateCurrInfo(absSCION, p)
+
+	egressID := p.egressInterface()
 
 	// (tlino) use getter to simplify verification
 	// if c, ok := p.d.external[egressID]; ok {
