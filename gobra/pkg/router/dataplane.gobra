@@ -3713,8 +3713,10 @@ ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 ensures (resultCase == Transit) || (resultCase == Inbound) || (resultCase == ErrorCase)
-ensures ( (resultCase == Transit) && (GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION))) && GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))])
-ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0 && GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn)
+ensures ( (resultCase == Transit) && (GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION)))
+ensures ( (resultCase == Transit) && (GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
+ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
 // (tlino) s is now a *slayers.SCION
 // func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
@@ -3806,12 +3808,13 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		unfold s.Mem()
 		assert p.Mem()
 
+		// (tlino) use lemma method to relate abstract types
+		ghost _ := relateOHPEgressID(s, p, absSCION)
+
 		// OHP should always be directed to the correct BR. // (tlino) original scion comment
 		// (tlino) use getter to simplify verification
 		// if c, ok := d.external[p.FirstHop.ConsEgress]; ok {
 		fristHopConsEgress := p.GetFristHopConsEgress()
-		// (tlino) use lemma method to relate abstract types
-		ghost _ := relateOHPEgressID(s, p, absSCION)
 		if c, ok := d.GetExternalBatchConn(fristHopConsEgress); ok {
 			// (tlino) use lemma methods to relate abstract types
 			ghost _ := relateBatchConn(fristHopConsEgress, c, supportedEgressIDs)
@@ -3873,7 +3876,8 @@ ensures pr.Mem()
 ensures errRet == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures errRet != nil ==> verifyutils.BytesAcc(rawPkt)
 ensures (resultCase == Inbound) || (resultCase == ErrorCase)
-ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==> (GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0 && GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn)
+ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
 func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCION,
 	buffer gopacket.SerializeBuffer, p *onehop.Path, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost resultCase ResultCase) {
 

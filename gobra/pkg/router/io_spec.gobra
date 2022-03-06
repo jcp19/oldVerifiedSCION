@@ -107,8 +107,10 @@ pure func G_decodeInterBFD(scn AbsSCION, bfd AbsBFD) (res bool)
 ghost
 decreases
 pure func G_processOHP(scn AbsSCION, pr AbsProcessResult, rc ResultCase, s mset[Fact], ia AbsIA, supportedEgressIDs dict[uint16]AbsConn, internalConn AbsConn) (res bool) {
-    return (((rc == Transit) && (GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(scn))) in domain(supportedEgressIDs)) ) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(scn))) && GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)])) &&
-    (((rc == Inbound) && (ia == GetAbsSCIONDstIA(scn)) ) ==> (GetAbsProcessResultEgressID(pr) == 0 && GetAbsProcessResultBatchConn(pr) == internalConn))
+    return ( ((rc == Transit) && (GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(scn)))) ) &&
+    ( ((rc == Transit) && (GetAbsHopConsEgress(GetAbsOHPPathFirstHop(GetAbsSCIONOHPPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)]) ) &&
+    ( ((rc == Inbound) && (ia == GetAbsSCIONDstIA(scn))) ==> (GetAbsProcessResultEgressID(pr) == 0) ) &&
+    ( ((rc == Inbound) && (ia == GetAbsSCIONDstIA(scn))) ==> (GetAbsProcessResultBatchConn(pr) == internalConn) )
 }
 
 ghost
