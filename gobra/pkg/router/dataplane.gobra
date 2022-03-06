@@ -1163,6 +1163,9 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// (tlino) use getters to avoid unfolding
 	// inputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 	inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
+	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
+	// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
+	// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 	updateInputMetrics(d, inputLabels, p.N)
 
 	fold verifyutils.BytesAcc((p.Buffers)[0])
@@ -1261,11 +1264,20 @@ preserves acc(inputLabels, _)
 decreases
 func updateInputMetrics(d *DataPlane, inputLabels prometheus.Labels, totalInputBytes int) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
-	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
-	// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
-	// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 	((d.Metrics.GetInputPacketsTotal()).With(inputLabels)).Inc()
 	((d.Metrics.GetInputBytesTotal()).With(inputLabels)).Add(float64(totalInputBytes))
+}
+
+// (tlino) Verified
+// (tlino) added helper function to simplify verification
+requires acc(DataPlaneMutexInvariant(d), _)
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
+preserves acc(outputLabels, _)
+decreases
+func updateOutputMetrics(d *DataPlane, outputLabels prometheus.Labels, pktLen int) {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
+	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(pktLen))
 }
 
 // (tlino) Verified
@@ -1349,12 +1361,11 @@ func processMessageHelper(d *DataPlane, result processResult) {
 	// ok metric
 	// (tlino) use getters to simplify verification
 	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
+	// (tlino) outlined to method to simplify verification
 	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
-	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
+	updateOutputMetrics(d, outputLabels, len(result.OutPkt))
 }
 
 // (tlino) added type
