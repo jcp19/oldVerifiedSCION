@@ -1471,10 +1471,10 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-	// outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
-	// unfold acc(DataPlaneMutexInvariant(d), _)
-	// ((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
-	// ((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
+	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
+	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
 	assert P(t1, s1)
 	return t1, s1
 }
