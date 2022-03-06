@@ -1413,6 +1413,8 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 
 	// (tlino) moved message creation to outlined function
 	messages := createMessages(pld, address, resultCase)
+	// (tlino) relate abstract types
+	ghost _ := relateMessageSendPayload(absPR, result, messages)
 
 	// (tlino) apply internal packPkt event
 	unfold P(t, s)
@@ -1469,10 +1471,10 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
-	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
+	// outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
+	// unfold acc(DataPlaneMutexInvariant(d), _)
+	// ((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
+	// ((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
 	assert P(t1, s1)
 	return t1, s1
 }
@@ -1502,6 +1504,7 @@ requires msgCase == MsgWithBytePacketAdd ==> (address != nil ==> acc(address.Mem
 requires msgCase == MsgWithNoAdd ==> address == nil && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
 ensures acc(msgs.MemSend(), 1/1000)
 ensures len(msgs) == 1
+ensures unfolding acc(msgs.MemSend(), 1/1000) in unfolding acc((&msgs[0]).MemSend(), 1/1000) in (msgs[0].Buffers)[0] == payload
 ensures msgCase == MsgWithDataPlaneAdd ==> acc(msgs.MemSend(), 1/1000) --* (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000))
 ensures msgCase == MsgWithMessageAdd ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && (payload != nil ==> acc(verifyutils.BytesAcc(payload), 1/1000)))
 ensures msgCase == MsgWithBytePacketAdd ==> acc(msgs.MemSend(), 1/1000) --* ((address != nil ==> acc(address.Mem(), 1/1000)) && acc(verifyutils.BytesAcc(payload), 1/1000))

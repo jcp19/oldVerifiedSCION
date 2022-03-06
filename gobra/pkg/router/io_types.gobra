@@ -22,8 +22,8 @@ type AbsMessage domain {
 
 type AbsProcessResult domain {
     func GetAbsProcessResultEgressID(AbsProcessResult) uint16
-    func GetAbsProcessResultResultCase(AbsProcessResult) ResultCase
     func GetAbsProcessResultBatchConn(AbsProcessResult) AbsConn
+    func GetAbsProcessResultOutPkt(AbsProcessResult) AbsBytes
 }
 
 type AbsSCION domain {

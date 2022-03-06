@@ -6,6 +6,7 @@ import (
     "gobra/lib/slayers/path"
     "gobra/lib/slayers/path/scion"
     "gobra/lib/slayers/path/onehop"
+    underlayconn "gobra/lib/underlay/conn"
 )
 
 pred P(pl Place, ghost s mset[Fact]) {
@@ -127,9 +128,10 @@ pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, rc ResultCase,s mset
 }
 
 ghost
-ensures res == true
-decreases _
-pure func G_packPkt(pr AbsProcessResult, m AbsMessage) (res bool)
+decreases
+pure func G_packPkt(pr AbsProcessResult, m AbsMessage) (res bool) {
+    return GetAbsProcessResultOutPkt(pr) == GetAbsMessagePayload(m)
+}
 
 // lemmas
 
@@ -139,13 +141,6 @@ requires data == unfolding scn.Mem() in scn.RawPkt
 ensures  absBytes == GetAbsSCIONRawPkt(ToAbsSCION(scn))
 decreases _
 pure func relateDataToSCION(data []byte, scn *slayers.SCION, absBytes AbsBytes) bool
-
-ghost
-requires pr.Mem()
-requires err != nil
-ensures GetAbsProcessResultResultCase(ToAbsProcessResult(pr)) == ErrorCase
-decreases _
-pure func relateResultCaseError(pr processResult, err error) bool
 
 ghost
 requires acc(s.Mem(), _)
@@ -206,6 +201,14 @@ requires IsValidBatchConnIntf(intf, bc)
 ensures intf in domain(cons) && cons[intf] == ToAbsConn(bc)
 decreases _
 pure func relateBatchConn(intf uint16, bc BatchConn, cons dict[uint16]AbsConn) bool
+
+ghost
+requires acc(m.MemSend(), _)
+requires len(m) == 1
+requires unfolding acc(m.MemSend(), _) in unfolding acc((&m[0]).MemSend(), _) in (m[0].Buffers)[0] == pr.OutPkt
+ensures GetAbsProcessResultOutPkt(absPr) == unfolding acc(m.MemSend(), _) in GetAbsMessagePayload(ToAbsMessage_MemSend(&m[0]))
+decreases _
+pure func relateMessageSendPayload(absPr AbsProcessResult, pr processResult, m underlayconn.Messages) bool
 
 // tests
 
