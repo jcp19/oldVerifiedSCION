@@ -2612,7 +2612,7 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
 // (tlino) we cannot prove termination of this method since p.d.resolveLocalDst() might not terminate
 // (tlino) Added addrFromSCIONPkt to describe if the address is from the SCION packet.
-// (tlino) addrFromSCIONPkt cannot be defined as ghost since it is later used in a non ghost assignment.
+// (tlino) addrFromSCIONPkt cannot be defined as ghost since it is later assigned to a ghost field that cannot be defined as ghost yet. 
 preserves p.Mem()
 ensures pr.Mem()
 ensures !addrFromSCIONPkt ==> (address != nil ==> acc(address.Mem(), _))
@@ -3204,6 +3204,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte) (pr processResu
 		assert verifyutils.BytesAcc(rp)
 
 		// (tlino) handle both possible address sources
+		// (tlino) at the moment addrSrc cannot be defined as ghost field since ghost fields are not supported in structs
 		var addrSrc AddrSource
 		if addrFromSCIONPkt {
 			addrSrc = AddrFromPacketBytes
@@ -3595,6 +3596,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	}
 
 	// (tlino) handle both possible address sources
+	// (tlino) at the moment addrSrc cannot be defined as ghost field since ghost fields are not supported in structs
 	var addrSrc AddrSource
 	if addrFromSCIONPkt {
 		addrSrc = AddrFromPacketBytes
@@ -3622,7 +3624,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 // (tlino) in a processResult together with the rawPkt slice.
 // (tlino) we cannot prove termination of this method, since  d.svc.Any() might not terminate
 // (tlino) Added addrFromSCIONPkt to describe if the address is from the SCION packet.
-// (tlino) addrFromSCIONPkt cannot be defined as ghost since it is later used in a non ghost assignment.
+// (tlino) addrFromSCIONPkt cannot be defined as ghost since it is later assigned to a ghost field that cannot be defined as ghost yet. 
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 preserves acc(s.Mem(), 1/100)
