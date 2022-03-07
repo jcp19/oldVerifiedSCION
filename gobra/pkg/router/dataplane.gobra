@@ -230,12 +230,9 @@ pure func (d *DataPlane) isRunning() (res bool) {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in d.running
 }
 
-// (tlino) We cannot prove termination of this function due to an issue in Gobra.
-// (tlino) The issue occurs when we try to access a map entry within a pure function.
-// (tlino) See Issue report for details: https://github.com/viperproject/gobra/issues/401
 requires acc(DataPlaneMutexInvariant(d), _)
 ensures res == unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
-decreases _
+decreases
 pure func (d *DataPlane) GetLinkType(intf uint16) (res topology.LinkType) {
 	return unfolding acc(DataPlaneMutexInvariant(d), _) in (d.linkTypes)[intf]
 }
@@ -1244,6 +1241,9 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	// (tlino) use getters to avoid unfolding
 	// inputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
 	inputLabels := interfaceToMetricLabels(ingressID, d.GetLocalAI(), d.GetNeighborIAs())
+	// (tlino) outlined to method to simplify verification
+	// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
+	// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 	updateInputMetrics(d, inputLabels, p.N)
 
 	fold verifyutils.BytesAcc((p.Buffers)[0])
@@ -1295,7 +1295,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 		// (tlino) log not yet supported
 		// log.Debug("Error processing packet", "err", err)
 
-		// (tlino) outline metric update to function
+		// (tlino) outlined to method to simplify verification
 		// d.Metrics.DroppedPacketsTotal.With(inputLabels).Inc()
 		updateDroppedPackets(d, inputLabels)
 
@@ -1353,10 +1353,21 @@ decreases
 func updateInputMetrics(d *DataPlane, inputLabels prometheus.Labels, totalInputBytes int) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
 	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
-	// d.Metrics.InputPacketsTotal.With(inputLabels).Inc()
-	// d.Metrics.InputBytesTotal.With(inputLabels).Add(float64(p.N))
 	((d.Metrics.GetInputPacketsTotal()).With(inputLabels)).Inc()
 	((d.Metrics.GetInputBytesTotal()).With(inputLabels)).Add(float64(totalInputBytes))
+}
+
+// (tlino) Verified
+// (tlino) added helper function to simplify verification
+requires acc(DataPlaneMutexInvariant(d), _)
+requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.Metrics != nil
+preserves acc(outputLabels, _)
+decreases
+func updateOutputMetrics(d *DataPlane, outputLabels prometheus.Labels, pktLen int) {
+	unfold acc(DataPlaneMutexInvariant(d), _)
+	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
+	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
+	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(pktLen))
 }
 
 // (tlino) Verified
@@ -1367,6 +1378,7 @@ preserves acc(inputLabels, _)
 decreases
 func updateDroppedPackets(d *DataPlane, inputLabels prometheus.Labels) {
 	unfold acc(DataPlaneMutexInvariant(d), _)
+	// (tlino) use getter to avoid unfolding d.Metrics.Mem()
 	((d.Metrics.GetDroppedPacketsTotal()).With(inputLabels)).Inc()
 }
 
@@ -1469,12 +1481,11 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 	// ok metric
 	// (tlino) use getters to simplify verification
 	// outputLabels := interfaceToMetricLabels(result.EgressID, d.localIA, d.neighborIAs)
+	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
+	// (tlino) outlined to method to simplify verification
 	// d.Metrics.OutputPacketsTotal.With(outputLabels).Inc()
 	// d.Metrics.OutputBytesTotal.With(outputLabels).Add(float64(len(result.OutPkt)))
-	outputLabels := interfaceToMetricLabels(result.GetEgressID(), d.GetLocalAI(), d.GetNeighborIAs())
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	((d.Metrics.GetOutputPacketsTotal()).With(outputLabels)).Inc()
-	((d.Metrics.GetOutputBytesTotal()).With(outputLabels)).Add(float64(result.GetOutPktLen()))
+	updateOutputMetrics(d, outputLabels, len(result.OutPkt))
 	assert P(t1, s1)
 	return t1, s1
 }
@@ -2324,6 +2335,23 @@ pred (p *scionPacketProcessor) Mem() {
  	p.rawPkt == p.scionLayer.getRawPkt()
 }
 
+// (tlino) start of added getters and setters for scionPacketProcessor to simplify verification
+preserves p.Mem()
+ensures acc(DataPlaneMutexInvariant(res), _)
+decreases
+func (p *scionPacketProcessor) GetDataPlane() (res *DataPlane) {
+	unfold p.Mem()
+	res = p.d
+	fold p.Mem()
+}
+
+requires acc(p.Mem(), _)
+decreases
+pure func (p *scionPacketProcessor) GetIngressID() (res uint16) {
+	return unfolding acc(p.Mem(), _) in p.ingressID
+}
+// (tlino) enf of added getters and setters for scionPacketProcessor
+
 // (tlino) Verified
 // TODO: next. "slayers.UDP", "slayers.HopByHopExtn", slayers.EndToEndExtn, *SCION <: DecodingLayer
 requires scmpH.Mem() && scmpP.Mem()
@@ -2783,6 +2811,17 @@ func (p *scionPacketProcessor) validateEgressID() (pr processResult, errRet erro
 }
 
 // (tlino) Verified
+// (tlino) added helper function
+preserves path.HopFieldInv(hf)
+preserves acc(inf)
+decreases
+func updateSegID(hf *path.HopField, inf *path.InfoField) {
+	unfold path.HopFieldInv(hf)
+	inf.UpdateSegID(hf.Mac)
+	fold path.HopFieldInv(hf)
+}
+
+// (tlino) Verified
 preserves p.Mem()
 decreases
 func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
@@ -2792,10 +2831,10 @@ func (p *scionPacketProcessor) updateNonConsDirIngressSegID() (err error) {
 	// be updated.
 	unfold p.Mem()
 	if !p.infoField.ConsDir && p.ingressID != 0 {
-		unfold path.HopFieldInv(p.hopField)
-		p.infoField.UpdateSegID(p.hopField.Mac)
-		fold path.HopFieldInv(p.hopField)
-
+		// (tlino) use helper function to reduce verification time
+		// p.infoField.UpdateSegID(p.hopField.Mac)
+		updateSegID(p.hopField, p.infoField)
+		
 		// get access to path, use new variables to make Gobra work
 		assert p.scionLayer != nil
 		assert p.path != nil
@@ -2897,12 +2936,15 @@ func (p *scionPacketProcessor) verifyCurrentMAC() (pr processResult, err error) 
 // (tlino) TODO: catch other errors of resolveLocalDst than noSVCBackend
 // (tlino) for now we assume this method catches all possible errors from resolveLocalDst
 // (tlino) we cannot prove termination of this method since p.d.resolveLocalDst() might not terminate
+// (tlino) Added addrFromSCIONPkt to describe if the address is from the SCION packet.
+// (tlino) addrFromSCIONPkt cannot be defined as ghost since it is later assigned to a ghost field that cannot be defined as ghost yet. 
 preserves p.Mem()
 ensures pr.Mem()
-func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error) {
+ensures !addrFromSCIONPkt ==> (address != nil ==> acc(address.Mem(), _))
+func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processResult, errRet error, addrFromSCIONPkt bool) {
 	unfold p.Mem()
 	sl := p.scionLayer
-	a, err := p.d.resolveLocalDst(sl)
+	a, err, isFromSCIONLayer := p.d.resolveLocalDst(sl)
 	switch {
 	// (tlino) globals not supported
 	// case errors.Is(err, noSVCBackend):
@@ -2930,7 +2972,7 @@ func (p *scionPacketProcessor) resolveInbound() (address net.Addr, pr processRes
 		// (tlino) original code, adpated code is below
 		// return a, processResult{}, nil
 		fold p.Mem()
-		address, pr, errRet = a, processResult{}, nil
+		address, pr, errRet, addrFromSCIONPkt = a, processResult{}, nil, isFromSCIONLayer
 		fold pr.Mem()
 	}
 }
@@ -2953,9 +2995,9 @@ func (p *scionPacketProcessor) processEgress() error {
 	assert pp.Mem()
 
 	if p.infoField.ConsDir {
-		unfold path.HopFieldInv(p.hopField)
-		p.infoField.UpdateSegID(p.hopField.Mac)
-		fold path.HopFieldInv(p.hopField)
+		// (tlino) use helper function to reduce verification time
+		// p.infoField.UpdateSegID(p.hopField.Mac)
+		updateSegID(p.hopField, p.infoField)
 
 		// (tlino) use helper function to access CurrINF
 		// if err := p.path.SetInfoField(p.infoField, int(p.path.PathMeta.CurrINF)); err != nil {
@@ -3075,11 +3117,9 @@ ensures pr.Mem()
 decreases
 func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet error) {
 	egressID := p.egressInterface()
-	unfold p.Mem()
-	// (tlino) use getter function to avoid unfold
+	// (tlino) use getter functions to avoid unfold
 	// if v, ok := p.d.bfdSessions[egressID]; ok {
-	if v, ok := p.d.GetBfdSession(egressID); ok {
-		assert acc(v.Mem(), _)
+	if v, ok := p.GetDataPlane().GetBfdSession(egressID); ok {
 		if !v.IsUp() {
 			scmpH := &slayers.SCMP{
 				TypeCode: slayers.CreateSCMPTypeCode(slayers.SCMPTypeExternalInterfaceDown, 0),
@@ -3087,30 +3127,29 @@ func (p *scionPacketProcessor) validateEgressUp() (pr processResult, errRet erro
 			var scmpP gopacket.SerializableLayer = &slayers.SCMPExternalInterfaceDown{
 				// (tlino) use getter function to avoid unfold
 				// IA:   p.d.localIA,
-				IA:   p.d.GetLocalAI(),
+				IA:   p.GetDataPlane().GetLocalAI(),
 				IfID: uint64(egressID),
 			}
 			// (tlino) use getter function to avoid unfold
 			// if _, external := p.d.external[egressID]; !external {
-			if _, external := p.d.GetExternalBatchConn(egressID); !external {
+			if _, external := p.GetDataPlane().GetExternalBatchConn(egressID); !external {
 				scmpH.TypeCode =
 					slayers.CreateSCMPTypeCode(slayers.SCMPTypeInternalConnectivityDown, 0)
 				scmpP = &slayers.SCMPInternalConnectivityDown{
-					// (tlino) use getter function to avoid unfold
+					// (tlino) use getter functions to avoid unfold
 					// IA:      p.d.localIA,
-					IA:      p.d.GetLocalAI(),
-					Ingress: uint64(p.ingressID),
+					// Ingress: uint64(p.ingressID)
+					IA:      p.GetDataPlane().GetLocalAI(),
+					Ingress: uint64(p.GetIngressID()),
 					Egress:  uint64(egressID),
 				}
 			}
 			fold scmpH.Mem()
 			fold scmpP.Mem()
-			fold p.Mem()
 			pr, errRet =  p.packSCMP(scmpH, scmpP, serrors.New("bfd session down"))
 			return
 		}
 	}
-	fold p.Mem()
 	pr, errRet = processResult{}, nil
 	fold pr.Mem()
 	return 
@@ -3481,7 +3520,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 	if dstIA.Equal(localIA) && int(currHF)+1 == numHops {
 		apply pp.Mem() --* (scionL.Mem() && pp == scionL.getRawScionPath() && rp == scionL.getRawPkt())
 		fold p.Mem()
-		a, r, err := p.resolveInbound()
+		a, r, err, addrFromSCIONPkt := p.resolveInbound()
 		if err != nil {
 			// (tlino) original code, adapted code below
 			// return r, err
@@ -3501,6 +3540,15 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		rp := p.rawPkt
 		ghost sl.getRawPktAccWithoutPreservePath(rp)
 		assert verifyutils.BytesAcc(rp)
+
+		// (tlino) handle both possible address sources
+		// (tlino) at the moment addrSrc cannot be defined as ghost field since ghost fields are not supported in structs
+		var addrSrc AddrSource
+		if addrFromSCIONPkt {
+			addrSrc = AddrFromPacketBytes
+		} else {
+			addrSrc = AddrFromDataplane
+		}
 
 		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt, AddrSrc: AddrFromPacketBytes}, nil
 		// (tlino) use lemma method to relate abstract types
@@ -3886,7 +3934,6 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 
 	// (tlino) get access to p.Mem()
 	unfold s.Mem()
-	assert p.Mem()
 
 	// (tlino) use setter function to avoid unfolding p
 	// (tlino) macFactory isn't supported, usse dummy MAC instead
@@ -3915,7 +3962,7 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		return pr, errRet, ErrorCase
 	}
 	
-	a, err := d.resolveLocalDst(s)
+	a, err, addrFromSCIONPkt := d.resolveLocalDst(s)
 	if err != nil {
 		// (tlino) original code, adapted code is below
 		// return processResult{}, err
@@ -3924,13 +3971,22 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 		ghost s.getRawPktAccWithoutPreservePath(rawPkt)
 		return pr, errRet, ErrorCase
 	}
+
+	// (tlino) handle both possible address sources
+	// (tlino) at the moment addrSrc cannot be defined as ghost field since ghost fields are not supported in structs
+	var addrSrc AddrSource
+	if addrFromSCIONPkt {
+		addrSrc = AddrFromPacketBytes
+	} else {
+		addrSrc = AddrFromDataplane
+	}
+
 	// (tlino) original code, adapted code is below
 	// return processResult{OutConn: d.internal, OutAddr: a, OutPkt: rawPkt}, nil
 	// (tlino) get access to rawPkt
 	ghost s.getRawPktAccWithoutPreservePath(rawPkt)
 	assert verifyutils.BytesAcc(rawPkt)
-	unfold acc(DataPlaneMutexInvariant(d), _)
-	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt, AddrSrc: AddrFromPacketBytes}, nil
+	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt, AddrSrc: addrSrc}, nil
 	// (tlino) use lemma method to relate abstract types
 	ghost _ := relateInternalBatchConn(pr.OutConn, internalConn)
 	fold pr.Mem()
@@ -3944,21 +4000,24 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 }
 
 // (tlino) Verified
-// (tlino) res contains a subslice of s.rawPkt
-// (tlino) This method doesn't establish res.Mem(), since the caller embedds res
-// (tlino) in a processResult together with the rawPkt.
+// (tlino) res contains a subslice of s.rawPkt if addrFromSCIONPkt is true
+// (tlino) This method doesn't establish res.Mem() if addrFromSCIONPkt is true, since the caller embedds res
+// (tlino) in a processResult together with the rawPkt slice.
 // (tlino) we cannot prove termination of this method, since  d.svc.Any() might not terminate
+// (tlino) Added addrFromSCIONPkt to describe if the address is from the SCION packet.
+// (tlino) addrFromSCIONPkt cannot be defined as ghost since it is later assigned to a ghost field that cannot be defined as ghost yet. 
 requires acc(DataPlaneMutexInvariant(d), _)
 requires unfolding acc(DataPlaneMutexInvariant(d), _) in d.svc != nil
 preserves acc(s.Mem(), 1/100)
+ensures !addrFromSCIONPkt ==> (res != nil ==> acc(res.Mem(), _))
 // (tlino) use *slayers.SCION instead of slayers.SCION
 // func (d *DataPlane) resolveLocalDst(s slayers.SCION) (net.Addr, error)
-func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet error) {
+func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet error, addrFromSCIONPkt bool) {
 	// (joao) DstAddr expects a *SCION, not a SCION. Gobra does not support this
 	dst, err := s.DstAddr()
 	if err != nil {
 		// TODO parameter problem. // (joao) this is an original comment from SCION
-		return nil, invalidDstAddr()
+		return nil, invalidDstAddr(), false
 	}
 	assert acc(dst.Mem(), 1/200)
 	if v, ok := dst.(addr.HostSVC); ok {
@@ -3970,13 +4029,13 @@ func (d *DataPlane) resolveLocalDst(s *slayers.SCION) (res net.Addr, errRet erro
 		if !ok {
 			// (tlino) globals are not supported
 			// return nil, noSVCBackend
-			return nil, noSVCBackend()
+			return nil, noSVCBackend(), false
 		}
-		return a, nil
+		return a, nil, false
 	}
 	res = addEndhostPort(dst)
 	ghost s.AddReadDstAddr(dst)
-	return res, nil
+	return res, nil, true
 }
 
 // (tlino) Verified
