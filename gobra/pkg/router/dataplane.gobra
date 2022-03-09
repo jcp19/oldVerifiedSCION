@@ -199,7 +199,7 @@ pred DataPlaneMutexInvariant(d *DataPlane) {
 	(d.Metrics != nil ==> d.Metrics.Mem())
 }
 
-// (tlino) we need this predicate to relate input arguments of the 'GetExternalBatchConn' method to its outputs.
+// (tlino) This predicate relates the interface number passed as an input to 'GetExternalBatchConn' to the BatchConn obtained as its output
 pred IsValidBatchConnIntf(idx uint16, bc BatchConn)
 
 // (tlino) we need this predicate to relate output the 'GetExternalBatchConn' method to internalConn.
@@ -2256,8 +2256,8 @@ preserves buffer.Mem()
 ensures pr.Mem()
 ensures err == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPkt)
 ensures err != nil ==> verifyutils.BytesAcc(rawPkt)
-ensures ( (resultCase == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
-ensures ( (resultCase == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
+ensures ( (resultCase == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHopIdx(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( (resultCase == Inbound) && (localIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHopIdx(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
 ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
 ensures ( (resultCase == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
 ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
@@ -3435,8 +3435,8 @@ ensures (p.buffer).Mem()
 ensures pr.Mem()
 ensures errProcess == nil ==> pr.Mem() --* verifyutils.BytesAcc(rawPktAlias)
 ensures errProcess != nil ==> verifyutils.BytesAcc(rawPktAlias)
-ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
-ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
+ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHopIdx(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
+ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) && ((GetAbsRawPathCurrHopIdx(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
 ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
 ensures ( (resultCase == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION)))
 ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]

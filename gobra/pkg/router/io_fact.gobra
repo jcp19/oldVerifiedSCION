@@ -2,16 +2,17 @@ package router
 
 type Fact domain {
 
-    // properties of the BR
+    // local IA of the border router
     func localIAFact(AbsIA) Fact
     func getLocalIAFact(Fact) AbsIA
+
+    // supported Egress IDs of the border router
     func supportedEgressIDsFact(dict[uint16]AbsConn) Fact
     func getSupportedEgressIDs(Fact) dict[uint16]AbsConn
+
+    // internal BatchConn interface of the border router
     func internalConnFact(AbsConn) Fact
     func getInternalConnFact(Fact) AbsConn
-
-    // each fact has a unique 'type':
-    func getType(Fact) int
 
     // incoming Message
     func inFact(AbsMessage) Fact
@@ -39,47 +40,47 @@ type Fact domain {
 
     // inFact injective
     axiom {
-        forall t AbsMessage :: { inFact(t) } getIn(inFact(t)) == t && getType(inFact(t)) == 0
+        forall t AbsMessage :: { inFact(t) } getIn(inFact(t)) == t
     }
 
     // decodedPktFact injective
     axiom {
-        forall t AbsSCION :: { decodedPktFact(t) } getDecodedPktFact(decodedPktFact(t)) == t && getType(decodedPktFact(t)) == 1
+        forall t AbsSCION :: { decodedPktFact(t) } getDecodedPktFact(decodedPktFact(t)) == t
     }
 
     // decodedIntraBFDFact injective
     axiom {
-        forall t AbsBFD :: { decodedIntraBFDFact(t) } getDecodedIntraBFDFact(decodedIntraBFDFact(t)) == t && getType(decodedIntraBFDFact(t)) == 2
+        forall t AbsBFD :: { decodedIntraBFDFact(t) } getDecodedIntraBFDFact(decodedIntraBFDFact(t)) == t
     }
 
     // decodedInterBFDFact injective
     axiom {
-        forall t AbsBFD :: { decodedInterBFDFact(t) } getDecodedInterBFDFact(decodedInterBFDFact(t)) == t && getType(decodedInterBFDFact(t)) == 3
+        forall t AbsBFD :: { decodedInterBFDFact(t) } getDecodedInterBFDFact(decodedInterBFDFact(t)) == t
     }
 
     // processedPktFact injective
     axiom {
-        forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t && getType(processedPktFact(t)) == 6
+        forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t
     }
 
     // outFact injective
     axiom {
-        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 7
+        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t
     }
 
     // localIAFact injective
     axiom {
-        forall ia AbsIA :: { localIAFact(ia) } getLocalIAFact(localIAFact(ia)) == ia && getType(localIAFact(ia)) == 8
+        forall ia AbsIA :: { localIAFact(ia) } getLocalIAFact(localIAFact(ia)) == ia
     }
 
     // supportedEgressIDs injective
     axiom {
-        forall cons dict[uint16]AbsConn :: { supportedEgressIDsFact(cons) } getSupportedEgressIDs(supportedEgressIDsFact(cons)) == cons && getType(supportedEgressIDsFact(cons)) == 9
+        forall cons dict[uint16]AbsConn :: { supportedEgressIDsFact(cons) } getSupportedEgressIDs(supportedEgressIDsFact(cons)) == cons
     }
 
     // internalConn injective
     axiom {
-        forall conn AbsConn :: { internalConnFact(conn) } getInternalConnFact(internalConnFact(conn)) == conn && getType(internalConnFact(conn)) == 10
+        forall conn AbsConn :: { internalConnFact(conn) } getInternalConnFact(internalConnFact(conn)) == conn
     }
 }
 

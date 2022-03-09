@@ -117,8 +117,8 @@ pure func G_processOHP(scn AbsSCION, pr AbsProcessResult, rc ResultCase, s mset[
 ghost
 decreases
 pure func G_processSCION(scn AbsSCION, pr AbsProcessResult, rc ResultCase,s mset[Fact], ia AbsIA, supportedEgressIDs dict[uint16]AbsConn, internalConn AbsConn) (res bool) {
-    return ((( (rc == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0) ) &&
-    ( ((rc == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultBatchConn(pr) == internalConn) ) &&
+    return ((( (rc == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHopIdx(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultEgressID(pr) == 0) ) &&
+    ( ((rc == Inbound) && (ia == GetAbsSCIONDstIA(scn)) && (GetAbsRawPathCurrHopIdx(GetAbsSCIONRawPath(scn)) + 1 == GetAbsRawPathNumHops(GetAbsSCIONRawPath(scn)))) ==> (GetAbsProcessResultBatchConn(pr) == internalConn) ) &&
     ( ((rc == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(scn))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn)))) ) &&
     ( ((rc == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(scn))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultEgressID(pr) == GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn)))) ) &&
     ( ((rc == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(scn))) && GetAbsHopConsEgress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(scn))) in domain(supportedEgressIDs))) ==> (GetAbsProcessResultBatchConn(pr) == supportedEgressIDs[GetAbsProcessResultEgressID(pr)]) ) &&
@@ -140,7 +140,7 @@ requires scn.Mem()
 requires data == unfolding scn.Mem() in scn.RawPkt
 ensures  absBytes == GetAbsSCIONRawPkt(ToAbsSCION(scn))
 decreases _
-pure func relateDataToSCION(data []byte, scn *slayers.SCION, absBytes AbsBytes) bool
+pure func relateDataToSCION(data []byte, scn *slayers.SCION, absBytes seq[byte]) bool
 
 ghost
 requires acc(s.Mem(), _)
@@ -151,7 +151,7 @@ pure func relateDstIAToLocalIA(s *slayers.SCION, d *DataPlane, localIA AbsIA, ab
 
 ghost
 requires acc(p.Mem(), _)
-ensures (int(p.GetCurrHF()) + 1 == p.GetNumHops()) ==> (GetAbsRawPathCurrHF(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))
+ensures (int(p.GetCurrHF()) + 1 == p.GetNumHops()) ==> (GetAbsRawPathCurrHopIdx(GetAbsSCIONRawPath(absSCION)) + 1) == GetAbsRawPathNumHops(GetAbsSCIONRawPath(absSCION))
 decreases _
 pure func relateLastHopToNumHops(p *scion.Raw, absSCION AbsSCION) bool
 

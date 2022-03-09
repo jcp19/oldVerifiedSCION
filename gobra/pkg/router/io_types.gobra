@@ -14,20 +14,18 @@ import (
 
 // abstract types
 
-type AbsBytes domain {}
-
 type AbsMessage domain {
-    func GetAbsMessagePayload(AbsMessage) AbsBytes
+    func GetAbsMessagePayload(AbsMessage) seq[byte]
 }
 
 type AbsProcessResult domain {
     func GetAbsProcessResultEgressID(AbsProcessResult) uint16
     func GetAbsProcessResultBatchConn(AbsProcessResult) AbsConn
-    func GetAbsProcessResultOutPkt(AbsProcessResult) AbsBytes
+    func GetAbsProcessResultOutPkt(AbsProcessResult) seq[byte]
 }
 
 type AbsSCION domain {
-    func GetAbsSCIONRawPkt(AbsSCION) AbsBytes
+    func GetAbsSCIONRawPkt(AbsSCION) seq[byte]
     func GetAbsSCIONRawPath(AbsSCION) AbsRawPath
     func GetAbsSCIONOHPPath(AbsSCION) AbsOHPPath
     func GetAbsSCIONDstIA(AbsSCION) AbsIA
@@ -36,7 +34,7 @@ type AbsSCION domain {
 type AbsIA domain {}
 
 type AbsRawPath domain {
-    func GetAbsRawPathCurrHF(AbsRawPath) int
+    func GetAbsRawPathCurrHopIdx(AbsRawPath) int
     func GetAbsRawPathNumHops(AbsRawPath) int
     func GetAbsRawPathCurrHop(AbsRawPath) AbsHop
     func GetAbsRawPathCurrInfo(AbsRawPath) AbsInfo
@@ -81,18 +79,18 @@ const (
 ghost
 requires forall i int :: { b[i] } 0 <= i && i < len(b) ==> acc(&b[i], _)
 decreases _
-pure func ToAbsBytes(b []byte) AbsBytes
+pure func ToAbsBytes(b []byte) seq[byte]
 
 ghost
-requires verifyutils.BytesAcc(b)
+requires acc(verifyutils.BytesAcc(b), _)
 decreases _
-pure func ToAbsBytes2(b []byte) (res AbsBytes)
+pure func ToAbsBytes2(b []byte) (res seq[byte])
 
 ghost
 requires msg.Mem()
 ensures res == unfolding msg.Mem() in ToAbsBytes(((msg.Buffers)[0])[0:(msg.N)])
 decreases _
-pure func MessageToAbsBytesBounded(msg *ipv4.Message) (res AbsBytes)
+pure func MessageToAbsBytesBounded(msg *ipv4.Message) (res seq[byte])
 
 ghost
 requires acc(m.Mem(), _)
@@ -152,4 +150,4 @@ requires acc(verifyutils.BytesAcc(b), _)
 requires absBytes == unfolding acc(verifyutils.BytesAcc(b), _) in ToAbsBytes(b)
 ensures absBytes == ToAbsBytes2(b)
 decreases _
-pure func relateByteAccess(b []byte, absBytes AbsBytes) bool
+pure func relateByteAccess(b []byte, absBytes seq[byte]) bool
