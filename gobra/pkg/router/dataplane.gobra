@@ -1026,7 +1026,7 @@ func RunReadClosure(ingressID uint16, rd BatchConn, d *DataPlane) {
 	ghost var currentPlace Place
 	ghost var state mset[Fact]
 	ghost var supportedEgressIDs dict[uint16]AbsConn
-	ghost localIA := ToAbsIA(d.GetLocalAI())
+	ghost localIA := d.GetLocalAI()
 	ghost internalConn := ToAbsConn(d.getInternal())
 	state = state union mset[Fact]{localIAFact(localIA)}
 	state = state union mset[Fact]{supportedEgressIDsFact(supportedEgressIDs)}
@@ -1162,7 +1162,7 @@ ensures localIAFact(localIA) in s1
 ensures supportedEgressIDsFact(supportedEgressIDs) in s1
 ensures internalConnFact(internalConn) in s1
 func processBatch(ingressID uint16, rd BatchConn, d *DataPlane, msgs underlayconn.Messages, metas []underlayconn.ReadMeta, pkts int, 
-	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t Place, ghost s mset[Fact], ghost absMsgs seq[AbsMessage]) (ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, scmpErr *scmpError, buffer gopacket.SerializeBuffer, spkt slayers.SCION, ghost localIA addr.IA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t Place, ghost s mset[Fact], ghost absMsgs seq[AbsMessage]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold msgs.Mem()
 
 	ghost var currentPlace Place = t
@@ -1218,7 +1218,7 @@ ensures p.Mem()
 ensures token(t1) && P(t1, s1)
 ensures s subset s1
 func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Message, origPacket []byte, spkt slayers.SCION, 
-	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
+	buffer gopacket.SerializeBuffer, scmpErr *scmpError, ghost absMsg AbsMessage, ghost localIA addr.IA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t Place, ghost s mset[Fact]) (ghost t1 Place, ghost s1 mset[Fact]) {
 	unfold p.Mem()
 	assert forall j int :: 0 <= j && j < p.N ==> &origPacket[j] == &(origPacket[:p.N])[j]
 	// (tlino) use local originPacket subslice
@@ -1250,7 +1250,7 @@ func processMessage(ingressID uint16, rd BatchConn, d *DataPlane, p *ipv4.Messag
 	fold verifyutils.BytesAcc(localOrigPacket)
 
 	// (tlino) use lemma to relate BytesAcc and quantified AbsBytes abstraction functions
-	ghost _ := relateByteAccess(rawPkt, absRawPkt) 
+	ghost relateByteAccess(rawPkt, absRawPkt) 
 	assert ToAbsBytes2(rawPkt) == GetAbsMessagePayload(absMsg)
 
 	// (tlino) use local variables
@@ -1426,7 +1426,7 @@ func processMessageHelper(d *DataPlane, result processResult, ghost absPR AbsPro
 	// (tlino) moved message creation to outlined function
 	messages := createMessages(pld, address, resultCase)
 	// (tlino) relate abstract types
-	ghost _ := relateMessageSendPayload(absPR, result, messages)
+	ghost relateMessageSendPayload(absPR, result, messages)
 
 	// (tlino) apply internal packPkt event
 	unfold P(t, s)
@@ -1846,7 +1846,7 @@ ensures token(t1) && P(t1, s1)
 ensures s0 subset s1
 ensures !isEmptyPR(pr) ==> processedPktFact(absPR) in s1
 func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr, s slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absMsg AbsMessage, ghost localIA addr.IA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost t0 Place, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost absPR AbsProcessResult, ghost t1 Place, ghost s1 mset[Fact]) {
 	// (joao) `s` should always have the zero value of slayers.SCION;
 	// (joao) in the code, we use `s` where an *slayers.SCION is expected. In Go, this modifies `s` but in Gobra, that idiom is still not supported;
 	// (joao) we use the following transformation - we check that s is always the zero value and we introduce a new shared variable `sNew` of type slayers.SCION{}
@@ -1869,7 +1869,7 @@ func (d *DataPlane) processPkt(ingressID uint16, rawPkt []byte, srcAddr net.Addr
 		fold pr.Mem()
 		return
 	}
-	ghost _ := relateDataToSCION(rawPkt, sNew, absData)
+	ghost relateDataToSCION(rawPkt, sNew, absData)
 
 	// (tlino) apply internal decodePkt event
 	unfold P(t0, s0)
@@ -2267,7 +2267,7 @@ ensures ( resultCase == TransitFromOtherBR ) ==> GetAbsProcessResultBatchConn(To
 // (joao) s is now a *slayers.SCION
 // func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s slayers.SCION,
 func (d *DataPlane) processSCION(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost localIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, err error, ghost resultCase ResultCase) {
+	origPacket []byte, buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost localIA addr.IA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, err error, ghost resultCase ResultCase) {
 
 	// (joao) added `&` before `scionPacketProcessor` to make this type check
 	p := &scionPacketProcessor{
@@ -3443,7 +3443,7 @@ ensures ( (resultCase == Transit) && (GetAbsInfoConsDir(GetAbsRawPathCurrInfo(Ge
 ensures ( (resultCase == Transit) && (!GetAbsInfoConsDir(GetAbsRawPathCurrInfo(GetAbsSCIONRawPath(absSCION))) && GetAbsHopConsIngress(GetAbsRawPathCurrHop(GetAbsSCIONRawPath(absSCION))) in domain(supportedEgressIDs)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == supportedEgressIDs[GetAbsProcessResultEgressID(ToAbsProcessResult(pr))]
 ensures ( resultCase == TransitFromOtherBR ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
 ensures ( resultCase == TransitFromOtherBR ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
-func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s mset[Fact]) (pr processResult, errProcess error, ghost resultCase ResultCase) {
+func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION AbsSCION, ghost locIA addr.IA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s mset[Fact]) (pr processResult, errProcess error, ghost resultCase ResultCase) {
 	if r, err := p.parsePath(); err != nil {
 		pr, errProcess := r, err
 		ghost p.scionLayer.getRawPktAccWithoutPreservePath(p.rawPkt)
@@ -3499,7 +3499,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 	dstIA := p.scionLayer.getDstIA()
 	localIA := p.d.GetLocalAI()
 	// (tlino) use lemma method to relate abstract types
-	ghost _ := relateDstIAToLocalIA(p.scionLayer, p.d, locIA, absSCION)
+	ghost relateDstIAToLocalIA(p.scionLayer, p.d, locIA, absSCION)
 
 	// (tlino) get access to path. Use new local variables to make gobra work
 	pp := p.path
@@ -3512,7 +3512,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 	currHF := pp.GetCurrHF()
 	numHops := pp.GetNumHops()
 	// (tlino) use lemma method to relate abstract types
-	ghost _ := relateLastHopToNumHops(pp, absSCION)
+	ghost relateLastHopToNumHops(pp, absSCION)
 
 	// Inbound: pkts destined to the local IA.
 	// (tlino) use getters above to avoid unfoldings
@@ -3552,12 +3552,12 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 
 		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt, AddrSrc: AddrFromPacketBytes}, nil
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := relateInternalBatchConn(pr.OutConn, internalConn)
+		ghost relateInternalBatchConn(pr.OutConn, internalConn)
 		fold pr.Mem()
 		assert pr.Mem()
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := relateProcessResultEgressID(pr)
-		ghost _ := relateProcessResultOutConn(pr)
+		ghost relateProcessResultEgressID(pr)
+		ghost relateProcessResultOutConn(pr)
 
 		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
 			unfold pr.Mem()
@@ -3624,8 +3624,8 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		return pr, errProcess, ErrorCase
 	}
 	// (tlino) use lemma method to relate abstract types
-	ghost _ := relateCurrHop(absSCION, p)
-	ghost _ := relateCurrInfo(absSCION, p)
+	ghost relateCurrHop(absSCION, p)
+	ghost relateCurrInfo(absSCION, p)
 
 	egressID := p.egressInterface()
 
@@ -3633,7 +3633,7 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 	// if c, ok := p.d.external[egressID]; ok {
 	if c, ok := p.d.GetExternalBatchConn(egressID); ok {
 		// (tlino) use lemma methods to relate abstract types
-		ghost _ := relateBatchConn(egressID, c, supportedEgressIDs)
+		ghost relateBatchConn(egressID, c, supportedEgressIDs)
 		
 		if err := p.processEgress(); err != nil {
 			// (tlino) original code,  adapted code below
@@ -3663,8 +3663,8 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 		fold pr.Mem()
 		assert pr.Mem()
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := relateProcessResultEgressID(pr)
-		ghost _ := relateProcessResultOutConn(pr)
+		ghost relateProcessResultEgressID(pr)
+		ghost relateProcessResultOutConn(pr)
 
 		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
 			unfold pr.Mem()
@@ -3692,12 +3692,12 @@ func (p *scionPacketProcessor) process(ghost rawPktAlias []byte, ghost absSCION 
 
 		pr, errProcess = processResult{OutConn: p.d.getInternal(), OutAddr: a, OutPkt: p.rawPkt, AddrSrc: AddrFromDataplane}, nil
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := relateInternalBatchConn(pr.OutConn, internalConn)
+		ghost relateInternalBatchConn(pr.OutConn, internalConn)
 		fold pr.Mem()
 		assert pr.Mem()
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := relateProcessResultEgressID(pr)
-		ghost _ := relateProcessResultOutConn(pr)
+		ghost relateProcessResultEgressID(pr)
+		ghost relateProcessResultOutConn(pr)
 
 		package pr.Mem() --* (verifyutils.BytesAcc(rp)) {
 			unfold pr.Mem()
@@ -3772,7 +3772,7 @@ ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==>
 // func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s slayers.SCION,
 //	buffer gopacket.SerializeBuffer) (processResult, error) {
 func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost resultCase ResultCase) {
+	buffer gopacket.SerializeBuffer, ghost absSCION AbsSCION, ghost locIA addr.IA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost resultCase ResultCase) {
 		
 	// (tlino) add path variable
 	unfold s.Mem()
@@ -3860,7 +3860,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		assert p.Mem()
 
 		// (tlino) use lemma method to relate abstract types
-		ghost _ := relateOHPEgressID(s, p, absSCION)
+		ghost relateOHPEgressID(s, p, absSCION)
 
 		// OHP should always be directed to the correct BR. // (tlino) original scion comment
 		// (tlino) use getter to simplify verification
@@ -3868,7 +3868,7 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 		fristHopConsEgress := p.GetFristHopConsEgress()
 		if c, ok := d.GetExternalBatchConn(fristHopConsEgress); ok {
 			// (tlino) use lemma methods to relate abstract types
-			ghost _ := relateBatchConn(fristHopConsEgress, c, supportedEgressIDs)
+			ghost relateBatchConn(fristHopConsEgress, c, supportedEgressIDs)
 			// buffer should already be correct // (tlino) original scion comment
 
 			// (tlino) get access to rawPkt
@@ -3885,8 +3885,8 @@ func (d *DataPlane) processOHP(ingressID uint16, rawPkt []byte, s *slayers.SCION
 				unfold pr.Mem()
 			}
 			// (tlino) use lemma method to relate abstract types
-			ghost _ := relateProcessResultEgressID(pr)
-			ghost _ := relateProcessResultOutConn(pr)
+			ghost relateProcessResultEgressID(pr)
+			ghost relateProcessResultOutConn(pr)
 			return pr, errRet, Transit
 		}
 		
@@ -3930,7 +3930,7 @@ ensures (resultCase == Inbound) || (resultCase == ErrorCase)
 ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==> GetAbsProcessResultEgressID(ToAbsProcessResult(pr)) == 0
 ensures ( (resultCase == Inbound) && (locIA == GetAbsSCIONDstIA(absSCION)) ) ==> GetAbsProcessResultBatchConn(ToAbsProcessResult(pr)) == internalConn
 func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCION,
-	buffer gopacket.SerializeBuffer, p *onehop.Path, ghost absSCION AbsSCION, ghost locIA AbsIA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost resultCase ResultCase) {
+	buffer gopacket.SerializeBuffer, p *onehop.Path, ghost absSCION AbsSCION, ghost locIA addr.IA, ghost supportedEgressIDs dict[uint16]AbsConn, ghost internalConn AbsConn, ghost s0 mset[Fact]) (pr processResult, errRet error, ghost resultCase ResultCase) {
 
 	// (tlino) get access to p.Mem()
 	unfold s.Mem()
@@ -3988,14 +3988,14 @@ func (d *DataPlane) processOHP2(ingressID uint16, rawPkt []byte, s *slayers.SCIO
 	assert verifyutils.BytesAcc(rawPkt)
 	pr, errRet = processResult{OutConn: d.getInternal(), OutAddr: a, OutPkt: rawPkt, AddrSrc: addrSrc}, nil
 	// (tlino) use lemma method to relate abstract types
-	ghost _ := relateInternalBatchConn(pr.OutConn, internalConn)
+	ghost relateInternalBatchConn(pr.OutConn, internalConn)
 	fold pr.Mem()
 	package pr.Mem() --* verifyutils.BytesAcc(rawPkt) {
 		unfold pr.Mem()
 	}
 	// (tlino) use lemma method to relate abstract types
-	ghost _ := relateProcessResultEgressID(pr)
-	ghost _ := relateProcessResultOutConn(pr)
+	ghost relateProcessResultEgressID(pr)
+	ghost relateProcessResultOutConn(pr)
 	return pr, errRet, Inbound
 }
 

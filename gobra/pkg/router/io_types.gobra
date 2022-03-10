@@ -28,10 +28,8 @@ type AbsSCION domain {
     func GetAbsSCIONRawPkt(AbsSCION) seq[byte]
     func GetAbsSCIONRawPath(AbsSCION) AbsRawPath
     func GetAbsSCIONOHPPath(AbsSCION) AbsOHPPath
-    func GetAbsSCIONDstIA(AbsSCION) AbsIA
+    func GetAbsSCIONDstIA(AbsSCION) addr.IA
 }
-
-type AbsIA domain {}
 
 type AbsRawPath domain {
     func GetAbsRawPathCurrHopIdx(AbsRawPath) int
@@ -126,10 +124,6 @@ decreases _
 pure func ToAbsMessages(msgs underlayconn.Messages, pkts int) (res seq[AbsMessage])
 
 ghost
-decreases _
-pure func ToAbsIA(ia addr.IA) AbsIA
-
-ghost
 requires acc(path.HopFieldInv(hop), _)
 decreases _
 pure func ToAbsHop(hop *path.HopField) AbsHop
@@ -146,8 +140,9 @@ pure func ToAbsOHPPath(p *onehop.Path) AbsOHPPath
 
 // lemmas
 ghost
-requires acc(verifyutils.BytesAcc(b), _)
+requires acc(verifyutils.BytesAcc(b), 1/1000)
 requires absBytes == unfolding acc(verifyutils.BytesAcc(b), _) in ToAbsBytes(b)
+ensures acc(verifyutils.BytesAcc(b), 1/1000)
 ensures absBytes == ToAbsBytes2(b)
 decreases _
-pure func relateByteAccess(b []byte, absBytes seq[byte]) bool
+func relateByteAccess(b []byte, absBytes seq[byte])
