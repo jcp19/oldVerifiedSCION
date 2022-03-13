@@ -120,6 +120,7 @@ requires 0 <= pkts && pkts <= len(msgs)
 requires msgs.Mem()
 ensures len(res) == pkts
 ensures unfolding msgs.Mem() in (forall i int :: 0 <= i && i < pkts ==> res[i] == ToAbsMessage(&msgs[i]))
+ensures forall i, j int :: 0 <= i && i < pkts && 0 <= j && j < pkts ==> (i != j ==> res[i] != res[j])
 decreases _
 pure func ToAbsMessages(msgs underlayconn.Messages, pkts int) (res seq[AbsMessage])
 

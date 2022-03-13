@@ -18,6 +18,9 @@ type Fact domain {
     func internalConnFact(AbsConn) Fact
     func getInternalConnFact(Fact) AbsConn
 
+    // each fact has a unique 'type':
+    func getType(Fact) int
+
     // incoming Message
     func inFact(AbsMessage) Fact
     func getIn(Fact) AbsMessage
@@ -44,47 +47,47 @@ type Fact domain {
 
     // inFact injective
     axiom {
-        forall t AbsMessage :: { inFact(t) } getIn(inFact(t)) == t
+        forall t AbsMessage :: { inFact(t) } getIn(inFact(t)) == t && getType(inFact(t)) == 0
     }
 
     // decodedPktFact injective
     axiom {
-        forall t AbsSCION :: { decodedPktFact(t) } getDecodedPktFact(decodedPktFact(t)) == t
+        forall t AbsSCION :: { decodedPktFact(t) } getDecodedPktFact(decodedPktFact(t)) == t && getType(decodedPktFact(t)) == 1
     }
 
     // decodedIntraBFDFact injective
     axiom {
-        forall t AbsBFD :: { decodedIntraBFDFact(t) } getDecodedIntraBFDFact(decodedIntraBFDFact(t)) == t
+        forall t AbsBFD :: { decodedIntraBFDFact(t) } getDecodedIntraBFDFact(decodedIntraBFDFact(t)) == t && getType(decodedIntraBFDFact(t)) == 2
     }
 
     // decodedInterBFDFact injective
     axiom {
-        forall t AbsBFD :: { decodedInterBFDFact(t) } getDecodedInterBFDFact(decodedInterBFDFact(t)) == t
+        forall t AbsBFD :: { decodedInterBFDFact(t) } getDecodedInterBFDFact(decodedInterBFDFact(t)) == t && getType(decodedInterBFDFact(t)) == 3
     }
 
     // processedPktFact injective
     axiom {
-        forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t
+        forall t AbsProcessResult :: { processedPktFact(t) } getProcessedPktFact(processedPktFact(t)) == t && getType(processedPktFact(t)) == 6
     }
 
     // outFact injective
     axiom {
-        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t
+        forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 7
     }
 
     // localIAFact injective
     axiom {
-        forall ia addr.IA :: { localIAFact(ia) } getLocalIAFact(localIAFact(ia)) == ia
+        forall ia addr.IA :: { localIAFact(ia) } getLocalIAFact(localIAFact(ia)) == ia && getType(localIAFact(ia)) == 8
     }
 
     // supportedEgressIDs injective
     axiom {
-        forall cons dict[uint16]AbsConn :: { supportedEgressIDsFact(cons) } getSupportedEgressIDs(supportedEgressIDsFact(cons)) == cons
+        forall cons dict[uint16]AbsConn :: { supportedEgressIDsFact(cons) } getSupportedEgressIDs(supportedEgressIDsFact(cons)) == cons && getType(supportedEgressIDsFact(cons)) == 9
     }
 
     // internalConn injective
     axiom {
-        forall conn AbsConn :: { internalConnFact(conn) } getInternalConnFact(internalConnFact(conn)) == conn
+        forall conn AbsConn :: { internalConnFact(conn) } getInternalConnFact(internalConnFact(conn)) == conn && getType(internalConnFact(conn)) == 10
     }
 }
 

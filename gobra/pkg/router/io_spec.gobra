@@ -29,54 +29,54 @@ pred P_readBatch(pl Place, ghost s mset[Fact]) {
 pred P_decodePkt(pl Place, ghost s mset[Fact]) {
     forall m AbsMessage, scn AbsSCION :: { decodePkt_p(pl, m, scn) } (
         (inFact(m) in s) && G_decodePkt(m, scn)) ==> 
-    decodePkt_p(pl, m, scn) && P(get_decodePkt_t1(pl, m, scn), s union mset[Fact]{decodedPktFact(scn)})
+    decodePkt_p(pl, m, scn) && P(get_decodePkt_t1(pl, m, scn), U(s, mset[Fact]{inFact(m)}, mset[Fact]{decodedPktFact(scn)}))
 }
 
 pred P_decodeIntraBFD(pl Place, ghost s mset[Fact]) {
     forall scn AbsSCION, bfd AbsBFD :: { decodeIntraBFD_p(pl, scn, bfd) } (
         (decodedPktFact(scn) in s) && G_decodeIntraBFD(scn, bfd)) ==>
-    decodeIntraBFD_p(pl, scn, bfd) && P(get_decodeIntraBFD_t1(pl, scn, bfd), s union mset[Fact]{decodedIntraBFDFact(bfd)})
+    decodeIntraBFD_p(pl, scn, bfd) && P(get_decodeIntraBFD_t1(pl, scn, bfd), U(s, mset[Fact]{decodedPktFact(scn)}, mset[Fact]{decodedIntraBFDFact(bfd)}))
 }
 
 pred P_decodeInterBFD(pl Place, ghost s mset[Fact]) {
     forall scn AbsSCION, bfd AbsBFD :: { decodeInterBFD_p(pl, scn, bfd) } (
         (decodedPktFact(scn) in s) && G_decodeInterBFD(scn, bfd)) ==>
-    decodeInterBFD_p(pl, scn, bfd) && P(get_decodeInterBFD_t1(pl, scn, bfd), s union mset[Fact]{decodedInterBFDFact(bfd)})
+    decodeInterBFD_p(pl, scn, bfd) && P(get_decodeInterBFD_t1(pl, scn, bfd), U(s, mset[Fact]{decodedPktFact(scn)}, mset[Fact]{decodedInterBFDFact(bfd)}))
 }
 pred P_sendIntraBFD(pl Place, ghost s mset[Fact]) {
     forall bfd AbsBFD :: { sendIntraBFD_p(pl, bfd) } (
         (decodedIntraBFDFact(bfd) in s)) ==>
-    sendIntraBFD_p(pl, bfd) && P(get_sendIntraBFD_t1(pl, bfd), s)
+    sendIntraBFD_p(pl, bfd) && P(get_sendIntraBFD_t1(pl, bfd), s setminus mset[Fact]{decodedIntraBFDFact(bfd)})
 }
 
 pred P_sendInterBFD(pl Place, ghost s mset[Fact]) {
     forall bfd AbsBFD :: { sendInterBFD_p(pl, bfd) } (
         (decodedInterBFDFact(bfd) in s)) ==>
-    sendInterBFD_p(pl, bfd) && P(get_sendInterBFD_t1(pl, bfd), s)
+    sendInterBFD_p(pl, bfd) && P(get_sendInterBFD_t1(pl, bfd), s setminus mset[Fact]{decodedInterBFDFact(bfd)} )
 }
 
 pred P_processOHP(pl Place, ghost s mset[Fact]) {
     forall scn AbsSCION, pr AbsProcessResult, rc ResultCase, ia addr.IA, egressIDs dict[uint16]AbsConn, ic AbsConn :: { processOHP_p(pl, scn, pr, rc, ia, egressIDs, ic) } (
         (decodedPktFact(scn) in s) && (localIAFact(ia) in s) && (internalConnFact(ic) in s) && 
         (supportedEgressIDsFact(egressIDs) in s) && G_processOHP(scn, pr, rc, s, ia, egressIDs, ic)) ==>
-    processOHP_p(pl, scn, pr, rc, ia, egressIDs, ic) && P(get_processOHP_t1(pl, scn, pr, rc, ia, egressIDs, ic), s union mset[Fact]{processedPktFact(pr)})
+    processOHP_p(pl, scn, pr, rc, ia, egressIDs, ic) && P(get_processOHP_t1(pl, scn, pr, rc, ia, egressIDs, ic), U(s, mset[Fact]{decodedPktFact(scn)}, mset[Fact]{processedPktFact(pr)}))
 }
 
 pred P_processSCION(pl Place, ghost s mset[Fact]) {
     forall scn AbsSCION, pr AbsProcessResult, rc ResultCase, ia addr.IA, egressIDs dict[uint16]AbsConn, ic AbsConn :: { processSCION_p(pl, scn, pr, rc, ia, egressIDs, ic) } (
         (decodedPktFact(scn) in s) && (localIAFact(ia) in s) && (internalConnFact(ic) in s) && 
         (supportedEgressIDsFact(egressIDs) in s) && G_processSCION(scn, pr, rc, s, ia, egressIDs, ic)) ==>
-    processSCION_p(pl, scn, pr, rc, ia, egressIDs, ic) && P(get_processSCION_t1(pl, scn, pr, rc, ia, egressIDs, ic), s union mset[Fact]{processedPktFact(pr)})
+    processSCION_p(pl, scn, pr, rc, ia, egressIDs, ic) && P(get_processSCION_t1(pl, scn, pr, rc, ia, egressIDs, ic), U(s, mset[Fact]{decodedPktFact(scn)}, mset[Fact]{processedPktFact(pr)}))
 }
 
 pred P_packPkt(pl Place, ghost s mset[Fact]) {
     forall pr AbsProcessResult, m AbsMessage :: { packPkt_p(pl, pr, m) } (
         (processedPktFact(pr) in s) && G_packPkt(pr, m)) ==>
-    packPkt_p(pl, pr, m) && P(get_packPkt_t1(pl, pr, m), s union mset[Fact]{outFact(m)})
+    packPkt_p(pl, pr, m) && P(get_packPkt_t1(pl, pr, m), U(s, mset[Fact]{processedPktFact(pr)}, mset[Fact]{outFact(m)}))
 }
 
 pred P_writeBatch(pl Place, ghost s mset[Fact]) {
-    forall m AbsMessage :: (outFact(m) # s) > 0 ==> writeBatch_p(pl, m) && P(get_writeBatch_t1(pl, m), s)
+    forall m AbsMessage :: (outFact(m) # s) > 0 ==> writeBatch_p(pl, m) && P(get_writeBatch_t1(pl, m), s setminus mset[Fact]{outFact(m)})
 }
 
 // helper functions
