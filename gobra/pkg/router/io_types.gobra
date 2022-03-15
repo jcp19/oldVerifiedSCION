@@ -5,36 +5,90 @@ import (
     underlayconn "gobra/lib/underlay/conn"
     "gobra/lib/slayers"
     "gobra/dependencies/gopacket/layers"
+    "gobra/lib/addr"
+    "gobra/lib/slayers/path"
+    "gobra/lib/slayers/path/onehop"
 
     "gobra/verifyutils"
 )
 
 // abstract types
 
-type AbsBytes domain {}
-
 type AbsMessage domain {
-    func GetAbsMessagePayload(AbsMessage) AbsBytes
+    func GetAbsMessagePayload(AbsMessage) seq[byte]
 }
 
-type AbsProcessResult domain {}
+type AbsProcessResult domain {
+    func GetAbsProcessResultEgressID(AbsProcessResult) uint16
+    func GetAbsProcessResultBatchConn(AbsProcessResult) AbsConn
+    func GetAbsProcessResultOutPkt(AbsProcessResult) seq[byte]
+}
 
-type AbsSCION domain {}
+type AbsSCION domain {
+    func GetAbsSCIONRawPkt(AbsSCION) seq[byte]
+    func GetAbsSCIONRawPath(AbsSCION) AbsRawPath
+    func GetAbsSCIONOHPPath(AbsSCION) AbsOHPPath
+    func GetAbsSCIONDstIA(AbsSCION) addr.IA
+}
+
+type AbsRawPath domain {
+    func GetAbsRawPathCurrHopIdx(AbsRawPath) int
+    func GetAbsRawPathNumHops(AbsRawPath) int
+    func GetAbsRawPathCurrHop(AbsRawPath) AbsHop
+    func GetAbsRawPathCurrInfo(AbsRawPath) AbsInfo
+}
+
+type AbsOHPPath domain {
+    func GetAbsOHPPathFirstHop(AbsOHPPath) AbsHop
+    func GetAbsOHPPathSecondHop(AbsOHPPath) AbsHop
+}
+
+type AbsHop domain {
+    func GetAbsHopConsEgress(AbsHop) uint16
+    func GetAbsHopConsIngress(AbsHop) uint16
+}
+
+type AbsInfo domain {
+    func GetAbsInfoConsDir(AbsInfo) bool
+}
+
+type AbsConn domain {}
 
 type AbsBFD domain {}
+
+// other types
+
+// This type represents the result cases for the processSCION and processOHP methods.
+// ErrorCase: an error occured during processing, packet is dropped or SCMP packet is sent back to sender.
+// Inbound: the packet is destined to the AS of the border router.
+// Transit: the border router forwards to packet to the next AS.
+// TransitFromOtherBR: the packet needs to be forwarded by another border router.
+type ResultCase uint8
+
+const (
+    ErrorCase ResultCase = 0
+	Inbound ResultCase = 1
+	Transit ResultCase = 2
+	TransitFromOtherBR ResultCase = 3
+)
 
 // abstraction functions
 
 ghost
 requires forall i int :: { b[i] } 0 <= i && i < len(b) ==> acc(&b[i], _)
 decreases _
-pure func ToAbsBytes(b []byte) AbsBytes
+pure func ToAbsBytes(b []byte) seq[byte]
+
+ghost
+requires acc(verifyutils.BytesAcc(b), _)
+decreases _
+pure func ToAbsBytes2(b []byte) (res seq[byte])
 
 ghost
 requires msg.Mem()
 ensures res == unfolding msg.Mem() in ToAbsBytes(((msg.Buffers)[0])[0:(msg.N)])
 decreases _
-pure func MessageToAbsBytesBounded(msg *ipv4.Message) (res AbsBytes)
+pure func MessageToAbsBytesBounded(msg *ipv4.Message) (res seq[byte])
 
 ghost
 requires acc(m.Mem(), _)
@@ -66,5 +120,30 @@ requires 0 <= pkts && pkts <= len(msgs)
 requires msgs.Mem()
 ensures len(res) == pkts
 ensures unfolding msgs.Mem() in (forall i int :: 0 <= i && i < pkts ==> res[i] == ToAbsMessage(&msgs[i]))
+ensures forall i, j int :: 0 <= i && i < pkts && 0 <= j && j < pkts ==> (i != j ==> res[i] != res[j])
 decreases _
 pure func ToAbsMessages(msgs underlayconn.Messages, pkts int) (res seq[AbsMessage])
+
+ghost
+requires acc(path.HopFieldInv(hop), _)
+decreases _
+pure func ToAbsHop(hop *path.HopField) AbsHop
+
+ghost
+requires acc(bc.Mem(), _)
+decreases _
+pure func ToAbsConn(bc BatchConn) AbsConn
+
+ghost
+requires acc(p.Mem(), _)
+decreases _
+pure func ToAbsOHPPath(p *onehop.Path) AbsOHPPath
+
+// lemmas
+ghost
+requires acc(verifyutils.BytesAcc(b), 1/1000)
+requires absBytes == unfolding acc(verifyutils.BytesAcc(b), _) in ToAbsBytes(b)
+ensures acc(verifyutils.BytesAcc(b), 1/1000)
+ensures absBytes == ToAbsBytes2(b)
+decreases _
+func relateByteAccess(b []byte, absBytes seq[byte])

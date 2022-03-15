@@ -1,6 +1,22 @@
 package router
 
+import (
+    "gobra/lib/addr"
+)
+
 type Fact domain {
+
+    // local IA of the border router
+    func localIAFact(addr.IA) Fact
+    func getLocalIAFact(Fact) addr.IA
+
+    // supported Egress IDs of the border router
+    func supportedEgressIDsFact(dict[uint16]AbsConn) Fact
+    func getSupportedEgressIDs(Fact) dict[uint16]AbsConn
+
+    // internal BatchConn interface of the border router
+    func internalConnFact(AbsConn) Fact
+    func getInternalConnFact(Fact) AbsConn
 
     // each fact has a unique 'type':
     func getType(Fact) int
@@ -57,6 +73,21 @@ type Fact domain {
     // outFact injective
     axiom {
         forall t AbsMessage :: { outFact(t) } getOut(outFact(t)) == t && getType(outFact(t)) == 7
+    }
+
+    // localIAFact injective
+    axiom {
+        forall ia addr.IA :: { localIAFact(ia) } getLocalIAFact(localIAFact(ia)) == ia && getType(localIAFact(ia)) == 8
+    }
+
+    // supportedEgressIDs injective
+    axiom {
+        forall cons dict[uint16]AbsConn :: { supportedEgressIDsFact(cons) } getSupportedEgressIDs(supportedEgressIDsFact(cons)) == cons && getType(supportedEgressIDsFact(cons)) == 9
+    }
+
+    // internalConn injective
+    axiom {
+        forall conn AbsConn :: { internalConnFact(conn) } getInternalConnFact(internalConnFact(conn)) == conn && getType(internalConnFact(conn)) == 10
     }
 }
 
