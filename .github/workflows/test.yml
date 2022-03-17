@@ -23,4 +23,5 @@ jobs:
           packageLocation: gobra
           globalTimeout: 13h
           packageTimeout: 10h
+          chop: 10
           
