@@ -15,12 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout VerifiedSCION
-        uses: actions/checkout@v2
-        
+        uses: actions/checkout@v2   
       - name: Verify all Gobra files
         uses: jogasser/gobra-action@main
         with:
           packageLocation: gobra
           globalTimeout: 13h
           packageTimeout: 10h
+          caching: '1'
+      - name: Upload cache
+        uses: actions/upload-artifact@v2
+        with:
+          name: cache
+          path: ${{ runner.workspace }}/.gobra/cache.json
           
