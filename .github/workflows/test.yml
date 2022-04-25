@@ -26,7 +26,7 @@ jobs:
       - name: Verify the specified files
         uses: viperproject/gobra-action@main
         with:
-          packageLocation: gobra
+          projectLocation: gobra
           globalTimeout: 5h
           packageTimeout: 2h
           viperBackend: VSWITHSILICON
