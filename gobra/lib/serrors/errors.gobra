@@ -77,7 +77,6 @@ func (e basicError) As(as interface{}) bool // {
 //	return false
 //}
 
-
 decreases
 func (e basicError) Unwrap() error {
 	return e.cause
@@ -162,7 +161,7 @@ func WrapStr(msg string, cause error, logCtx ...interface{}) (res error) {
 }
 
 // New creates a new error with the given message and context.
-ensures res != nil
+ensures isComparable(res) && res != nil
 decreases 
 func New(msg string, logCtx ...interface{}) (res error) {
 	if len(logCtx) == 0 {
@@ -191,6 +190,8 @@ func (e List) ToError() error {
 // errList is the internal error interface implementation of error List.
 type errList []error
 
+// (joao) Trusted
+// preserves forall i int :: 0 <= i && i < len(e) ==> acc(&e[i], 1/10000)
 decreases _
 func (e errList) Error() string // {
 //	return fmtErrors(e)

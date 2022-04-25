@@ -42,22 +42,64 @@ type Metrics struct {
 
 pred (m *Metrics) Mem() {
 	acc(m) &&
-	m.InputBytesTotal.Mem() &&
-	m.OutputBytesTotal.Mem() &&
-	m.InputPacketsTotal.Mem() &&
-	m.OutputPacketsTotal.Mem() &&
-	m.DroppedPacketsTotal.Mem() &&
-	m.InterfaceUp.Mem() &&
-	m.BFDInterfaceStateChanges.Mem() &&
-	m.BFDPacketsSent.Mem() &&
-	m.BFDPacketsReceived.Mem() &&
-	m.ServiceInstanceCount.Mem() &&
-	m.ServiceInstanceChanges.Mem() &&
-	m.SiblingReachable.Mem() &&
-	m.SiblingBFDPacketsSent.Mem() &&
-	m.SiblingBFDPacketsReceived.Mem() &&
-	m.SiblingBFDStateChanges.Mem()
+	acc(m.InputBytesTotal.Mem(), _) &&
+	acc(m.OutputBytesTotal.Mem(), _) &&
+	acc(m.InputPacketsTotal.Mem(), _) &&
+	acc(m.OutputPacketsTotal.Mem(), _) &&
+	acc(m.DroppedPacketsTotal.Mem(), _) &&
+	acc(m.InterfaceUp.Mem(), _) &&
+	acc(m.BFDInterfaceStateChanges.Mem(), _) &&
+	acc(m.BFDPacketsSent.Mem(), _) &&
+	acc(m.BFDPacketsReceived.Mem(), _) &&
+	acc(m.ServiceInstanceCount.Mem(), _) &&
+	acc(m.ServiceInstanceChanges.Mem(), _) &&
+	acc(m.SiblingReachable.Mem(), _) &&
+	acc(m.SiblingBFDPacketsSent.Mem(), _) &&
+	acc(m.SiblingBFDPacketsReceived.Mem(), _) &&
+	acc(m.SiblingBFDStateChanges.Mem(), _)
 }
+
+// (tlino) added getters to simplify verification
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetInputBytesTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.InputBytesTotal
+}
+
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetOutputBytesTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.OutputBytesTotal
+}
+
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetInputPacketsTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.InputPacketsTotal
+}
+
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetOutputPacketsTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.OutputPacketsTotal
+}
+
+preserves acc(m.Mem(), _)
+ensures acc(res.Mem(), _)
+decreases
+func (m *Metrics) GetDroppedPacketsTotal() (res *prometheus.CounterVec) {
+	unfold acc(m.Mem(), _)
+	res = m.DroppedPacketsTotal
+}
+// (tlino) end of added getters to simplify verification
 
 // NewMetrics initializes the metrics for the Border Router, and registers them
 // with the default registry.

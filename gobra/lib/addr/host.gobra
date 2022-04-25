@@ -477,6 +477,7 @@ func (h HostSVC) Multicast() HostSVC {
 
 decreases
 ensures res.Mem()
+decreases
 func (h HostSVC) Copy() (res HostAddr) {
 	fold h.Mem()
 	return h
@@ -490,7 +491,7 @@ func (h HostSVC) Equal(o HostAddr) bool {
 
 // (joao) Trusted function
 // (joao) no support for rune literals
-decreases
+decreases _
 func (h HostSVC) String() string // {
 //	name := h.BaseString()
 //	cast := 'A'

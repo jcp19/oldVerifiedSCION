@@ -70,9 +70,49 @@ type HopField struct {
 
 pred HopFieldInv(h *HopField) {
 	acc(h) &&
+	h.ConsIngress >= 0 &&
+	h.ConsEgress >= 0 &&
 	len(h.Mac) == MacLen &&
 	forall i int :: 0 <= i &&
 	i < len(h.Mac) ==> acc(&(h.Mac)[i])
+}
+
+// (tlino) added getters to simplify verification
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.IngressRouterAlert
+decreases
+pure func (h *HopField) GetIngressRouterAlert() (res bool) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.IngressRouterAlert
+}
+
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.EgressRouterAlert
+decreases
+pure func (h *HopField) GetEgressRouterAlert() (res bool) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.EgressRouterAlert
+}
+
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.ExpTime
+decreases
+pure func (h *HopField) GetExpTime() (res uint8) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.ExpTime
+}
+
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.ConsIngress
+ensures res >= 0
+decreases
+pure func (h *HopField) GetConsIngress() (res uint16) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.ConsIngress
+}
+
+requires acc(HopFieldInv(h), 1/1000)
+ensures res == unfolding acc(HopFieldInv(h), 1/1000) in h.ConsEgress
+ensures res >= 0
+decreases
+pure func (h *HopField) GetConsEgress() (res uint16) {
+	return unfolding acc(HopFieldInv(h), 1/1000) in h.ConsEgress
 }
 
 // (joao) verifies, as expected
@@ -100,8 +140,10 @@ func (h *HopField) DecodeFromBytes(raw []byte) (res error) {
 
 	assert &raw[2:4][0] == &raw[2] && &raw[2:4][1] == &raw[3]
 	h.ConsIngress = binary.BigEndian.Uint16(raw[2:4])
+	assume h.ConsIngress >= 0
 	assert &raw[4:6][0] == &raw[4] && &raw[4:6][1] == &raw[5]
 	h.ConsEgress = binary.BigEndian.Uint16(raw[4:6])
+	assume h.ConsEgress >= 0
 
 	// (joao) introduced temporary variable tmp to simplify intermediate assertions
 	assert len(raw[6:6+MacLen]) == MacLen

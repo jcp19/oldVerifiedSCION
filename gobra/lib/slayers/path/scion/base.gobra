@@ -102,16 +102,18 @@ func (s *Base) DecodeFromBytes(data []byte) (res error) {
 
 // IncPath increases the currHF index and currINF index if appropriate.
 requires BaseInvariant(s)
-ensures err == nil ==> BaseInvariant(s)
-ensures err != nil ==> acc(s)
+ensures BaseInvariant(s)
+ensures s.Len() == old(s.Len())
 decreases
 func (s *Base) IncPath() (err error) {
 	unfold BaseInvariant(s)
 	if s.NumINF == 0 {
+		fold BaseInvariant(s)
 		return serrors.New("empty path cannot be increased")
 	}
 	if int(s.PathMeta.CurrHF) >= s.NumHops-1 {
 		s.PathMeta.CurrHF = uint8(s.NumHops - 1)
+		fold BaseInvariant(s)
 		return serrors.New("path already at end")
 	}
 	s.PathMeta.CurrHF++
@@ -151,6 +153,7 @@ pure func getNumHops(s *Base) (res int) {
 
 // (joao) introduced to reduce verification time
 requires acc(BaseInvariant(s), _)
+ensures res >= 0
 decreases
 pure func getCurrHF(s *Base) (res uint8) {
 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
@@ -160,15 +163,7 @@ pure func getCurrHF(s *Base) (res uint8) {
 requires acc(BaseInvariant(s), _)
 ensures res >= 0
 decreases
-pure func GetCurrHF(s *Base) (res uint8) {
-	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrHF
-}
-
-// (tlino) introduced to reduce verification time
-requires acc(BaseInvariant(s), _)
-ensures res >= 0
-decreases
-pure func GetCurrINF(s *Base) (res uint8) {
+pure func getCurrINF(s *Base) (res uint8) {
 	return unfolding acc(BaseInvariant(s), _) in s.PathMeta.CurrINF
 }
 

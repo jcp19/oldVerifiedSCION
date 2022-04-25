@@ -19,6 +19,7 @@ type PacketBuilder interface {
 
 	requires Mem()
 	ensures Mem()
+	decreases
 	SetTruncated()
 
 	// (lhalm) done with DecodeFeedback methods

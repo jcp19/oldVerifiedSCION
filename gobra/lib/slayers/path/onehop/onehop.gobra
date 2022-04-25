@@ -45,6 +45,126 @@ pred (o *Path) Mem() {
 	path.HopFieldInv(&o.SecondHop)
 }
 
+// (tlino) add getter to simplifiy verification
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetPeer() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.Info.Peer
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetConsDir() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.Info.ConsDir
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSegID() uint16 {
+	return unfolding acc(p.Mem(), 1/1000) in p.Info.SegID
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetTimestamp() uint32 {
+	return unfolding acc(p.Mem(), 1/1000) in p.Info.Timestamp
+}
+
+requires acc(p.Mem(), 1/1000)
+ensures res >= 0
+decreases
+pure func (p *Path) GetFristHopConsEgress() (res uint16) {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetConsEgress()
+}
+
+requires acc(p.Mem(), 1/1000)
+ensures res >= 0
+decreases
+pure func (p *Path) GetFristHopConsIngress() (res uint16) {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetConsIngress()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetFristHopConsEgressRouterAlert() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetEgressRouterAlert()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetFristHopConsIngressRouterAlert() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetIngressRouterAlert()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetFirstHopExpTime() uint8 {
+	return unfolding acc(p.Mem(), 1/1000) in p.FirstHop.GetExpTime()
+}
+
+requires acc(p.Mem(), 1/1000)
+ensures res >= 0
+decreases
+pure func (p *Path) GetSecondHopConsEgress() (res uint16) {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetConsEgress()
+}
+
+requires acc(p.Mem(), 1/1000)
+ensures res >= 0
+decreases
+pure func (p *Path) GetSecondHopConsIngress() (res uint16) {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetConsIngress()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSecondHopConsEgressRouterAlert() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetEgressRouterAlert()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSecondHopConsIngressRouterAlert() bool {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetIngressRouterAlert()
+}
+
+requires acc(p.Mem(), 1/1000)
+decreases
+pure func (p *Path) GetSecondHopExpTime() uint8 {
+	return unfolding acc(p.Mem(), 1/1000) in p.SecondHop.GetExpTime()
+}
+// (tlino) end of getters
+
+// (tlino) add setters and update methods to simplify verification
+requires p.Mem()
+ensures p.Mem()
+decreases
+func (p *Path) InfoUpdateSegID() {
+	unfold p.Mem()
+	unfold path.HopFieldInv(&p.FirstHop)
+	mac := p.FirstHop.Mac
+	p.Info.UpdateSegID(mac)
+	fold path.HopFieldInv(&p.FirstHop)
+	fold p.Mem()
+}
+
+// (tlino) Gobra cannot yet deduce that uints are always non-negative
+// (tlino) Thus we need the preconditions for hop.ConsIngress and hop.ConsEgress
+requires hop.ConsIngress >= 0
+requires hop.ConsEgress >= 0
+requires len(hop.Mac) == path.MacLen
+requires forall i int :: 0 <= i && i < len(hop.Mac) ==> acc(&(hop.Mac)[i])
+preserves p.Mem()
+decreases
+func (p *Path) SetSecondHop(hop path.HopField) {
+	unfold p.Mem()
+	unfold path.HopFieldInv(&p.SecondHop)
+	p.SecondHop = hop
+	fold path.HopFieldInv(&p.SecondHop)
+	fold p.Mem()
+}
+// (tlino) end of setters and update methods
+
 //func satisfiableOneHopInv() {
 //	o := &Path{}
 //

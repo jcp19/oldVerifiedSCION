@@ -295,6 +295,8 @@ type SCION struct {
 	RawPkt []byte
 }
 
+// (tlino) s.RawSrcAddr, s.RawDstAddr, s.Path, and s.EmbeddedBaseLayer.Payload contain subslices of s.RawPkt.
+// (tlino) However, these subslices do not overlap. Thus, it is fine to use access permission to these fields
 pred (s *SCION) Mem() {
 	acc(s) &&
 	verifyutils.BytesAcc(s.RawSrcAddr) &&
@@ -307,7 +309,8 @@ pred (s *SCION) Mem() {
 	s.TrafficClass >= 0 &&
 	s.FlowID >= 0 &&
 	s.HdrLen >= 0 &&
-	s.PayloadLen >= 0
+	s.PayloadLen >= 0 &&
+	verifyutils.BytesAcc(s.EmbeddedBaseLayer.Payload)
 	// TODO:
 	// - Relation between PathType and Path
 }
@@ -316,9 +319,17 @@ ghost
 requires s.Mem()
 requires b == s.getRawPkt()
 ensures verifyutils.BytesAcc(b)
-ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()))
+ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt() && s.getRawScionPath() == old(s.getRawScionPath()) && s.getOHPPath() == old(s.getOHPPath()))
 decreases
 func (s *SCION) getRawPktAcc(b []byte)
+
+ghost
+requires s.Mem()
+requires b == s.getRawPkt()
+ensures verifyutils.BytesAcc(b)
+ensures verifyutils.BytesAcc(b) --* (s.Mem() && b == s.getRawPkt())
+decreases
+func(s *SCION) getRawPktAccWithoutPreservePath(b []byte)
 
 ghost 
 requires s.Mem()
@@ -330,6 +341,21 @@ decreases
 func (s *SCION) getPathAcc(p *scion.Raw, b []byte) {
 	unfold s.Mem()
 	package p.Mem() --* (s.Mem() && p == s.getRawScionPath() && b == s.getRawPkt()) {
+		fold s.Mem()
+	}
+}
+
+ghost
+requires s.Mem()
+requires pld == s.LayerPayload()
+requires p != nil && p == s.getRawScionPath()
+requires r == s.getRawPkt()
+ensures verifyutils.BytesAcc(pld)
+ensures verifyutils.BytesAcc(pld) --* (s.Mem() && pld == s.LayerPayload() && r == s.getRawPkt() && p == s.getRawScionPath())
+decreases
+func (s *SCION) getLayerPayloadAcc(pld []byte, p *scion.Raw, r []byte) {
+	unfold s.Mem()
+	package verifyutils.BytesAcc(pld) --* (s.Mem() && pld == s.LayerPayload() && r == s.getRawPkt() && p == s.getRawScionPath()) {
 		fold s.Mem()
 	}
 }
@@ -522,6 +548,15 @@ decreases _
 func (s *SCION) getRawScionPath() (res *scion.Raw) {
 	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *scion.Raw ? (s.Path).(*scion.Raw) : (*scion.Raw)(nil)
 }
+
+ghost
+pure
+requires acc(s.Mem(), _)
+ensures res == unfolding acc(s.Mem(), _) in typeOf(s.Path) == *onehop.Path ? (s.Path).(*onehop.Path) : (*onehop.Path)(nil)
+decreases _
+func (s *SCION) getOHPPath() (res *onehop.Path) {
+	return unfolding acc(s.Mem(), _) in typeOf(s.Path) == *onehop.Path ? (s.Path).(*onehop.Path) : (*onehop.Path)(nil)
+}
 /** End of Getters **/
 
 ensures res == (int(addrLen) + 1) * LineLen
@@ -560,8 +595,9 @@ func (s *SCION) NextLayerType() gopacket.LayerType {
 //        This is useful if one only wants to compute the length of the returned slice.
 pure
 requires acc(s.Mem(), 1/10000)
+ensures res == unfolding acc(s.Mem(), 1/10000) in (s.EmbeddedBaseLayer).Payload
 decreases
-func (s *SCION) LayerPayload() []byte {
+func (s *SCION) LayerPayload() (res []byte) {
 	// (joao) the field `Payload` is implemented in the embedded field `layers.BaseLayer`.
 	// (joao) embedded fields are broken.
 	// return s.Payload
@@ -586,7 +622,7 @@ pure func (s *SCION) getPathLen() (ret int) /* {
 // (joao) Partially Verified
 requires s.Mem() && b.Mem()
 ensures s.Mem() && b.Mem()
-ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath()) && (s.getOHPPath() == old(s.getOHPPath()))
 decreases
 func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (retErr error) {
 	scnLen := CmnHdrLen + s.AddrHdrLen() + s.getPathLen()
@@ -653,7 +689,7 @@ func (s *SCION) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeO
 
 preserves s.Mem()
 preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
-ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath()) && (s.getOHPPath() == old(s.getOHPPath()))
 decreases
 func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
 	unfold s.Mem()
@@ -669,10 +705,12 @@ func (s *SCION) outlinePathSerializeTo(buf []byte) error /*{
 // data, so care should be taken to copy it first should later modification of data be required
 // before the SCION layer is discarded.
 requires acc(s) && df.Mem()
-requires forall i int :: 0 <= i && i < len(data) ==> acc(&data[i])
-ensures  df.Mem()
-ensures  errRes == nil ==> s.Mem()
+requires verifyutils.BytesAcc(data)
+ensures df.Mem()
+ensures errRes == nil ==> s.Mem()
 ensures errRes == nil ==> s.getRawPkt() == data
+ensures errRes != nil ==> acc(s)
+ensures errRes != nil ==> verifyutils.BytesAcc(data)
 decreases
 func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes error) /* {
 	// Decode common header.
@@ -814,11 +852,15 @@ func (s *SCION) AddReadDstAddr(addr net.Addr)
 // the destination address.
 requires acc(s.Mem(), 1/200)
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadDstAddr(resAddr)
+ensures resErr != nil ==> acc(s.Mem(), 1/200)
 decreases
 func (s *SCION) DstAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
 	res, err := parseAddr(s.DstAddrType, s.DstAddrLen, s.RawDstAddr)
+	ghost if err != nil {
+		fold acc(s.Mem(), 1/200)
+	}
 	inhale err == nil ==> s.ReadDstAddr(res)
 	return res, err
 }
@@ -899,6 +941,7 @@ ensures addrLen != AddrLen4 && addrLen != AddrLen16 ==> resErr != nil
 ensures (addrLen == AddrLen4 && (addrType == T4Ip || addrType == T4Svc)) ==> resErr == nil
 ensures (addrLen == AddrLen16 && addrType == T16Ip) ==> resErr == nil
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200)
+ensures resErr != nil ==> acc(verifyutils.BytesAcc(raw), 1/200)
 decreases
 func parseAddr(addrType AddrType, addrLen AddrLen, raw []byte) (resAddr net.Addr, resErr error) {
 	switch addrLen {
@@ -983,7 +1026,7 @@ preserves forall i int :: 0 <= i && i < len(buf) ==> acc(&buf[i])
 decreases
 ensures len(buf) >= s.AddrHdrLen() ==> err == nil
 ensures len(buf) < s.AddrHdrLen()  ==> err != nil
-ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath()) && (s.getOHPPath() == old(s.getOHPPath()))
 func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 	if len(buf) < s.AddrHdrLen() {
 		return serrors.New("provided buffer is too small", "expected", s.AddrHdrLen(),
@@ -1027,7 +1070,7 @@ func (s *SCION) SerializeAddrHdr(buf []byte) (err error) {
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath()) && (s.getOHPPath() == old(s.getOHPPath()))
 decreases
 func copyRawDstAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate
@@ -1045,7 +1088,7 @@ func copyRawDstAddr(s *SCION, b []byte) /* {
 // (joao) function not present in the original code
 preserves acc(s.Mem(), 1/1000)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
-ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath())
+ensures (old(s.getRawPkt()) == s.getRawPkt()) && (old(s.getRawScionPath()) == s.getRawScionPath()) && (s.getOHPPath() == old(s.getOHPPath()))
 decreases
 func copyRawSrcAddr(s *SCION, b []byte) /* {
 	// (joao) without this assumption, verification does not terminate

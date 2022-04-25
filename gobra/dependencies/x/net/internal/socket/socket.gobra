@@ -5,17 +5,22 @@ import (
 	"gobra/verifyutils"
 )
 
-// (tlino) this predicate is tailored for the SCION code
+// (tlino) This predicate is tailored for the SCION code.
+// (tlino) This predicate is established right after initializing a *Message
 pred (m *Message) MemPartiallyInitialized() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&
 	acc(&(m.Buffers)[0]) &&
 	(forall k int :: 0 <= k && k < cap((m.Buffers)[0]) ==> acc(&(m.Buffers)[0][k])) &&
 	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
+	m.N == 0 &&
 	m.Addr.Mem()
 }
 
-// (tlino) this predicate is tailored for the SCION code
+// (tlino) This predicate is tailored for the SCION code
+// (tlino) This predicate is established for the message buffer.
+// (tlino) A valid buffer in the dataplane must have a capacity of verifyutils.BufSize.
+// (tlino) If this property does not hold, slice resizing operations may fail.
 pred (m *Message) Mem() {
 	acc(m) &&
 	(len(m.Buffers) == 1) &&
@@ -23,7 +28,20 @@ pred (m *Message) Mem() {
 	cap((m.Buffers)[0]) == verifyutils.BufSize &&
 	(forall k int :: 0 <= k && k < cap((m.Buffers)[0]) ==> acc(&(m.Buffers)[0][k])) &&
 	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
+	0 <= m.N && m.N <= verifyutils.BufSize &&
 	m.Addr.Mem()
+}
+
+// (tlino) This predicate is tailored for the SCION code.
+// (tlino) This predicate is established for every message sent by the SCION border router.
+pred (m *Message) MemSend() {
+	acc(m) &&
+	(len(m.Buffers) == 1) &&
+	acc(&(m.Buffers)[0]) &&
+	(((m.Buffers)[0] != nil) ==> ((forall k int :: 0 <= k && k < len((m.Buffers)[0]) ==> acc(&(m.Buffers)[0][k])))) &&
+	(forall i int :: 0 <= i && i < len(m.OOB) ==> acc(&(m.OOB)[i])) &&
+	(m.Addr != nil && m.WildcardAddressAcc ==> acc(m.Addr.Mem(), _)) &&
+	(m.Addr != nil && !m.WildcardAddressAcc ==> m.Addr.Mem())
 }
 
 // (tlino) added helper function
@@ -55,4 +73,9 @@ type Message struct {
 	N     int // # of bytes read or written from/to Buffers
 	NN    int // # of bytes read or written from/to OOB
 	Flags int // protocol-specific information on the received message
+
+	// ghost
+	// (tlino) We need to add this ghost variable, since when we write a Message,
+	// (tlino) the Addr.Mem() predicate has either a wildcard or a concrete permission amount.
+	WildcardAddressAcc bool
 }

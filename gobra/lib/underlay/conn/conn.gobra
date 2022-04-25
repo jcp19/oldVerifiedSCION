@@ -37,6 +37,8 @@ import (
 //	"github.com/scionproto/scion/go/lib/sockctrl"
 //	"github.com/scionproto/scion/go/lib/topology/underlay"
 	"gobra/lib/topology/underlay"
+
+	"gobra/verifyutils"
 )
 
 // ReceiveBufferSize is the default size, in bytes, of receive buffers for
@@ -54,12 +56,19 @@ const sizeOfRxqOvfl = 4 // Defined to be uint32
 // between ipv4.Message, ipv6.Message and socket.Message.
 type Messages []ipv4.Message
 
+// (tlino) This predicate is established right after initializing Messages 
 pred (m Messages) MemPartiallyInitialized() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemPartiallyInitialized()
 }
 
+// (tlino) This predicate is established for the Messages buffer.
 pred (m Messages) Mem() {
 	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).Mem()
+}
+
+// (tlino) This predicate is established for every message sent by the SCION border router.
+pred (m Messages) MemSend() {
+	forall i int :: 0 <= i && i < len(m) ==> (&m[i]).MemSend()
 }
 
 // Conn describes the API for an underlay socket with additional metadata on
@@ -822,6 +831,7 @@ func (m *ReadMeta) setSrc(a *net.UDPAddr, raddr *net.UDPAddr, ot underlay.Type) 
 requires n >= 0
 ensures msgs.MemPartiallyInitialized()
 ensures len(msgs) == n
+decreases _
 func NewReadMessages(n int) (msgs Messages) //{
 // 	m := make(Messages, n)
 // 	for i := range m {
@@ -849,6 +859,7 @@ func NewWriteMessages(n int) (msgs Messages) {
 
 	invariant 0 <= i && i <= len(m)
 	invariant forall j int :: i <= j && j < len(m) ==> acc(&m[j]) && (forall k int :: 0 <= k && k < len(m[j].OOB) ==> acc(&((m[j].OOB)[k])))
+	invariant forall j int :: i <= j && j < len(m) ==> m[j].N == 0
 	invariant forall j int :: 0 <= j && j < i ==> (&m[j]).MemPartiallyInitialized()
 	for i := 0; i < len(m); i++ {
 		// Allocate a single-element, to avoid allocations when setting the buffer.

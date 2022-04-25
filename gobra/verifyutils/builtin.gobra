@@ -10,11 +10,15 @@ func OutlineMemorySafeCopy(dst, src []byte) {
 
 // Produces unknown string, useful to model unsupported operations that produce strings without requiring
 // any permissions
-decreases
+decreases _
 func HavocString() string
 
 pred BytesAcc(b []byte) {
 	forall i int :: { b[i] } 0 <= i && i < len(b) ==> acc(&b[i])
+}
+
+pred BytesAccCap(b []byte) {
+	forall i int :: { b[i] } 0 <= i && i < cap(b) ==> acc(&b[i])
 }
 
 requires acc(BytesAcc(b), _)

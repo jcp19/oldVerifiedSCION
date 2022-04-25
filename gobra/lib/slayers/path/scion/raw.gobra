@@ -323,3 +323,55 @@ decreases
 pure func (r*Raw) Len() int {
 	return (&r.Base).Len()
 }
+
+// (tlino) added to speed up verification 
+requires acc(r.Mem(), 1/1000)
+ensures res >= 0
+decreases
+pure func (r *Raw) GetCurrINF() (res uint8) {
+	return unfolding acc(r.Mem(), 1/1000) in getCurrINF(&(r.Base))
+}
+
+// (tlino) added to speed up verification 
+requires acc(r.Mem(), 1/1000)
+ensures res >= 0
+decreases
+pure func (r *Raw) GetCurrHF() (res uint8) {
+	return unfolding acc(r.Mem(), 1/1000) in getCurrHF(&(r.Base))
+}
+
+// (tlino) added to speed up verification 
+requires acc(r.Mem(), 1/1000)
+ensures res >= 0
+decreases
+pure func (r *Raw) GetNumINF() (res int) {
+	return unfolding acc(r.Mem(), 1/1000) in getNumINF(&(r.Base))
+}
+
+// (tlino) added to speed up verification 
+requires acc(r.Mem(), 1/1000)
+ensures res >= 0
+decreases
+pure func (r *Raw) GetNumHops() (res int) {
+	return unfolding acc(r.Mem(), 1/1000) in getNumHops(&(r.Base))
+}
+
+// (tlino) added to speed up verification, this function delegates the IncPath call
+requires r.Mem()
+ensures r.Mem()
+decreases
+func (r *Raw) IncPath() (err error) {
+	unfold r.Mem()
+	err := r.Base.IncPath()
+	fold r.Mem()
+}
+
+// (tlino) added to speed up verification
+requires r.Mem()
+ensures r.Mem()
+decreases
+func (r *Raw) IsXover() (res bool) {
+	unfold r.Mem()
+	res = r.Base.IsXover()
+	fold r.Mem()
+}
