@@ -4,23 +4,36 @@
 #
 # Copyright (c) 2011-2020 ETH Zurich.
 
-name: test
+name: Verify the specified codebase
 
 on:
   push: # run this workflow on every push
-  # pull_request: # run this workflow on every pull_request
+  pull_request: # run this workflow on every pull_request
 
 jobs:
   setup-and-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout VerifiedSCION
+      - name: Checkout the VerifiedSCION repository
         uses: actions/checkout@v2
-        
-      - name: Verify all Gobra files
-        uses: jogasser/gobra-action@main
+      - name: Cache the verification results
+        uses: actions/cache@v3
+        env:
+          cache-name: gobra-cache
+        with:
+          path: ${{ runner.workspace }}/.gobra/cache.json
+          key: ${{ env.cache-name }}
+      - name: Verify the specified files
+        uses: viperproject/gobra-action@main
         with:
           packageLocation: gobra
-          globalTimeout: 13h
-          packageTimeout: 10h
-          
+          globalTimeout: 5h
+          packageTimeout: 2h
+          viperBackend: VSWITHSILICON
+          caching: '1'
+          # chop: 10 # avoid chopping for now, to avoid cache misses
+      - name: Upload the verification report
+        uses: actions/upload-artifact@v2
+        with:
+          name: verification_statistics
+          path: ${{ runner.workspace }}/.gobra/stats.json
