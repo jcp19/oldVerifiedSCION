@@ -31,7 +31,10 @@ jobs:
           packageTimeout: 2h
           viperBackend: VSWITHSILICON
           caching: '1'
-          # chop: 10 # avoid chopping for now, to avoid cache misses
+          # chopping is disabled for now to avoid cache misses.
+          # this should be tested in a separate PR to figure if it
+          # has an impact on verification times
+          # chop: 10
       - name: Upload the verification report
         uses: actions/upload-artifact@v2
         with:
