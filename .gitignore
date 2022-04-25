@@ -93,8 +93,12 @@ _build
 *.vpr
 *.internal
 *.unparsed
+gobra/tmp/*
 
 # Other
 #########################
 *.log
 *.txt
+project/
+target/
+tmp/

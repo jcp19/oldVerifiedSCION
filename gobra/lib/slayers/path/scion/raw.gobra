@@ -179,7 +179,6 @@ func (s *Raw) GetInfoField(idx int) (retInfo *path.InfoField, retErr error) {
 	fold acc(s.Mem(), 1/100)
 	return info, nil
 }
-
 // GetCurrentInfoField is a convenience method that returns the current hop field pointed to by the
 // CurrINF index in the path meta header.
 preserves acc(s.Mem(), 1/100)

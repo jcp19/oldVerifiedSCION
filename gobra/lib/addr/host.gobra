@@ -475,6 +475,7 @@ func (h HostSVC) Multicast() HostSVC {
 	return h | HostSVC(SVCMcast)
 }
 
+decreases
 ensures res.Mem()
 decreases
 func (h HostSVC) Copy() (res HostAddr) {

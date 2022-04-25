@@ -39,6 +39,7 @@ requires acc(t)
 requires forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
 ensures  acc(t)
 ensures  forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+decreases
 func (t *UnixTime) UnmarshalJSON(b []byte) error {
 	var seconds uint64
 	// Only allow up to 63-bit to avoid wrap around.
@@ -52,7 +53,9 @@ func (t *UnixTime) UnmarshalJSON(b []byte) error {
 
 // MarshalJSON marshals the time as seconds since unix epoch. This must be a
 // value receiver.
-func (t UnixTime) MarshalJSON() ([]byte, error) {
+decreases
+ensures forall i int :: 0 <= i && i < len(res) ==> acc(&res[i])
+func (t UnixTime) MarshalJSON() (res []byte, error) {
 	// return []byte(strconv.FormatUint(uint64(t.Unix()), 10)), nil
     time := uint64(t.Time.Unix())
     assume time >= 0 // (joao) obtained from the type system
@@ -60,6 +63,7 @@ func (t UnixTime) MarshalJSON() ([]byte, error) {
 }
 
 preserves acc(t, 1/1000)
+decreases
 func (t *UnixTime) String() string {
 	return TimeToCompact(t.Time)
 }
@@ -77,19 +81,21 @@ func TimeToSecs(t time.Time) uint32 {
 }
 
 // TimeToString formats the time as a string.
-decreases
+decreases _
 func TimeToString(t time.Time) string /* {
 	return (t.UTC()).Format(common.TimeFmt)
 }
 */
 
 // SecsToCompact creates a compact string representation from the seconds.
+decreases
 func SecsToCompact(t uint32) string {
 	return TimeToCompact(SecsToTime(t))
 }
 
 // TimeToCompact formats the time as a compat string, e.g. it discards the
 // milliseconds parts if the time only has second resolution.
+decreases
 func TimeToCompact(t time.Time) string {
 	if t.Nanosecond() == 0 {
 		// (joao) TimeFmtSecs not supported yet

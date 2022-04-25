@@ -54,6 +54,7 @@ pred (s *services) Mem() {
 }
 
 ensures res.Mem()
+decreases
 func newServices() (res *services) {
 	// (joao) previously:
 	// return &services{m: make(map[addr.HostSVC][]*net.UDPAddr)}
@@ -167,6 +168,7 @@ func (s *services) Any(svc addr.HostSVC) (addr *net.UDPAddr, ok bool) {
 // (joao) function introduced because model mrand.Intn is not supported
 requires n > 0
 ensures  0 <= r && r < n
+decreases _
 func generateRand(n int) (r int)
 
 preserves acc(a.Mem(), _) && acc(validMapValue(addrs), 1/2)
@@ -174,6 +176,7 @@ ensures   resBool ==> resInt >= 0 && len(addrs) > 0 && 0 <= resInt && resInt < l
 ensures   !resBool ==> resInt == -1
 // (joao) this postcondition can be made stronger if Gobra allowed IP.Equal to be a pure function
 ensures  !resBool ==> unfolding acc(validMapValue(addrs), 1/2) in (forall i int :: 0 <= i && i < len(addrs) ==> addrs[i] != a)
+decreases _
 func (s *services) index(a *net.UDPAddr, addrs []*net.UDPAddr) (resInt int, resBool bool) /* {
 	// (joao) range statements not supported yet
 	for i, o := range addrs {

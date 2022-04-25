@@ -9,10 +9,12 @@ type Counter interface {
     requires forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
     ensures  Mem()
     ensures  forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
+    decreases
 	With(labelValues ...string) (res Counter)
 
     requires Mem()
     ensures  Mem()
+    decreases
 	Add(delta float64)
 }
 
@@ -25,14 +27,17 @@ type Gauge interface {
     requires forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
     ensures  Mem()
     ensures  forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
+    decreases
 	With(labelValues ...string) Gauge
 
     requires Mem()
     ensures  Mem()
+    decreases
 	Set(value float64)
 
     requires Mem()
     ensures  Mem()
+    decreases
 	Add(delta float64)
 }
 
@@ -47,9 +52,11 @@ type Histogram interface {
     requires forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
     ensures  Mem()
     ensures  forall i int :: 0 <= i && i < len(labelValues) ==> acc(&labelValues[i], 1/1000)
+    decreases
 	With(labelValues ...string) Histogram
 
     requires Mem()
     ensures  Mem()
+    decreases
 	Observe(value float64)
 }

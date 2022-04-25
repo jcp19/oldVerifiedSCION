@@ -51,6 +51,7 @@ const (
 type ISD uint16
 
 // ISDFromString parses an ISD from a decimal string.
+decreases
 func ISDFromString(s string) (ISD, error) {
 	isd, err := strconv.ParseUint(s, 10, ISDBits)
 	if err != nil {
@@ -65,6 +66,7 @@ func ISDFromString(s string) (ISD, error) {
 
 // ISDFromFileFmt parses an ISD from a file-format string. If prefix is true,
 // an 'ISD' prefix is expected and stripped before parsing.
+decreases
 func ISDFromFileFmt(s string, prefix bool) (ISD, error) {
 	if prefix {
 		if !strings.HasPrefix(s, ISDFmtPrefix) {
@@ -92,6 +94,7 @@ func (isd ISD) String() string {
 type AS uint64
 
 ghost
+decreases
 pure func validAS(s string) bool
 
 // ASFromString parses an AS from a decimal (in the case of the 32bit BGP AS
@@ -99,6 +102,7 @@ pure func validAS(s string) bool
 // string.
 ensures validAS(s) ==> err == nil
 ensures !validAS(s) ==> err != nil
+decreases
 func ASFromString(s string) (as AS, err error) {
 	return asParse(s, ":")
 }
@@ -106,6 +110,7 @@ func ASFromString(s string) (as AS, err error) {
 // ASFromFileFmt parses an AS from a file-format string. This is the same
 // format as ASFromString expects, with ':' replaced by '_'. If prefix is true,
 // an 'AS' prefix is expected and stripped before parsing.
+decreases
 func ASFromFileFmt(s string, prefix bool) (AS, error) {
 	if prefix {
 		if !strings.HasPrefix(s, ASFmtPrefix) {
@@ -120,6 +125,7 @@ func ASFromFileFmt(s string, prefix bool) (AS, error) {
 
 ensures validAS(s) ==> resErr == nil
 ensures !validAS(s) ==> resErr != nil
+decreases
 func asParse(s string, sep string) (resAS AS, resErr error) {
 	if strings.Index(s, sep) == -1 {
 		// Must be a BGP AS, parse as 32-bit decimal number
@@ -146,6 +152,7 @@ func asParse(s string, sep string) (resAS AS, resErr error) {
 
 	invariant 0 <= i && i <= asParts
 	invariant forall j int :: 0 <= j && j < len(parts) ==> acc(&parts[j])
+	decreases asParts - i
 	for i := 0; i < asParts; i++ {
 		// (joao) leads to error, types not comptabile with >>. Currently rewritten.
 		// as <<= asPartBits
@@ -178,6 +185,7 @@ func (as AS) FileFmt() string //{
 //	return as.fmt('_')
 //}
 
+decreases
 func (as AS) fmt(sep byte) string {
 	if !as.inRange() {
 		// (joao) fmt not currently supported
@@ -198,6 +206,7 @@ func (as AS) fmt(sep byte) string {
 	b := make([]byte, 0, maxLen)
 
 	invariant forall i int :: 0 <= i && i < len(b) ==> acc(&b[i])
+	decreases asParts - i
 	for i := 0; i < asParts; i++ {
 		if i > 0 {
 			b = append(perm(1/2), b, sep)
@@ -219,6 +228,7 @@ func (as AS) inRange() bool {
 	return as <= MaxAS
 }
 
+decreases
 func (as AS) MarshalText() ([]byte, error) {
 	if !as.inRange() {
 		// (joao) added cast to common.ErrMsg around string, otherwise leads to type error
@@ -233,6 +243,7 @@ requires forall i int :: 0 <= i && i < len(text) ==> acc(&text[i])
 ensures acc(as)
 ensures forall i int :: 0 <= i && i < len(text) ==> acc(&text[i])
 ensures !validAS(string(text)) ==> *as == old(*as)
+decreases
 func (as *AS) UnmarshalText(text []byte) error {
 	newAS, err := ASFromString(string(text))
 	if err != nil {
@@ -262,6 +273,7 @@ func IAFromRaw(b common.RawBytes) (ret IA) {
 }
 
 // IAFromString parses an IA from a string of the format 'ia-as'.
+decreases
 func IAFromString(s string) (IA, error) {
 	parts := strings.Split(s, "-")
 	if len(parts) != 2 {
@@ -281,6 +293,7 @@ func IAFromString(s string) (IA, error) {
 }
 
 // IAFromFileFmt parses an IA from a file-format
+decreases
 func IAFromFileFmt(s string, prefixes bool) (IA, error) {
 	parts := strings.Split(s, "-")
 	if len(parts) != 2 {
@@ -307,6 +320,7 @@ func (ia IA) MarshalText() ([]byte, error) {
 // UnmarshalText allows IA to be used as a map key in JSON.
 preserves acc(ia)
 preserves forall i int :: 0 <= i && i < len(text) ==> acc(&text[i], 1/1000)
+decreases
 func (ia *IA) UnmarshalText(text []byte) error {
 	if len(text) == 0 {
 		*ia = IA{}
@@ -353,6 +367,7 @@ func (ia IA) Equal(other IA) bool {
 }
 
 // IsWildcard returns whether the ia has a wildcard part (isd or as).
+decreases
 func (ia IA) IsWildcard() bool {
 	return ia.I == 0 || ia.A == 0
 }
@@ -378,6 +393,7 @@ func (ia IA) FileFmt(prefixes bool) string {
 // (joao) may be simplified, only requires acc(ia) if IAFromString leads to nil error
 requires acc(ia)
 ensures acc(ia)
+decreases
 func (ia *IA) Set(s string) error {
 	pIA, err := IAFromString(s)
 	if err != nil {
@@ -413,6 +429,7 @@ func (ia IAInt) MarshalText() (res []byte, e error) {
 
 preserves acc(ia)
 preserves forall i int :: 0 <= i && i < len(b) ==> acc(&b[i], 1/1000)
+decreases
 func (ia *IAInt) UnmarshalText(b []byte) error {
 	tIA, err := IAFromString(string(b))
 	if err != nil {

@@ -28,6 +28,7 @@ import (
 // Returns nil, if gv is nil.
 requires gv != nil ==> gv.Mem()
 ensures  gv != nil ==> g.Mem()
+decreases _
 func NewPromGauge(gv *prometheus.GaugeVec) (g Gauge) /* {
 	if gv == nil {
 		return nil
@@ -40,6 +41,7 @@ func NewPromGauge(gv *prometheus.GaugeVec) (g Gauge) /* {
 // Returns nil if cv is nil.
 requires cv != nil ==> cv.Mem()
 ensures  cv != nil ==> c.Mem()
+decreases _
 func NewPromCounter(cv *prometheus.CounterVec) (c Counter) /* {
 	if cv == nil {
 		return nil
@@ -52,6 +54,7 @@ func NewPromCounter(cv *prometheus.CounterVec) (c Counter) /* {
 requires opts.ConstLabels != nil ==> acc(opts.ConstLabels)
 requires forall i int :: 0 <= i && i < len(labelNames) ==> acc(&labelNames[i], 1/1000)
 ensures  c.Mem()
+decreases _
 func NewPromCounterFrom(opts prometheus.CounterOpts, labelNames []string) (c Counter) /* {
 	return kitprom.NewCounterFrom(opts, labelNames)
 }

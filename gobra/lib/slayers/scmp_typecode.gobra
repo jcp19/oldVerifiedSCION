@@ -103,7 +103,7 @@ pure func (a SCMPTypeCode) InfoMsg() bool {
 	return a.Type() > 127
 }
 
-decreases
+decreases _
 func (a SCMPTypeCode) String() string /* {
 	t, c := a.Type(), a.Code()
 	info, ok := scmpTypeCodeInfo[t]
@@ -135,7 +135,7 @@ func CreateSCMPTypeCode(typ SCMPType, code SCMPCode) SCMPTypeCode {
 	return SCMPTypeCode(binary.BigEndian.Uint16([]byte{uint8(typ), uint8(code)}))
 }
 
-/* (joao) global variables not supported
+/* (joao) global variables not supported, rewritten bellow
 var scmpTypeCodeInfo = map[SCMPType]struct {
 	name  string
 	codes map[SCMPCode]string
@@ -175,3 +175,49 @@ var scmpTypeCodeInfo = map[SCMPType]struct {
 	},
 }
 */
+
+ensures acc(res, _)
+decreases
+func scmpTypeCodeInfo() (res map[SCMPType]struct {
+	name  string
+	codes map[SCMPCode]string
+}) {
+	return map[SCMPType]struct {
+		name  string
+		codes map[SCMPCode]string
+	}{
+		SCMPTypeDestinationUnreachable:   {name: "DestinationUnreachable"},
+		SCMPTypeExternalInterfaceDown:    {name: "ExternalInterfaceDown"},
+		SCMPTypeInternalConnectivityDown: {name: "InternalConnectivityDown"},
+		SCMPTypePacketTooBig:             {name: "PacketTooBig"},
+		SCMPTypeEchoRequest:              {name: "EchoRequest"},
+		SCMPTypeEchoReply:                {name: "EchoReply"},
+		SCMPTypeTracerouteRequest:        {name: "TracerouteRequest"},
+		SCMPTypeTracerouteReply:          {name: "TracerouteReply"},
+		SCMPTypeParameterProblem: {
+			"ParameterProblem", map[SCMPCode]string{
+				SCMPCodeErroneousHeaderField:      "ErroneousHeaderField",
+				SCMPCodeUnknownNextHdrType:        "UnknownNextHdrType",
+				SCMPCodeInvalidCommonHeader:       "InvalidCommonHeader",
+				SCMPCodeUnknownSCIONVersion:       "UnknownSCIONVersion",
+				SCMPCodeFlowIDRequired:            "FlowIDRequired",
+				SCMPCodeInvalidPacketSize:         "InvalidPacketSize",
+				SCMPCodeUnknownPathType:           "UnknownPathType",
+				SCMPCodeUnknownAddressFormat:      "UnknownAddressFormat",
+				SCMPCodeInvalidAddressHeader:      "InvalidAddressHeader",
+				SCMPCodeInvalidSourceAddress:      "InvalidSourceAddress",
+				SCMPCodeInvalidDestinationAddress: "InvalidDestinationAddress",
+				SCMPCodeNonLocalDelivery:          "NonLocalDelivery",
+				SCMPCodeInvalidPath:               "InvalidPath",
+				SCMPCodeUnknownHopFieldIngress:    "UnknownHopFieldIngressInterface",
+				SCMPCodeUnknownHopFieldEgress:     "UnknownHopFieldEgressInterface",
+				SCMPCodeInvalidHopFieldMAC:        "InvalidHopFieldMAC",
+				SCMPCodePathExpired:               "PathExpired",
+				SCMPCodeInvalidSegmentChange:      "InvalidSegmentChange",
+				SCMPCodeInvalidExtensionHeader:    "InvalidExtensionHeader",
+				SCMPCodeUnknownHopByHopOption:     "UnknownHopByHopOption",
+				SCMPCodeUnknownEndToEndOption:     "UnknownEndToEndOption",
+			},
+		},
+	}
+}

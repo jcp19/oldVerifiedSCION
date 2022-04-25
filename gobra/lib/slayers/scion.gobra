@@ -52,6 +52,7 @@ const (
 type PathType uint8
 
 // (joao) Hidden for performance
+decreases
 func (t PathType) String() string {
 	switch t {
 	case PathTypeEmpty:
@@ -584,6 +585,7 @@ func (s *SCION) LayerType() gopacket.LayerType {
 //}
 
 requires acc(s.Mem(), 1/100)
+decreases
 func (s *SCION) NextLayerType() gopacket.LayerType {
 	// return scionNextLayerType(s.NextHdr)
 	return scionNextLayerType(s.getNextHdr())
@@ -611,6 +613,7 @@ func (s *SCION) LayerPayload() (res []byte) {
 requires acc(s.Mem(), 1/1000)
 ensures  ret == unfolding acc(s.Mem(), 1/100) in s.Path.Len()
 ensures  ret >= 0 // (joao) This cannot be added as a post-condition of the pure method in Path and is also not inferred from the instances
+decreases
 pure func (s *SCION) getPathLen() (ret int) /* {
 	return unfolding acc(s.Mem(), 1/100) in s.Path.Len()
 }
@@ -807,6 +810,7 @@ func (s *SCION) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (errRes
 */
 
 // (joao) global variables still not supported
+decreases
 func scionNextLayerType(t common.L4ProtocolType) gopacket.LayerType {
 	switch t {
 	case common.L4UDP:
@@ -869,6 +873,7 @@ ghost
 requires acc(s.Mem(), 1/200) && acc(addr.Mem(), 1/200)
 requires s.ReadSrcAddr(addr)
 ensures acc(s.Mem(), 1/100)
+decreases
 func (s *SCION) AddReadSrcAddr(addr net.Addr)
 
 // (joao) Verified
@@ -878,6 +883,7 @@ func (s *SCION) AddReadSrcAddr(addr net.Addr)
 // address.
 requires acc(s.Mem(), 1/200)
 ensures resErr == nil ==> acc(resAddr.Mem(), 1/200) && s.ReadSrcAddr(resAddr)
+decreases
 func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 	unfold acc(s.Mem(), 1/200)
 	// (joao) this call used to be part of the return statement
@@ -892,6 +898,7 @@ func (s *SCION) SrcAddr() (resAddr net.Addr, resErr error) {
 // Changes to dst might leave the layer in an inconsistent state.
 requires s.Mem() && dst.Mem()
 ensures ret == nil ==> s.Mem()
+decreases
 func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 	unfold s.Mem()
 	var err error
@@ -912,6 +919,7 @@ func (s *SCION) SetDstAddr(dst net.Addr) (ret error) {
 // (joao) Verified
 requires s.Mem() && src.Mem()
 ensures ret == nil ==> s.Mem()
+decreases
 func (s *SCION) SetSrcAddr(src net.Addr) (ret error) {
 	var err error
 	unfold s.Mem()
@@ -982,6 +990,7 @@ ensures (err == nil && addrLen == AddrLen16) ==> addrType == T16Ip
 // (joao) This post-condition may require additional-checks to hold 
 ensures err == nil ==> validAddrLen(addrLen) && len(s) == addrBytes(addrLen)
 ensures err != nil ==> addrLen == 0 && addrType == 0 && s == nil
+decreases _
 func packAddr(hostAddr net.Addr) (addrLen AddrLen, addrType AddrType, s []byte, err error) /* {
 	switch a := hostAddr.(type) {
 	case *net.IPAddr:
@@ -1003,6 +1012,7 @@ requires acc(s.Mem(), _)
 ensures unfolding acc(s.Mem(), _) in res == 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 ensures unfolding acc(s.Mem(), _) in addrBytes(s.DstAddrLen) >= 0
 ensures unfolding acc(s.Mem(), _) in addrBytes(s.SrcAddrLen) >= 0
+decreases
 pure func (s *SCION) AddrHdrLen() (res int) {
 	return unfolding s.Mem() in 2*addr.IABytes + addrBytes(s.DstAddrLen) + addrBytes(s.SrcAddrLen)
 }
@@ -1146,6 +1156,7 @@ preserves forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 
 ensures retErr != nil ==> ret == 0
 ensures s == nil ==> retErr != nil
 ensures s != nil && s.getLenRawSrcAddr() > 0 && s.getLenRawDstAddr() > 0 ==> retErr == nil
+decreases
 func (s *SCION) computeChecksum(upperLayer []byte, protocol uint8) (ret uint16, retErr error) {
 	if s == nil {
 		return 0, serrors.New("SCION header missing")
@@ -1165,6 +1176,7 @@ ensures acc(s.Mem(), 1/100)
 ensures s.getLenRawSrcAddr() == 0 ==> resErr != nil
 ensures s.getLenRawDstAddr() == 0 ==> resErr != nil
 ensures s.getLenRawSrcAddr() > 0 && s.getLenRawDstAddr() > 0 ==> resErr == nil
+decreases
 func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32, resErr error) {
 	// (joao) len(s.RawDstAddr) replaced by s.getLenRawDstAddr() to avoid unfoldings
 	// if len(s.RawDstAddr) == 0 {
@@ -1197,6 +1209,7 @@ func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32
 	invariant i%2 == 0
 	invariant forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
 	invariant forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
+	decreases 8-i
 	for i := 0; i < 8; i += 2 {
 		csum += uint32(srcIA[i]) << 8
 		csum += uint32(srcIA[i+1])
@@ -1211,6 +1224,7 @@ func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32
 	invariant 0 <= i && i <= s.getLenRawSrcAddr()
 	// (joao) len(s.RawSrcAddr) replaced by s.getLenRawSrcAddr() to avoid unfoldings
 	// for i := 0; i < len(s.RawSrcAddr); i += 2 {
+	decreases s.getLenRawSrcAddr() - i
 	for i := 0; i < s.getLenRawSrcAddr(); i += 2 {
 		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
 		// (joao) original:
@@ -1229,6 +1243,7 @@ func (s *SCION) pseudoHeaderChecksum(length int, protocol uint8) (resUint uint32
 	invariant 0 <= i && i <= s.getLenRawDstAddr()
 	// (joao) len(s.RawDstAddr) replaced by s.getLenRawSrcAddr() to avoid unfoldings
 	// for i := 0; i < len(s.RawDstAddr); i += 2 {
+	decreases s.getLenRawDstAddr() - i
 	for i := 0; i < s.getLenRawDstAddr(); i += 2 {
 		// (joao) added parentheses surrounding s.RawSrcAddr, otherwise does not parse
 		// (joao) rewrite 1:
@@ -1251,6 +1266,7 @@ requires forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
 ensures  acc(s.Mem(), 1/200)
 ensures  forall i int :: 0 <= i && i < 8 ==> acc(&srcIA[i])
 ensures  forall i int :: 0 <= i && i < 8 ==> acc(&dstIA[i])
+decreases
 func (s *SCION) pseudoHeaderChecksumOutlineBlock1(srcIA []byte, dstIA []byte) {
 	// (joao) Original code, omitted to avoid unfolding
 	// s.SrcIA.Write(srcIA)
@@ -1263,6 +1279,7 @@ func (s *SCION) pseudoHeaderChecksumOutlineBlock1(srcIA []byte, dstIA []byte) {
 // (joao) Verified
 requires forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/10000)
 ensures forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/10000)
+decreases
 func (s *SCION) upperLayerChecksum(upperLayer []byte, csum uint32) uint32 {
 	// Compute safe boundary to ensure we do not access out of bounds.
 	// Odd lengths are handled at the end.
@@ -1270,6 +1287,7 @@ func (s *SCION) upperLayerChecksum(upperLayer []byte, csum uint32) uint32 {
 	invariant safeBoundary == len(upperLayer) - 1
 	invariant 0 <= i && i < safeBoundary + 2 && i%2 == 0
 	invariant forall j int :: 0 <= j && j < len(upperLayer) ==> acc(&upperLayer[j], 1/20000)
+	decreases safeBoundary - i
 	for i := 0; i < safeBoundary; i += 2 {
 		csum += uint32(upperLayer[i]) << 8
 		csum += uint32(upperLayer[i+1])
@@ -1281,6 +1299,7 @@ func (s *SCION) upperLayerChecksum(upperLayer []byte, csum uint32) uint32 {
 }
 
 // (joao) Verified
+decreases _
 func (s *SCION) foldChecksum(csum uint32) uint16 {
 	for csum > 0xffff {
 		csum = (csum >> 16) + (csum & 0xffff)

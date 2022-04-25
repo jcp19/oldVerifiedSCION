@@ -147,12 +147,11 @@ func (s *SCMP) GetTypeCode() (typeCode SCMPTypeCode) {
 // (tlino) end of getters
 
 // CanDecode returns the set of layer types that this DecodingLayer can decode.
-/*
+decreases
 func (s *SCMP) CanDecode() gopacket.LayerClass {
 	// return LayerTypeSCMP
 	return LayerTypeSCMP()
 }
-*/
 
 // NextLayerType use the typecode to select the right next decoder.
 // If the SCMP type is unknown, the next layer is gopacket.LayerTypePayload.
@@ -190,6 +189,7 @@ requires s.Mem()
 requires b.Mem()
 ensures s.Mem()
 ensures b.Mem()
+decreases
 func (s *SCMP) SerializeTo(b gopacket.SerializeBuffer, opts gopacket.SerializeOptions) (ret error) {
 	unfold s.Mem()
 	bytes, err := b.PrependBytes(4)
@@ -272,17 +272,18 @@ func (s *SCMP) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) (ret err
 }
 
 preserves acc(s, 1/1000) && (forall i int :: 0 <= i && i < len(s.BaseLayerEmbedded.Payload) ==> acc(&(s.BaseLayerEmbedded.Payload)[i], 1/1000))
+decreases _
 func (s *SCMP) String() string /* {
 	return fmt.Sprintf("%s(%d)\nPayload: %s", &s.TypeCode, s.Checksum, s.Payload)
 }
 */
 
-// (joao) Assumed for now
 // SetNetworkLayerForChecksum tells this layer which network layer is wrapping it.
 // This is needed for computing the checksum when serializing,
 requires acc(s) && l.Mem()
 ensures  acc(s)
 ensures  err == nil ==> s.scn.Mem()
+decreases _
 func (s *SCMP) SetNetworkLayerForChecksum(l gopacket.NetworkLayer) (err error) /* {
 	if l == nil {
 		return serrors.New("cannot use nil layer type for scmp checksum network layer")

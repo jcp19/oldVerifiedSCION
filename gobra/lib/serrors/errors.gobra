@@ -83,6 +83,7 @@ func (e basicError) Unwrap() error {
 }
 
 // (joao) Trusted
+decreases _
 func (e basicError) TopError() string // {
 //	// (joao) appending strings still not supported
 //	s := make([]string, 0, 1+(len(e.logCtx)/2))
@@ -102,6 +103,7 @@ func (e basicError) msgString() string {
 
 // IsTimeout returns whether err is or is caused by a timeout error.
 // (joao) Trusted
+decreases _
 func IsTimeout(err error) bool // {
 //	// (joao) added `;` to make this parse
 //	// var t interface{ Timeout() bool }
@@ -111,6 +113,7 @@ func IsTimeout(err error) bool // {
 
 // IsTemporary returns whether err is or is caused by a temporary error.
 // (joao) Trusted
+decreases _
 func IsTemporary(err error) bool // {
 //	// (joao) added `;` to make this parse
 //	// var t interface{ Temporary() bool }
@@ -189,7 +192,7 @@ type errList []error
 
 // (joao) Trusted
 // preserves forall i int :: 0 <= i && i < len(e) ==> acc(&e[i], 1/10000)
-decreases
+decreases _
 func (e errList) Error() string // {
 //	return fmtErrors(e)
 //}
@@ -197,6 +200,7 @@ func (e errList) Error() string // {
 // FmtError formats the error for logging. It walks through all wrapped errors,
 // putting each on a new line, and indenting multi-line errors.
 // (joao) Trusted
+decreases _
 func FmtError(e error) string // {
 //	var s, ns []string
 //	for {
@@ -210,7 +214,9 @@ func FmtError(e error) string // {
 //}
 
 // (joao) Trusted
-func innerFmtError(e error) ([]string, error) // {
+ensures forall i int :: 0 <= i && i < len(ret) ==> acc(&ret[i])
+decreases _
+func innerFmtError(e error) (ret []string, error) // {
 //	var s []string
 //	var lines []string
 //	switch e := e.(type) {
@@ -237,12 +243,22 @@ func innerFmtError(e error) ([]string, error) // {
 
 // fmtErrors formats a slice of errors for logging.
 // (joao) Trusted
-preserves forall i int :: 0 <= i && i < len(errs) ==> acc(&errs[i], 1/10000)
-func fmtErrors(errs []error) string // {
-//	s := make([]string, 0, len(errs))
-//	// (joao) no support for range statements
-//	for _, e := range errs {
-//		s = append(s, e.Error())
-//	}
-//	return strings.Join(s, "\n")
-//}
+requires forall i int :: 0 <= i && i < len(errs) ==> acc(&errs[i], 1/10000)
+ensures  forall i int :: 0 <= i && i < len(errs) ==> acc(&errs[i], 1/10000)
+// decreases
+func fmtErrors(errs []error) string {
+	s := make([]string, 0, len(errs))
+	// (joao) no support for range statements
+	// for _, e := range errs {
+	//	s = append(s, e.Error())
+	// }
+	invariant 0 <= i && i <= len(errs)
+	invariant forall i int :: 0 <= i && i < len(s) ==> acc(&s[i])
+	invariant forall i int :: 0 <= i && i < len(errs) ==> acc(&errs[i], 1/100000)
+	// decreases len(errs) - i
+	for i := 0; i < len(errs); i++ {
+		e := errs[i]
+		s = append(perm(1/1000000), s, e.Error())
+	}
+	return strings.Join(s, "\n")
+}

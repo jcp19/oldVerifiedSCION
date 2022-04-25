@@ -38,6 +38,7 @@ const (
 	Peer LinkType = 4
 )
 
+decreases
 func (lt LinkType) String() string {
 	switch lt {
 	case Unset:
@@ -57,6 +58,7 @@ func (lt LinkType) String() string {
 
 // LinkTypeFromString returns the numerical link type associated with a string description. If the
 // string is not recognized, an Unset link type is returned. The matching is case-insensitive.
+decreases
 func LinkTypeFromString(s string) LinkType {
 	switch strings.ToLower(s) {
 	case "unset":

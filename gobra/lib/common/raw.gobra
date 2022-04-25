@@ -27,12 +27,14 @@ pred (r RawBytes) Mem() {
 }
 
 preserves acc(r.Mem(), 1/100000)
+decreases _
 func (r RawBytes) String() string //{
 //  return fmt.Sprintf("%x", []byte(r))
 //}
 
 pure
 ensures ret == len(r)
+decreases
 func (r RawBytes) Len() (ret int) {
 	return len(r)
 }
@@ -41,6 +43,7 @@ requires acc(r.Mem(), 1/100000)
 ensures  acc(r.Mem(), 1/100000)
 ensures  res.Mem()
 ensures  err == nil
+decreases
 func (r RawBytes) Copy() (res Payload, err error) {
 	unfold acc(r.Mem(), 1/1000000)
 	// (joao) introduced var `tmp` to allow folding and unfolding
@@ -53,6 +56,7 @@ func (r RawBytes) Copy() (res Payload, err error) {
 preserves acc(r.Mem(), 1/100000)
 preserves acc(b.Mem())
 ensures len(r) <= len(b) ==> err == nil
+decreases
 func (r RawBytes) WritePld(b RawBytes) (res int, err error) {
 	if len(b) < len(r) {
 		// (joao) Gobra does not type check if the type conversion to ErrMsg is not present
@@ -68,11 +72,21 @@ func (r RawBytes) WritePld(b RawBytes) (res int, err error) {
 	return tmp, nil
 }
 
-// (joao) Trusted function
 preserves r.Mem()
 ensures   unfolding r.Mem() in forall i int :: 0 <= i && i < len(r) ==> r[i] == 0
-func (r RawBytes) Zero() // {
-//	for i := range r {
-//		r[i] = 0
-//	}
-//}
+decreases
+func (r RawBytes) Zero() {
+	// (joao) range loops still not supported
+	// for i := range r {
+	//	r[i] = 0
+	// }
+	invariant 0 <= i && i <= len(r)
+	invariant r.Mem()
+	invariant unfolding r.Mem() in forall j int :: 0 <= j && j < i ==> r[j] == 0
+	decreases len(r) - i
+	for i := 0; i < len(r); i++ {
+		unfold r.Mem()
+		r[i] = 0
+		fold r.Mem()
+	}
+}

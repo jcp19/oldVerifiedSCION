@@ -183,6 +183,7 @@ func (p *Path) SetSecondHop(hop path.HopField) {
 
 requires o.Mem()
 ensures  o.UninitializedMem()
+decreases
 func (o *Path) ExchangePerms() {
 	unfold o.Mem()
 	unfold path.HopFieldInv(&o.FirstHop)
@@ -193,7 +194,6 @@ func (o *Path) ExchangePerms() {
 requires o.UninitializedMem()
 preserves forall i int :: 0 <= i && i < len(data) ==> acc(&data[i], 1/100)
 ensures err == nil ==> o.Mem()
-// ensures err != nil ==> acc(o)
 decreases
 func (o *Path) DecodeFromBytes(data []byte) (err error) {
 	if len(data) < PathLen {
@@ -221,7 +221,7 @@ func (o *Path) DecodeFromBytes(data []byte) (err error) {
 	// (joao) introduced `tmp` var to fold before returning
 	tmp := o.SecondHop.DecodeFromBytes(data[offset : offset+path.HopLen])
 
-	if tmp == nil {
+	ghost if tmp == nil {
 		fold o.Mem()
 	} else {
 		unfold path.HopFieldInv(&o.FirstHop)
