@@ -28,7 +28,7 @@ jobs:
         with:
           srcDirectory: gobra
           globalTimeout: 5h
-          packageTimeout: 2h
+          packageTimeout: 4h
           viperBackend: VSWITHSILICON
           caching: '1'
           chop: 20
