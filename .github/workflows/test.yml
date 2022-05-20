@@ -27,6 +27,7 @@ jobs:
         uses: viperproject/gobra-action@verified-scion
         with:
           projectLocation: VerifiedSCION/gobra
+          module: gobra
           recursive: '1'
           globalTimeout: 5h
           packageTimeout: 4h
