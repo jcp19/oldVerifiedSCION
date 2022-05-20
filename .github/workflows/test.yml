@@ -24,12 +24,13 @@ jobs:
           path: ${{ runner.workspace }}/.gobra/cache.json
           key: ${{ env.cache-name }}
       - name: Verify the specified files
-        uses: viperproject/gobra-action@main
+        uses: viperproject/gobra-action@verified-scion
         with:
           srcDirectory: gobra
           globalTimeout: 5h
           packageTimeout: 4h
           viperBackend: VSWITHSILICON
+          assumeInjectivityOnInhale: '1'
           caching: '1'
           # chopping is disabled for now to avoid cache misses.
           # this should be tested in a separate PR to figure if it
