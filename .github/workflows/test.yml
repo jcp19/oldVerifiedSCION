@@ -26,7 +26,7 @@ jobs:
       - name: Verify the specified files
         uses: viperproject/gobra-action@verified-scion
         with:
-          srcDirectory: gobra
+          projectLocation: gobra
           recursive: '1'
           globalTimeout: 5h
           packageTimeout: 4h
