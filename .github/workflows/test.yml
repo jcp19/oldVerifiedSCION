@@ -31,6 +31,7 @@ jobs:
           recursive: '1'
           globalTimeout: 5h
           packageTimeout: 4h
+          imageVersion: '6f1e3cec2faa4795a6970b0ac21fed3cc4b23fb50b27cc2a2ca01e040513c999'
           viperBackend: VSWITHSILICON
           assumeInjectivityOnInhale: '1'
           caching: '1'
