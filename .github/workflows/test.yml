@@ -24,7 +24,7 @@ jobs:
           path: ${{ runner.workspace }}/.gobra/cache.json
           key: ${{ env.cache-name }}
       - name: Verify the specified files
-        uses: viperproject/gobra-action@verified-scion
+        uses: viperproject/gobra-action@v22.05.1
         with:
           projectLocation: VerifiedSCION/gobra
           module: gobra
