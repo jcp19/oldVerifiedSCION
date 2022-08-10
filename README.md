@@ -1,6 +1,7 @@
 # VerifiedSCION
 
 > **Warning**:
+> This repository is currently outdated.
 > We are currently in the process of updating our specification to more recent versions of SCION. More updates on this will be provided soon.
 
 This package contains the **verified** implementation of the
