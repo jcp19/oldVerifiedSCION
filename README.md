@@ -1,5 +1,8 @@
 # VerifiedSCION
 
+> **Warning**:
+> We are currently in the process of updating our specification to more recent versions of SCION. More updates on this will be provided soon.
+
 This package contains the **verified** implementation of the
 [SCION](http://www.scion-architecture.net) protocol, a future Internet architecture.
 SCION is the first
