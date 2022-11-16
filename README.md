@@ -1,8 +1,8 @@
 # VerifiedSCION
 
 > **Warning**:
-> This repository is currently outdated.
-> We are currently in the process of updating our specification to more recent versions of SCION. More updates on this will be provided soon.
+> This repository is outdated.
+> The development of VerifiedSCION continues [here](https://github.com/viperproject/VerifiedSCION).
 
 This package contains the **verified** implementation of the
 [SCION](http://www.scion-architecture.net) protocol, a future Internet architecture.
